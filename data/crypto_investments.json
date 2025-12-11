@@ -1,0 +1,15 @@
+{
+    "crypto_total_investment": 10000.0,
+    "holdings": {
+        "bitcoin": 0.2,
+        "ethereum": 0.0,
+        "tether": 29093.0,
+        "binancecoin": 0.0,
+        "solana": 20.0,
+        "ripple": 0.0,
+        "usd-coin": 0.0,
+        "cardano": 0.0,
+        "dogecoin": 0.0,
+        "avalanche-2": 0.0
+    }
+}
