@@ -2,4 +2,6 @@ streamlit
 pandas
 altair
 plotly
+yfinance
 requests
+python-dateutil
