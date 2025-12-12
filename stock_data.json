@@ -1,18 +1,1 @@
-{
-    "assets": {
-        "AAPL": 1.0,
-        "MSFT": 22.0,
-        "GOOGL": 1.0,
-        "AMZN": 2.0,
-        "NVDA": 21.0,
-        "TSLA": 1.0,
-        "META": 1.0,
-        "JPM": 0.0,
-        "V": 0.0,
-        "BRK-B": 0.0
-    },
-    "stock_total_investment": 0.0,
-    "exchange_rate": 14.5,
-    "rate": 12.11,
-    "invested": 234523.0
-}
+
