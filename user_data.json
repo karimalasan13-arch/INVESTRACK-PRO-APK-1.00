@@ -1,1 +1,44 @@
+{
+    "holdings": {
+        "BTC": 0.0,
+        "ETH": 0.0,
+        "USDT": 0.0,
+        "USDC": 0.0,
+        "BNB": 0.0,
+        "SOL": 0.0,
+        "XRP": 0.0,
+        "ADA": 0.0,
+        "DOGE": 0.0,
+        "TRX": 0.0
+    },
+    "fx_rate": 15.0,
+    "total_invested": 0.0,
+    "crypto_rate": 12.22,
+    "crypto_investment": 59000.0,
+    "crypto_holdings": {
+        "BTC": 0.0,
+        "ETH": 0.0,
+        "SOL": 0.0,
+        "BNB": 0.0,
+        "XRP": 0.0,
+        "ADA": 0.0,
+        "DOGE": 0.0,
+        "DOT": 0.0,
+        "LTC": 0.0
+    },
+    "stock_rate": 11.2,
+    "stock_investment": 80000.0,
+    "stock_holdings": {
+        "AAPL": 2.0,
+        "MSFT": 3.0,
+        "GOOGL": 1.0,
+        "AMZN": 3.0,
+        "META": 12.0,
+        "TSLA": 0.0,
+        "BRK.B": 0.0,
+        "NVDA": 0.0,
+        "JPM": 0.0,
+        "V": 0.0
+    }
+}
 
