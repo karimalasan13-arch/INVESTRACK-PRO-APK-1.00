@@ -19,6 +19,7 @@ def crypto_live_prices():
         "DOGE": "dogecoin",
         "DOT": "polkadot",
         "LTC": "litecoin"
+        "USDT": Tether",
     }
 
     try:
