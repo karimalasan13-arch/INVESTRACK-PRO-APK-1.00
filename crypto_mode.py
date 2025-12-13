@@ -22,6 +22,7 @@ API_MAP = {
     "DOGE": "dogecoin",
     "DOT": "polkadot",
     "LTC": "litecoin",
+    "USDT": "Tether",
 }
 
 # -------------------------------------------------
