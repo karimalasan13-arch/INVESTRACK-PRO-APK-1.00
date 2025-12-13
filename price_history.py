@@ -18,7 +18,7 @@ def crypto_live_prices():
         "ADA": "cardano",
         "DOGE": "dogecoin",
         "DOT": "polkadot",
-        "LTC": "litecoin"
+        "LTC": "litecoin",
         "USDT": "Tether",
     }
 
