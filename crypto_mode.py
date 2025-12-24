@@ -1,3 +1,7 @@
+from user_session import get_user_id
+def crypto_app():
+    user_id = get_user_id()  # 🔑 THIS LINE
+    st.title("💰 Crypto Portfolio Tracker")
 import streamlit as st
 import json
 import os
