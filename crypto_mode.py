@@ -174,7 +174,7 @@ def crypto_app():
     save_local_history(history)
 
     # Also autosave via your tracker
-   save_crypto_value(USER_ID, total_value_ghs)
+    save_crypto_value(USER_ID, total_value_ghs)
 
     # -------------------------------------------------
     # Summary Section
