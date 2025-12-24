@@ -1,3 +1,9 @@
+from supabase_crypto import (
+    load_crypto_holdings,
+    save_crypto_holdings,
+    save_crypto_value,
+    load_crypto_history
+)
 from user_session import get_user_id
 def crypto_app():
     user_id = get_user_id()  # 🔑 THIS LINE
