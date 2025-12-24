@@ -1,31 +1,17 @@
 import streamlit as st
+import pandas as pd
+import altair as alt
+import plotly.graph_objects as go
+from datetime import datetime
+
+from price_history import crypto_live_prices
 from supabase_crypto import (
     load_crypto_holdings,
     save_crypto_holdings,
     save_crypto_value,
     load_crypto_history
 )
-if "user_id" not in st.session_state:
-    st.session_state.user_id = "guest"
-
-USER_ID = st.session_state.user_id
-
-holdings = load_crypto_holdings(USER_ID)
-
 from user_session import get_user_id
-def crypto_app():
-    user_id = get_user_id()  # 🔑 THIS LINE
-    st.title("💰 Crypto Portfolio Tracker")
-import streamlit as st
-import json
-import os
-import pandas as pd
-import altair as alt
-from datetime import datetime
-from price_history import crypto_live_prices
-import plotly.graph_objects as go
-from portfolio_tracker import load_history as pt_load_history, autosave_portfolio_value
-
 
 USER_FILE = "user_data.json"
 HIST_FILE = "crypto_history.json"
