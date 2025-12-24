@@ -1,5 +1,11 @@
 import streamlit as st
-import json
+from supabase_crypto import (
+    load_crypto_holdings,
+    save_crypto_holdings,
+    save_crypto_value,
+    load_crypto_history
+)
+USER_ID = st.session_state.get("user_id", "guest")
 import os
 import pandas as pd
 import altair as alt
@@ -103,7 +109,7 @@ def crypto_app():
     st.sidebar.markdown("---")
     st.sidebar.subheader("Crypto Holdings")
 
-    holdings = data["crypto_holdings"]
+    holdings = load_crypto_holdings(USER_ID)
     for sym in API_MAP.keys():
         holdings.setdefault(sym, 0.0)
 
@@ -117,11 +123,11 @@ def crypto_app():
             updated = True
 
     if st.sidebar.button("Save Holdings"):
-        save_user_data(data)
+        save_crypto_holdings(USER_ID, holdings)
         st.sidebar.success("Crypto holdings saved.")
 
     if st.sidebar.button("Save Settings"):
-        save_user_data(data)
+        save_crypto_holdings(USER_ID, holdings)
         st.sidebar.success("Settings saved.")
 
     # -------------------------------------------------
@@ -152,7 +158,7 @@ def crypto_app():
     # -------------------------------------------------
     # Save daily history
     # -------------------------------------------------
-    history = load_local_history()
+    history = load_crypto_history(USER_ID)
     today = datetime.utcnow().date().isoformat()
 
     updated_today = False
@@ -168,7 +174,7 @@ def crypto_app():
     save_local_history(history)
 
     # Also autosave via your tracker
-    autosave_portfolio_value(total_value_ghs)
+   save_crypto_value(USER_ID, total_value_ghs)
 
     # -------------------------------------------------
     # Summary Section
