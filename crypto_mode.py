@@ -7,8 +7,6 @@ from datetime import datetime
 from price_history import crypto_live_prices
 import plotly.graph_objects as go
 from portfolio_tracker import load_history as pt_load_history, autosave_portfolio_value
-
-
 USER_FILE = "user_data.json"
 HIST_FILE = "crypto_history.json"
 
