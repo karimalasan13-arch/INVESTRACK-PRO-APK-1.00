@@ -1,17 +1,10 @@
 import streamlit as st
-import os
 import json
+import os
 import pandas as pd
 import altair as alt
 from datetime import datetime
 from price_history import crypto_live_prices
-from supabase_crypto import (
-    load_crypto_holdings,
-    save_crypto_holdings,
-    save_crypto_value,
-    load_crypto_history
-)
-USER_ID = st.session_state.get("user_id", "guest")
 import plotly.graph_objects as go
 from portfolio_tracker import load_history as pt_load_history, autosave_portfolio_value
 
@@ -110,7 +103,7 @@ def crypto_app():
     st.sidebar.markdown("---")
     st.sidebar.subheader("Crypto Holdings")
 
-    holdings = load_crypto_holdings(USER_ID)
+    holdings = data["crypto_holdings"]
     for sym in API_MAP.keys():
         holdings.setdefault(sym, 0.0)
 
@@ -124,11 +117,11 @@ def crypto_app():
             updated = True
 
     if st.sidebar.button("Save Holdings"):
-        save_crypto_holdings(USER_ID, holdings)
+        save_user_data(data)
         st.sidebar.success("Crypto holdings saved.")
 
     if st.sidebar.button("Save Settings"):
-        save_crypto_holdings(USER_ID, holdings)
+        save_user_data(data)
         st.sidebar.success("Settings saved.")
 
     # -------------------------------------------------
@@ -159,7 +152,7 @@ def crypto_app():
     # -------------------------------------------------
     # Save daily history
     # -------------------------------------------------
-    history = load_crypto_history(USER_ID)
+    history = load_local_history()
     today = datetime.utcnow().date().isoformat()
 
     updated_today = False
