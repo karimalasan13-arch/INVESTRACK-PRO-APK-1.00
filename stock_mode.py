@@ -1,6 +1,7 @@
 from user_session import get_user_id
 def stock_app():
     user_id = get_user_id()
+    st.caption(f"User ID: {user_id[:8]}")
     st.title("📊 Stock Portfolio Tracker")
 import streamlit as st
 import json
