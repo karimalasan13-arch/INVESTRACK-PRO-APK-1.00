@@ -1,4 +1,10 @@
 import streamlit as st
+import os
+import json
+import pandas as pd
+import altair as alt
+from datetime import datetime
+from price_history import crypto_live_prices
 from supabase_crypto import (
     load_crypto_holdings,
     save_crypto_holdings,
@@ -6,11 +12,6 @@ from supabase_crypto import (
     load_crypto_history
 )
 USER_ID = st.session_state.get("user_id", "guest")
-import os
-import pandas as pd
-import altair as alt
-from datetime import datetime
-from price_history import crypto_live_prices
 import plotly.graph_objects as go
 from portfolio_tracker import load_history as pt_load_history, autosave_portfolio_value
 
