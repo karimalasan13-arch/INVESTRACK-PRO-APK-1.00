@@ -1,7 +1,6 @@
 from user_session import get_user_id
 def crypto_app():
     user_id = get_user_id()  # 🔑 THIS LINE
-    st.caption(f"User ID: {user_id[:8]}")
     st.title("💰 Crypto Portfolio Tracker")
 import streamlit as st
 import json
