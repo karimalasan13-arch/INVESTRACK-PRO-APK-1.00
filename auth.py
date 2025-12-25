@@ -13,16 +13,19 @@ def login_ui():
         if st.button("Login"):
             try:
                 res = supabase.auth.sign_in_with_password({
-                    "email": email,
-                    "password": password
-                if res.user is None:
-                    st.error(res.error.message if res.error else "Login failed")
-                    return    
+                "email": email,
+                "password": password
                 })
-                st.session_state.user = res.user
-                st.rerun()
-            except Exception as e:
-                st.error("Login failed")
+
+                st.write("RAW RESPONSE:", res)
+
+                if res.user is None:
+                    st.error("LOGIN FAILED")
+                    st.error(res.error)
+                    st.stop()
+
+                st.success("LOGIN OK")
+                st.write(res.user)
 
     with col2:
         if st.button("Create Account"):
