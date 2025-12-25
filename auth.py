@@ -15,6 +15,9 @@ def login_ui():
                 res = supabase.auth.sign_in_with_password({
                     "email": email,
                     "password": password
+                if res.user is None:
+                    st.error(res.error.message if res.error else "Login failed")
+                    return    
                 })
                 st.session_state.user = res.user
                 st.rerun()
