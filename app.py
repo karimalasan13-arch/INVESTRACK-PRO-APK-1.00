@@ -1,12 +1,12 @@
 import streamlit as st
-
-# 🔐 AUTH GATE — MUST RUN FIRST
 from auth import login_ui
 
+# 🔐 AUTH GATE
 if "user" not in st.session_state:
     login_ui()
+    st.stop()
 
-# 🚀 APP STARTS ONLY AFTER LOGIN
+# ✅ POST-LOGIN APP
 from crypto_mode import crypto_app
 from stock_mode import stock_app
 
