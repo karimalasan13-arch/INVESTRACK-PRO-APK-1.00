@@ -1,11 +1,13 @@
-from datetime import datetime
+# portfolio_tracker.py
+
+from datetime import datetime, timedelta
 from db import supabase
 
 
 def autosave_portfolio_value(user_id: str, value_ghs: float):
     """
-    Saves a portfolio snapshot for a specific user.
-    Safe to call multiple times per day.
+    Saves portfolio value once per day per user.
+    Uses UPSERT to avoid unique constraint crashes.
     """
 
     if not user_id:
@@ -13,31 +15,16 @@ def autosave_portfolio_value(user_id: str, value_ghs: float):
 
     today = datetime.utcnow().date().isoformat()
 
-    supabase.table("portfolio_history").upsert(
-        {
-            "user_id": user_id,
-            "date": today,
-            "value_ghs": float(value_ghs),
-            "updated_at": datetime.utcnow().isoformat()
-        },
-        on_conflict="user_id,date"
-    ).execute()
+    try:
+        supabase.table("portfolio_history").upsert(
+            {
+                "user_id": user_id,
+                "date": today,
+                "value_ghs": float(value_ghs),
+            },
+            on_conflict="user_id,date"
+        ).execute()
 
-
-def load_history(user_id: str):
-    """
-    Load portfolio history for a user.
-    """
-
-    if not user_id:
-        return []
-
-    res = (
-        supabase.table("portfolio_history")
-        .select("date,value_ghs")
-        .eq("user_id", user_id)
-        .order("date")
-        .execute()
-    )
-
-    return res.data or []
+    except Exception as e:
+        # Do NOT crash the app — log instead
+        print("Portfolio autosave failed:", e)
