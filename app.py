@@ -1,4 +1,8 @@
 import streamlit as st
+st.error("APP.PY IS RUNNING")
+st.stop()
+
+import streamlit as st
 from auth import login_ui
 
 # 🔐 HARD GATE
