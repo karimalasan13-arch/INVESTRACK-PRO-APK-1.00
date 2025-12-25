@@ -1,6 +1,5 @@
 import streamlit as st
 from auth import login_ui
-st.session_state.pop("user", None)
 
 # 🔐 HARD GATE
 if "user" not in st.session_state:
