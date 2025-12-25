@@ -1,12 +1,22 @@
 import streamlit as st
 from auth import login_ui
 
-# 🔐 AUTH GATE
+# ------------------------------------
+# AUTH GATE
+# ------------------------------------
 if "user" not in st.session_state:
     login_ui()
     st.stop()
 
-# ✅ POST-LOGIN APP
+# ------------------------------------
+# NORMALIZE USER SESSION (CRITICAL)
+# ------------------------------------
+if "user_id" not in st.session_state:
+    st.session_state.user_id = st.session_state.user.id
+
+# ------------------------------------
+# POST-LOGIN APP
+# ------------------------------------
 from crypto_mode import crypto_app
 from stock_mode import stock_app
 
