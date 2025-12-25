@@ -12,5 +12,3 @@ if mode == "Crypto":
     crypto_app()
 else:
     stock_app()
-from db import supabase
-st.write("Supabase OK:", bool(supabase))
