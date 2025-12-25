@@ -1,12 +1,15 @@
 import streamlit as st
+from auth import login_ui
 from crypto_mode import crypto_app
 from stock_mode import stock_app
 
-st.set_page_config(page_title="InvesTrack Pro", layout="wide")
-st.sidebar.title("InvesTrack Pro")
+if "user" not in st.session_state:
+    login_ui()
+    st.stop()
 
-# Only mode selector here. Exchange rates are managed inside each mode to avoid duplication.
-mode = st.sidebar.radio("Choose Mode", ["Crypto", "Stocks"])
+st.sidebar.success(f"Logged in as {st.session_state.user.email}")
+
+mode = st.sidebar.radio("Select Mode", ["Crypto", "Stocks"])
 
 if mode == "Crypto":
     crypto_app()
