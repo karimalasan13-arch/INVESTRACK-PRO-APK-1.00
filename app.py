@@ -5,7 +5,6 @@ from auth import login_ui
 
 if "user" not in st.session_state:
     login_ui()
-    st.stop()
 
 # 🚀 APP STARTS ONLY AFTER LOGIN
 from crypto_mode import crypto_app
