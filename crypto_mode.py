@@ -29,14 +29,14 @@ API_MAP = {
 # -----------------------------------------
 # SUPABASE HELPERS
 # -----------------------------------------
-def load_setting(key, default):
-    try:
-        res = supabase.table("user_settings").select("value").eq("key", key).execute()
-        if res.data:
-            return float(res.data[0]["value"])
-    except:
-        pass
-    return default
+def load_settings(user_id):
+    res = supabase.table("user_settings") \
+        .select("*") \
+        .eq("user_id", user_id) \
+        .single() \
+        .execute()
+
+    return res.data
 
 
 def save_setting(user_id: str, key: str, value):
