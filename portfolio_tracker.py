@@ -1,35 +1,43 @@
+from datetime import datetime
+from db import supabase
 
-import json
-import os
-from datetime import datetime, timedelta
 
-HISTORY_FILE = "portfolio_history.json"
+def autosave_portfolio_value(user_id: str, value_ghs: float):
+    """
+    Saves a portfolio snapshot for a specific user.
+    Safe to call multiple times per day.
+    """
 
-def load_history():
-    if not os.path.exists(HISTORY_FILE):
+    if not user_id:
+        return
+
+    today = datetime.utcnow().date().isoformat()
+
+    supabase.table("portfolio_history").upsert(
+        {
+            "user_id": user_id,
+            "date": today,
+            "value_ghs": float(value_ghs),
+            "updated_at": datetime.utcnow().isoformat()
+        },
+        on_conflict="user_id,date"
+    ).execute()
+
+
+def load_history(user_id: str):
+    """
+    Load portfolio history for a user.
+    """
+
+    if not user_id:
         return []
-    try:
-        with open(HISTORY_FILE, "r") as f:
-            return json.load(f)
-    except:
-        return []
 
-def save_history(history):
-    with open(HISTORY_FILE, "w") as f:
-        json.dump(history, f, indent=4)
+    res = (
+        supabase.table("portfolio_history")
+        .select("date,value_ghs")
+        .eq("user_id", user_id)
+        .order("date")
+        .execute()
+    )
 
-def autosave_portfolio_value(value):
-    history = load_history()
-    now = datetime.now()
-
-    # Save every 8 hours
-    if history:
-        last_time = datetime.fromisoformat(history[-1]["timestamp"])
-        if now - last_time < timedelta(hours=8):
-            return
-
-    history.append({
-        "timestamp": now.isoformat(),
-        "value": value
-    })
-    save_history(history)
+    return res.data or []
