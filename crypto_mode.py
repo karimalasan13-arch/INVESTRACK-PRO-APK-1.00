@@ -39,9 +39,11 @@ def load_setting(key, default):
     return default
 
 
-def save_setting(key, value):
-    supabase.table("user_settings").upsert(
-        {"key": key, "value": value}
+def save_setting(user_id: str, key: str, value):
+    supabase.table("user_settings").update(
+        {key: value}
+    ).eq(
+        "user_id", user_id
     ).execute()
 
 
