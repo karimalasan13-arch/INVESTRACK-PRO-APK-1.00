@@ -184,7 +184,11 @@ def crypto_app():
     # -------------------------------------
     # 8-HOUR SNAPSHOT SAVE (SAFE)
     # -------------------------------------
-    autosave_portfolio_value(user_id, total_value_ghs)
+    from auth import get_current_user
+
+user = get_current_user()
+if user:
+    autosave_portfolio_value(user["id"], total_value_ghs)
 
     history = load_portfolio_history(user_id)
 
