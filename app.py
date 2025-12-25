@@ -1,4 +1,5 @@
-
+import streamlit as st
+st.success("✅ DEPLOYED NEW APP.PY")
 import streamlit as st
 
 # 🔐 AUTH GATE — MUST RUN FIRST
