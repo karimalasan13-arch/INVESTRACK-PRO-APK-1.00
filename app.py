@@ -1,5 +1,5 @@
 import streamlit as st
-from auth import login_ui
+from auth_ui import login_ui
 
 # ------------------------------------
 # AUTH GATE
