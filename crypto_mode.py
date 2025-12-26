@@ -55,7 +55,6 @@ def save_setting(user_id, key, value):
     }).execute()
 
 
-
 def load_crypto_holdings(user_id):
     holdings = {k: 0.0 for k in API_MAP}
     try:
