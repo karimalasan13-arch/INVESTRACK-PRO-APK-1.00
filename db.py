@@ -4,6 +4,6 @@ import streamlit as st
 
 # Read secrets from Streamlit Cloud
 SUPABASE_URL = st.secrets["SUPABASE_URL"]
-SUPABASE_KEY = st.secrets["SUPABASE_SERVICE_ROLE_KEY"]
+SUPABASE_KEY = st.secrets["SUPABASE_ANON PUBLIC_KEY"]
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
