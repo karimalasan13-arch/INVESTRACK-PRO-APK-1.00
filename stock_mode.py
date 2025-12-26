@@ -6,7 +6,11 @@ import plotly.graph_objects as go
 
 from price_history import stock_live_prices
 from portfolio_tracker import autosave_portfolio_value
-from db import supabase
+from db import get_supabase
+
+supabase = get_supabase()
+supabase.table("user_settings")...
+
 from user_session import get_user_id
 
 
