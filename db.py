@@ -1,13 +1,9 @@
+import os
+from supabase import create_client, Client
 import streamlit as st
-from supabase import create_client
 
+# Read secrets from Streamlit Cloud
 SUPABASE_URL = st.secrets["SUPABASE_URL"]
-SUPABASE_ANON_KEY = st.secrets["SUPABASE_ANON_KEY"]
+SUPABASE_KEY = st.secrets["SUPABASE_SERVICE_ROLE_KEY"]
 
-def get_supabase():
-    if "supabase" not in st.session_state:
-        st.session_state.supabase = create_client(
-            SUPABASE_URL,
-            SUPABASE_ANON_KEY
-        )
-    return st.session_state.supabase
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
