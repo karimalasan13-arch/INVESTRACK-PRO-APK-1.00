@@ -33,22 +33,27 @@ STOCK_MAP = {
 def load_setting(user_id, key, default):
     try:
         res = supabase.table("user_settings") \
-            .select(key) \
+            .select("value") \
             .eq("user_id", user_id) \
+            .eq("key", key) \
             .single() \
             .execute()
-        if res.data and key in res.data:
-            return float(res.data[key])
+
+        if res.data:
+            return float(res.data["value"])
     except:
         pass
+
     return default
 
 
 def save_setting(user_id, key, value):
     supabase.table("user_settings").upsert({
         "user_id": user_id,
-        key: value
+        "key": key,
+        "value": value
     }).execute()
+
 
 
 def load_stock_holdings(user_id):
