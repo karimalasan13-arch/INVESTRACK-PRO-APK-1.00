@@ -4,13 +4,10 @@ import altair as alt
 from datetime import datetime
 import plotly.graph_objects as go
 
-from price_history import stock_live_prices
+from price_history import crypto_live_prices
 from portfolio_tracker import autosave_portfolio_value
 from db import get_supabase
 from user_session import get_user_id
-
-supabase = get_supabase()
-supabase.table("user_settings")...
 
 
 # -----------------------------------------
