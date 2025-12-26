@@ -55,21 +55,15 @@ def save_setting(user_id: str, key: str, value: float):
     ).execute()
 
 
-def load_setting(user_id: str, key: str, default: float):
+def load_crypto_holdings():
+    holdings = {sym: 0.0 for sym in API_MAP}
     try:
-        res = supabase.table("user_settings") \
-            .select("value") \
-            .eq("user_id", user_id) \
-            .eq("key", key) \
-            .single() \
-            .execute()
-
-        if res.data:
-            return float(res.data["value"])
+        res = supabase.table("crypto_holdings").select("*").execute()
+        for row in res.data:
+            holdings[row["symbol"]] = float(row["quantity"])
     except:
         pass
-
-    return default
+    return holdings
 
 
 def save_crypto_holdings(user_id, holdings):
