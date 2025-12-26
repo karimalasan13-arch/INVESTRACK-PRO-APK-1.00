@@ -30,19 +30,21 @@ API_MAP = {
 # -----------------------------------------
 # SUPABASE HELPERS
 # -----------------------------------------
-def load_setting(user_id, key, default):
-    try:
-        res = supabase.table("user_settings") \
-            .select(key) \
-            .eq("user_id", user_id) \
-            .single() \
-            .execute()
-        if res.data and key in res.data:
-            return float(res.data[key])
-    except:
-        pass
-    return default
+def load_crypto_holdings(user_id: str):
+    holdings = {sym: 0.0 for sym in API_MAP}
 
+    try:
+        res = supabase.table("crypto_holdings") \
+            .select("symbol,quantity") \
+            .eq("user_id", user_id) \
+            .execute()
+
+        for row in res.data:
+            holdings[row["symbol"]] = float(row["quantity"])
+    except Exception as e:
+        st.error(f"Failed to load crypto holdings: {e}")
+
+    return holdings
 
 def save_setting(user_id: str, key: str, value: float):
     supabase.table("user_settings").upsert(
