@@ -6,15 +6,13 @@ import plotly.graph_objects as go
 
 from price_history import crypto_live_prices
 from portfolio_tracker import autosave_portfolio_value
-from db import supabase
-from user_session import get_user_id   # 🔑 REQUIRED
+from db import supabase   # <-- central Supabase client
 
 
 # -----------------------------------------
 # CONFIG
 # -----------------------------------------
 API_MAP = {
-    "USDT": "tether",
     "BTC": "bitcoin",
     "ETH": "ethereum",
     "SOL": "solana",
@@ -28,71 +26,46 @@ API_MAP = {
 
 
 # -----------------------------------------
-# SUPABASE HELPERS (USER-SAFE)
+# SUPABASE HELPERS
 # -----------------------------------------
-def load_setting(user_id: str, key: str, default):
+def load_setting(key, default):
     try:
-        res = supabase.table("user_settings") \
-            .select(key) \
-            .eq("user_id", user_id) \
-            .single() \
-            .execute()
-
-        if res.data and key in res.data:
-            return float(res.data[key])
+        res = supabase.table("user_settings").select("value").eq("key", key).execute()
+        if res.data:
+            return float(res.data[0]["value"])
     except:
         pass
-
     return default
 
 
-def save_setting(user_id: str, key: str, value):
-    supabase.table("user_settings").upsert({
-        "user_id": user_id,
-        key: value
-    }).execute()
+def save_setting(key, value):
+    supabase.table("user_settings").upsert(
+        {"key": key, "value": value}
+    ).execute()
 
 
-def load_crypto_holdings(user_id: str):
+def load_crypto_holdings():
     holdings = {sym: 0.0 for sym in API_MAP}
     try:
-        res = supabase.table("crypto_holdings") \
-            .select("symbol,quantity") \
-            .eq("user_id", user_id) \
-            .execute()
-
+        res = supabase.table("crypto_holdings").select("*").execute()
         for row in res.data:
             holdings[row["symbol"]] = float(row["quantity"])
     except:
         pass
-
     return holdings
 
 
-def save_crypto_holdings(user_id: str, holdings: dict):
-    rows = [
-        {
-            "user_id": user_id,
-            "symbol": sym,
-            "quantity": qty
-        }
-        for sym, qty in holdings.items()
-    ]
-
-    supabase.table("crypto_holdings").upsert(
-        rows,
-        on_conflict="user_id,symbol"
-    ).execute()
+def save_crypto_holdings(holdings):
+    rows = [{"symbol": s, "quantity": q} for s, q in holdings.items()]
+    supabase.table("crypto_holdings").upsert(rows).execute()
 
 
-def load_portfolio_history(user_id: str):
+def load_portfolio_history():
     try:
         res = supabase.table("portfolio_history") \
             .select("timestamp,value_ghs") \
-            .eq("user_id", user_id) \
             .order("timestamp") \
             .execute()
-
         return res.data or []
     except:
         return []
@@ -109,15 +82,14 @@ def pct(v): return f"{v:.2f}%"
 # MAIN APP
 # -----------------------------------------
 def crypto_app():
-    user_id = get_user_id()   # 🔑 SINGLE SOURCE OF TRUTH
     st.title("💰 Crypto Portfolio Tracker")
 
     # -------------------------------------
-    # LOAD USER DATA
+    # LOAD FROM SUPABASE
     # -------------------------------------
-    rate = load_setting(user_id, "crypto_rate", 14.5)
-    invested = load_setting(user_id, "crypto_investment", 0.0)
-    holdings = load_crypto_holdings(user_id)
+    rate = load_setting("crypto_rate", 14.5)
+    invested = load_setting("crypto_investment", 0.0)
+    holdings = load_crypto_holdings()
 
     # -------------------------------------
     # SIDEBAR
@@ -127,14 +99,13 @@ def crypto_app():
     rate = st.sidebar.number_input(
         "Crypto Exchange Rate (USD → GHS)", value=rate, step=0.1
     )
-
     invested = st.sidebar.number_input(
         "Total Crypto Investment (GHS)", value=invested, step=10.0
     )
 
     if st.sidebar.button("Save Settings"):
-        save_setting(user_id, "crypto_rate", rate)
-        save_setting(user_id, "crypto_investment", invested)
+        save_setting("crypto_rate", rate)
+        save_setting("crypto_investment", invested)
         st.sidebar.success("Settings saved")
 
     st.sidebar.markdown("---")
@@ -149,7 +120,7 @@ def crypto_app():
         )
 
     if st.sidebar.button("Save Holdings"):
-        save_crypto_holdings(user_id, holdings)
+        save_crypto_holdings(holdings)
         st.sidebar.success("Holdings saved")
 
     # -------------------------------------
@@ -182,11 +153,11 @@ def crypto_app():
     pnl_pct = (pnl / invested * 100) if invested > 0 else 0
 
     # -------------------------------------
-    # 8-HOUR SNAPSHOT SAVE (SAFE)
+    # 8-HOUR SNAPSHOT SAVE
     # -------------------------------------
-    autosave_portfolio_value(user_id, total_value_ghs)
+    autosave_portfolio_value(total_value_ghs)
 
-    history = load_portfolio_history(user_id)
+    history = load_portfolio_history()
 
     # -------------------------------------
     # SUMMARY
@@ -200,7 +171,7 @@ def crypto_app():
     c3.metric("All-Time PnL", fmt(pnl), pct(pnl_pct))
 
     # -------------------------------------
-    # LINE CHART
+    # LINE CHART (PINCH / ZOOM ENABLED)
     # -------------------------------------
     st.subheader("📈 Portfolio Value Over Time")
 
