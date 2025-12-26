@@ -1,12 +1,12 @@
 import streamlit as st
-from auth import require_auth, auth_header
+from auth import login_ui
 
 # ------------------------------------
 # AUTH GATE
 # ------------------------------------
 if "user" not in st.session_state:
-    require_auth()
-    auth_header()
+    login_ui()
+    st.stop()
 
 # ------------------------------------
 # NORMALIZE USER SESSION (CRITICAL)
