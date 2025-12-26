@@ -4,6 +4,7 @@ import altair as alt
 from datetime import datetime
 import plotly.graph_objects as go
 
+st.write("USER ID:", user_id)
 from price_history import stock_live_prices
 from portfolio_tracker import autosave_portfolio_value
 from db import supabase
