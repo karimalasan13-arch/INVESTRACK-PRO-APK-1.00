@@ -1,11 +1,13 @@
-import os
-from supabase import create_client
 import streamlit as st
+from supabase import create_client
 
-SUPABASE_URL = st.secrets.get("SUPABASE_URL") or os.getenv("SUPABASE_URL")
-SUPABASE_KEY = st.secrets.get("SUPABASE_ANON_KEY") or os.getenv("SUPABASE_ANON_KEY")
+SUPABASE_URL = st.secrets["SUPABASE_URL"]
+SUPABASE_ANON_KEY = st.secrets["SUPABASE_ANON_KEY"]
 
-if not SUPABASE_URL or not SUPABASE_KEY:
-    raise RuntimeError("Supabase credentials not found")
-
-supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+def get_supabase():
+    if "supabase" not in st.session_state:
+        st.session_state.supabase = create_client(
+            SUPABASE_URL,
+            SUPABASE_ANON_KEY
+        )
+    return st.session_state.supabase
