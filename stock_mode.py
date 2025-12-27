@@ -165,7 +165,7 @@ def stock_app():
     user_id = st.session_state.user.id
     autosave_portfolio_value(user_id, total_value_ghs)
 
-    history = load_portfolio_history()
+    history = load_portfolio_history(user_id)
 
     # -------------------------------------
     # SUMMARY
