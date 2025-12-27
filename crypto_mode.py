@@ -13,7 +13,6 @@ from db import supabase
 # CONFIG
 # -----------------------------------------
 API_MAP = {
-    "USDT": "tether",
     "BTC": "bitcoin",
     "ETH": "ethereum",
     "SOL": "solana",
@@ -27,75 +26,73 @@ API_MAP = {
 
 
 # -----------------------------------------
-# SUPABASE HELPERS (USER-SCOPED)
+# SUPABASE HELPERS (USER-SAFE)
 # -----------------------------------------
 def load_settings(user_id):
     try:
-        res = supabase.table("user_settings") \
-            .select("crypto_rate, crypto_investment") \
-            .eq("user_id", user_id) \
-            .single() \
+        res = (
+            supabase.table("user_settings")
+            .select("*")
+            .eq("user_id", user_id)
+            .single()
             .execute()
-
+        )
         if res.data:
-            return (
-                float(res.data.get("crypto_rate", 14.5)),
-                float(res.data.get("crypto_investment", 0.0))
-            )
+            return res.data
     except:
         pass
 
-    return 14.5, 0.0
+    return {
+        "crypto_rate": 14.5,
+        "crypto_investment": 0.0,
+    }
 
 
 def save_settings(user_id, rate, invested):
-    supabase.table("user_settings").upsert({
-        "user_id": user_id,
-        "crypto_rate": rate,
-        "crypto_investment": invested
-    }).execute()
+    supabase.table("user_settings").upsert(
+        {
+            "user_id": user_id,
+            "crypto_rate": rate,
+            "crypto_investment": invested,
+        }
+    ).execute()
 
 
 def load_crypto_holdings(user_id):
     holdings = {sym: 0.0 for sym in API_MAP}
     try:
-        res = supabase.table("crypto_holdings") \
-            .select("symbol, quantity") \
-            .eq("user_id", user_id) \
+        res = (
+            supabase.table("crypto_holdings")
+            .select("symbol,quantity")
+            .eq("user_id", user_id)
             .execute()
-
+        )
         for row in res.data:
             holdings[row["symbol"]] = float(row["quantity"])
     except:
         pass
-
     return holdings
 
 
 def save_crypto_holdings(user_id, holdings):
     rows = [
-        {
-            "user_id": user_id,
-            "symbol": sym,
-            "quantity": qty
-        }
+        {"user_id": user_id, "symbol": sym, "quantity": qty}
         for sym, qty in holdings.items()
     ]
-
     supabase.table("crypto_holdings").upsert(
-        rows,
-        on_conflict="user_id,symbol"
+        rows, on_conflict="user_id,symbol"
     ).execute()
 
 
 def load_portfolio_history(user_id):
     try:
-        res = supabase.table("portfolio_history") \
-            .select("timestamp, value_ghs") \
-            .eq("user_id", user_id) \
-            .order("timestamp") \
+        res = (
+            supabase.table("portfolio_history")
+            .select("timestamp,value_ghs")
+            .eq("user_id", user_id)
+            .order("timestamp")
             .execute()
-
+        )
         return res.data or []
     except:
         return []
@@ -112,14 +109,12 @@ def pct(v): return f"{v:.2f}%"
 # MAIN APP
 # -----------------------------------------
 def crypto_app():
-    user_id = st.session_state.user.id   # ✅ SAFE LOCATION
-
+    user_id = st.session_state.user.id
     st.title("💰 Crypto Portfolio Tracker")
 
-    # -------------------------------------
-    # LOAD USER DATA
-    # -------------------------------------
-    rate, invested = load_settings(user_id)
+    settings = load_settings(user_id)
+    rate = float(settings.get("crypto_rate", 14.5))
+    invested = float(settings.get("crypto_investment", 0.0))
     holdings = load_crypto_holdings(user_id)
 
     # -------------------------------------
@@ -128,15 +123,10 @@ def crypto_app():
     st.sidebar.header("Crypto Settings")
 
     rate = st.sidebar.number_input(
-        "Crypto Exchange Rate (USD → GHS)",
-        value=rate,
-        step=0.1
+        "Crypto Exchange Rate (USD → GHS)", value=rate, step=0.1
     )
-
     invested = st.sidebar.number_input(
-        "Total Crypto Investment (GHS)",
-        value=invested,
-        step=10.0
+        "Total Crypto Investment (GHS)", value=invested, step=10.0
     )
 
     if st.sidebar.button("Save Settings"):
@@ -151,7 +141,7 @@ def crypto_app():
             f"{sym} quantity",
             value=float(holdings.get(sym, 0.0)),
             step=0.0001,
-            key=f"crypto_{sym}"
+            key=f"hold_{sym}"
         )
 
     if st.sidebar.button("Save Holdings"):
@@ -181,17 +171,10 @@ def crypto_app():
     st.subheader("📘 Crypto Asset Breakdown")
     st.dataframe(df, use_container_width=True)
 
-    # -------------------------------------
-    # PnL
-    # -------------------------------------
     pnl = total_value_ghs - invested
     pnl_pct = (pnl / invested * 100) if invested > 0 else 0.0
 
-    # -------------------------------------
-    # 8-HOUR SNAPSHOT SAVE
-    # -------------------------------------
     autosave_portfolio_value(user_id, total_value_ghs)
-
     history = load_portfolio_history(user_id)
 
     # -------------------------------------
@@ -229,18 +212,3 @@ def crypto_app():
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("Portfolio history will appear as data is collected.")
-
-    # -------------------------------------
-    # ALLOCATION PIE
-    # -------------------------------------
-    st.markdown("---")
-    st.subheader("🍕 Allocation (by Value)")
-
-    df_pie = df[df["Value (GHS)"] > 0][["Asset", "Value (GHS)"]]
-    if not df_pie.empty:
-        pie = alt.Chart(df_pie).mark_arc().encode(
-            theta="Value (GHS):Q",
-            color="Asset:N",
-            tooltip=["Asset", "Value (GHS)"]
-        )
-        st.altair_chart(pie, use_container_width=True)
