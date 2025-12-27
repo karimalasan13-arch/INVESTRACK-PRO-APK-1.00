@@ -28,23 +28,22 @@ API_MAP = {
 # -----------------------------------------
 # SUPABASE HELPERS
 # -----------------------------------------
-def load_settings(user_id):
+def load_setting(user_id: str, key: str, default):
     try:
-        res = (
-            supabase.table("user_settings")
-            .select("*")
-            .eq("user_id", user_id)
-            .single()
+        res = supabase.table("user_settings") \
+            .select("value") \
+            .eq("user_id", user_id) \
+            .eq("key", key) \
+            .single() \
             .execute()
-        )
-        if res.data:
-            return res.data
+
+        if res.data and "value" in res.data:
+            return float(res.data["value"])
     except:
         pass
 
-    return {
-        "crypto_rate": 14.5,
-        "crypto_investment": 0.0,
+    return default
+
     }
 
 
@@ -111,11 +110,10 @@ def pct(v): return f"{v:.2f}%"
 # -----------------------------------------
 def crypto_app():
     user_id = st.session_state.user.id
-    st.title("💰 Crypto Portfolio Tracker")
 
-    settings = load_settings(user_id)
-    rate = float(settings.get("crypto_rate", 14.5))
-    invested = float(settings.get("crypto_investment", 0.0))
+    rate = load_setting(user_id, "crypto_rate", 14.5)
+    invested = load_setting(user_id, "crypto_investment", 0.0)
+
     holdings = load_crypto_holdings(user_id)
 
     # -------------------------------------
