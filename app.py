@@ -1,7 +1,5 @@
 import streamlit as st
 from auth import login_ui
-from db import supabase
-st.write("Supabase OK:", bool(supabase))
 
 # ------------------------------------
 # AUTH GATE
