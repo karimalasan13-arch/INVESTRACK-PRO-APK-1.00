@@ -48,13 +48,14 @@ def load_settings(user_id):
     }
 
 
-def save_settings(user_id, rate, invested):
+def save_setting(user_id: str, key: str, value: float):
     supabase.table("user_settings").upsert(
         {
             "user_id": user_id,
-            "crypto_rate": rate,
-            "crypto_investment": invested,
-        }
+            "key": key,
+            "value": value,
+        },
+        on_conflict="user_id,key",
     ).execute()
 
 
@@ -131,7 +132,8 @@ def crypto_app():
     )
 
     if st.sidebar.button("Save Settings"):
-        save_settings(user_id, rate, invested)
+        save_setting(user_id, "crypto_rate", rate)
+        save_setting(user_id, "crypto_investment", invested)
         st.sidebar.success("Settings saved")
 
     st.sidebar.markdown("---")
