@@ -8,6 +8,7 @@ from price_history import stock_live_prices
 from portfolio_tracker import autosave_portfolio_value
 from db import supabase
 
+
 # -----------------------------------------
 # CONFIG
 # -----------------------------------------
@@ -24,71 +25,94 @@ STOCK_MAP = {
     "BRK-B": "BRK.B",
 }
 
+
 # -----------------------------------------
-# SUPABASE HELPERS (USER SAFE)
+# SUPABASE HELPERS (USER-SAFE)
 # -----------------------------------------
-def load_setting(user_id, key, default):
+def load_setting(user_id: str, key: str, default: float):
     try:
-        res = supabase.table("user_settings") \
-            .select("value") \
-            .eq("user_id", user_id) \
-            .eq("key", key) \
-            .single() \
+        res = (
+            supabase.table("user_settings")
+            .select("value")
+            .eq("user_id", user_id)
+            .eq("key", key)
+            .single()
             .execute()
-        return float(res.data["value"])
-    except:
-        return default
+        )
+        if res.data and "value" in res.data:
+            return float(res.data["value"])
+    except Exception:
+        pass
+    return default
 
 
-def save_setting(user_id, key, value):
-    supabase.table("user_settings").upsert({
-        "user_id": user_id,
-        "key": key,
-        "value": value
-    }, on_conflict="user_id,key").execute()
+def save_setting(user_id: str, key: str, value: float):
+    supabase.table("user_settings").upsert(
+        {
+            "user_id": user_id,
+            "key": key,
+            "value": value,
+        },
+        on_conflict="user_id,key",
+    ).execute()
 
 
-def load_stock_holdings(user_id):
+def load_stock_holdings(user_id: str):
     holdings = {sym: 0.0 for sym in STOCK_MAP}
-    res = supabase.table("stock_holdings") \
-        .select("symbol,quantity") \
-        .eq("user_id", user_id) \
-        .execute()
-
-    for row in res.data:
-        holdings[row["symbol"]] = float(row["quantity"])
-
+    try:
+        res = (
+            supabase.table("stock_holdings")
+            .select("symbol, quantity")
+            .eq("user_id", user_id)
+            .execute()
+        )
+        for row in res.data:
+            holdings[row["symbol"]] = float(row["quantity"])
+    except Exception:
+        pass
     return holdings
 
 
-def save_stock_holdings(user_id, holdings):
+def save_stock_holdings(user_id: str, holdings: dict):
     rows = [
         {
             "user_id": user_id,
             "symbol": sym,
-            "quantity": qty
+            "quantity": qty,
         }
         for sym, qty in holdings.items()
     ]
 
-    supabase.table("stock_holdings") \
-        .upsert(rows, on_conflict="user_id,symbol") \
-        .execute()
+    supabase.table("stock_holdings").upsert(
+        rows,
+        on_conflict="user_id,symbol",
+    ).execute()
 
 
-def load_portfolio_history(user_id):
-    res = supabase.table("portfolio_history") \
-        .select("timestamp,value_ghs") \
-        .eq("user_id", user_id) \
-        .order("timestamp") \
-        .execute()
-    return res.data or []
+def load_portfolio_history(user_id: str):
+    try:
+        res = (
+            supabase.table("portfolio_history")
+            .select("timestamp,value_ghs")
+            .eq("user_id", user_id)
+            .order("timestamp")
+            .execute()
+        )
+        return res.data or []
+    except Exception:
+        return []
+
 
 # -----------------------------------------
 # FORMATTERS
 # -----------------------------------------
-def fmt(v): return f"GHS {v:,.2f}"
-def pct(v): return f"{v:.2f}%"
+def fmt(v): 
+    return f"GHS {v:,.2f}"
+
+
+def pct(v): 
+    return f"{v:.2f}%"
+
 
 # -----------------------------------------
 # MAIN APP
@@ -98,7 +122,7 @@ def stock_app():
     st.title("📊 Stock Portfolio Tracker")
 
     # -------------------------------------
-    # LOAD DATA
+    # LOAD USER DATA
     # -------------------------------------
     rate = load_setting(user_id, "stock_rate", 14.5)
     invested = load_setting(user_id, "stock_investment", 0.0)
@@ -110,11 +134,15 @@ def stock_app():
     st.sidebar.header("Stock Settings")
 
     rate = st.sidebar.number_input(
-        "Stock Exchange Rate (USD → GHS)", value=rate, step=0.1
+        "Stock Exchange Rate (USD → GHS)",
+        value=rate,
+        step=0.1,
     )
 
     invested = st.sidebar.number_input(
-        "Total Stock Investment (GHS)", value=invested, step=10.0
+        "Total Stock Investment (GHS)",
+        value=invested,
+        step=10.0,
     )
 
     if st.sidebar.button("Save Settings"):
@@ -130,7 +158,7 @@ def stock_app():
             f"{sym} quantity",
             value=float(assets.get(sym, 0.0)),
             step=1.0,
-            key=f"stk_{sym}"
+            key=f"stk_{sym}",
         )
 
     if st.sidebar.button("Save Holdings"):
@@ -138,80 +166,127 @@ def stock_app():
         st.sidebar.success("Holdings saved")
 
     # -------------------------------------
-    # LIVE PRICES
+    # LIVE PRICES (USD)
     # -------------------------------------
-    prices = stock_live_prices(
-        symbols=[s for s, q in assets.items() if q > 0] or list(STOCK_MAP)
-    )
+    symbols_to_fetch = [s for s, q in assets.items() if q > 0] or list(STOCK_MAP.keys())
+    prices = stock_live_prices(symbols=symbols_to_fetch)
 
     rows = []
     total_value_ghs = 0.0
 
     for sym, qty in assets.items():
         usd_price = prices.get(sym, 0.0)
-        value_ghs = usd_price * qty * rate
+        value_usd = usd_price * qty
+        value_ghs = value_usd * rate
         total_value_ghs += value_ghs
-        rows.append([sym, qty, usd_price, value_ghs / rate, value_ghs])
+        rows.append([sym, qty, usd_price, value_usd, value_ghs])
 
     df = pd.DataFrame(
         rows,
-        columns=["Asset", "Qty", "Price (USD)", "Value (USD)", "Value (GHS)"]
+        columns=["Asset", "Qty", "Price (USD)", "Value (USD)", "Value (GHS)"],
     )
 
     st.subheader("📘 Stock Asset Breakdown")
     st.dataframe(df, use_container_width=True)
 
     # -------------------------------------
-    # SNAPSHOT SAVE (8 HOUR)
+    # PnL
+    # -------------------------------------
+    pnl = total_value_ghs - invested
+    pnl_pct = (pnl / invested * 100) if invested > 0 else 0.0
+
+    # -------------------------------------
+    # 8-HOUR SNAPSHOT SAVE
     # -------------------------------------
     autosave_portfolio_value(user_id, total_value_ghs)
+
     history = load_portfolio_history(user_id)
 
     # -------------------------------------
     # SUMMARY
     # -------------------------------------
-    pnl = total_value_ghs - invested
-    pnl_pct = (pnl / invested * 100) if invested > 0 else 0
-
     st.markdown("---")
+    st.subheader("📈 Portfolio Summary")
+
     c1, c2, c3 = st.columns(3)
-    c1.metric("Total Value", fmt(total_value_ghs))
-    c2.metric("Invested", fmt(invested))
-    c3.metric("PnL", fmt(pnl), pct(pnl_pct))
+    c1.metric("Total Value (GHS)", fmt(total_value_ghs))
+    c2.metric("Total Invested (GHS)", fmt(invested))
+    c3.metric("All-Time PnL", fmt(pnl), pct(pnl_pct))
 
     # -------------------------------------
-    # LINE CHART
+    # LINE CHART (PINCH + ZOOM)
     # -------------------------------------
     st.subheader("📈 Portfolio Value Over Time")
 
     if len(history) >= 2:
-        fig = go.Figure(go.Scatter(
-            x=[h["timestamp"] for h in history],
-            y=[h["value_ghs"] for h in history],
-            mode="lines+markers"
-        ))
+        dates = [h["timestamp"] for h in history]
+        values = [h["value_ghs"] for h in history]
+
+        fig = go.Figure()
+        fig.add_trace(
+            go.Scatter(
+                x=dates,
+                y=values,
+                mode="lines+markers",
+            )
+        )
+
         fig.update_layout(
             dragmode="zoom",
             hovermode="x unified",
-            height=350
+            height=350,
+            xaxis_title="Date",
+            yaxis_title="Portfolio Value (GHS)",
         )
+
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("Portfolio history will appear as data is collected.")
 
     # -------------------------------------
+    # MTD / YTD
+    # -------------------------------------
+    st.markdown("---")
+    st.subheader("📆 MTD & YTD Performance")
+
+    if history:
+        hist_df = pd.DataFrame(history)
+        hist_df["timestamp"] = pd.to_datetime(hist_df["timestamp"])
+        hist_df = hist_df.sort_values("timestamp")
+
+        now = datetime.utcnow()
+
+        month_df = hist_df[hist_df["timestamp"].dt.month == now.month]
+        year_df = hist_df[hist_df["timestamp"].dt.year == now.year]
+
+        mtd_start = month_df.iloc[0]["value_ghs"] if not month_df.empty else total_value_ghs
+        ytd_start = year_df.iloc[0]["value_ghs"] if not year_df.empty else total_value_ghs
+
+        mtd_pnl = total_value_ghs - mtd_start
+        ytd_pnl = total_value_ghs - ytd_start
+
+        mtd_pct = (mtd_pnl / mtd_start * 100) if mtd_start > 0 else 0
+        ytd_pct = (ytd_pnl / ytd_start * 100) if ytd_start > 0 else 0
+    else:
+        mtd_pnl = ytd_pnl = mtd_pct = ytd_pct = 0.0
+
+    c1, c2 = st.columns(2)
+    c1.metric("MTD", fmt(mtd_pnl), pct(mtd_pct))
+    c2.metric("YTD", fmt(ytd_pnl), pct(ytd_pct))
+
+    # -------------------------------------
     # ALLOCATION PIE
     # -------------------------------------
     st.markdown("---")
-    st.subheader("🍕 Allocation")
+    st.subheader("🍕 Allocation (by Value)")
 
     df_pie = df[df["Value (GHS)"] > 0][["Asset", "Value (GHS)"]]
     if not df_pie.empty:
-        st.altair_chart(
-            alt.Chart(df_pie).mark_arc().encode(
-                theta="Value (GHS):Q",
-                color="Asset:N",
-                tooltip=["Asset", "Value (GHS)"]
-            ),
-            use_container_width=True
+        pie = alt.Chart(df_pie).mark_arc().encode(
+            theta="Value (GHS):Q",
+            color="Asset:N",
+            tooltip=["Asset", "Value (GHS)"],
         )
+        st.altair_chart(pie, use_container_width=True)
+    else:
+        st.info("No allocation to display yet.")
