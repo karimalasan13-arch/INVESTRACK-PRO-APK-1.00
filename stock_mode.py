@@ -7,7 +7,7 @@ import plotly.graph_objects as go
 from price_history import stock_live_prices
 from portfolio_tracker import autosave_portfolio_value
 from db import supabase
-
+user_id = st.session_state.user.id
 
 # -----------------------------------------
 # CONFIG
@@ -162,7 +162,8 @@ def stock_app():
     # -------------------------------------
     # 8-HOUR SNAPSHOT SAVE
     # -------------------------------------
-    autosave_portfolio_value(total_value_ghs)
+    user_id = st.session_state.user.id
+    autosave_portfolio_value(user_id, total_value_ghs)
 
     history = load_portfolio_history()
 
