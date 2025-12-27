@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import altair as alt
-from datetime import datetime
 import plotly.graph_objects as go
 
 from price_history import crypto_live_prices
@@ -10,10 +9,10 @@ from db import supabase
 
 
 # -----------------------------------------
-# CONFIG
+# CONFIG (USDT INCLUDED)
 # -----------------------------------------
 API_MAP = {
-    "USDT": "tether"
+    "USDT": "tether",          # ← FIXED
     "BTC": "bitcoin",
     "ETH": "ethereum",
     "SOL": "solana",
@@ -27,7 +26,7 @@ API_MAP = {
 
 
 # -----------------------------------------
-# SUPABASE HELPERS (USER-SAFE)
+# SUPABASE HELPERS
 # -----------------------------------------
 def load_settings(user_id):
     try:
@@ -126,6 +125,7 @@ def crypto_app():
     rate = st.sidebar.number_input(
         "Crypto Exchange Rate (USD → GHS)", value=rate, step=0.1
     )
+
     invested = st.sidebar.number_input(
         "Total Crypto Investment (GHS)", value=invested, step=10.0
     )
@@ -150,15 +150,16 @@ def crypto_app():
         st.sidebar.success("Holdings saved")
 
     # -------------------------------------
-    # LIVE PRICES
+    # LIVE PRICES (USDT FIXED)
     # -------------------------------------
     prices = crypto_live_prices()
+    prices["USDT"] = 1.0   # ← CRITICAL FIX
 
     rows = []
     total_value_ghs = 0.0
 
     for sym, qty in holdings.items():
-        usd_price = prices.get(sym, 0.0)
+        usd_price = float(prices.get(sym, 0.0))
         value_usd = usd_price * qty
         value_ghs = value_usd * rate
         total_value_ghs += value_ghs
@@ -172,6 +173,9 @@ def crypto_app():
     st.subheader("📘 Crypto Asset Breakdown")
     st.dataframe(df, use_container_width=True)
 
+    # -------------------------------------
+    # PnL
+    # -------------------------------------
     pnl = total_value_ghs - invested
     pnl_pct = (pnl / invested * 100) if invested > 0 else 0.0
 
@@ -201,15 +205,33 @@ def crypto_app():
             y=[h["value_ghs"] for h in history],
             mode="lines+markers"
         ))
-
         fig.update_layout(
-            dragmode="zoom",
             hovermode="x unified",
+            dragmode="zoom",
             height=350,
             xaxis_title="Date",
             yaxis_title="Portfolio Value (GHS)",
         )
-
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("Portfolio history will appear as data is collected.")
+
+    # -------------------------------------
+    # ALLOCATION PIE (FIXED)
+    # -------------------------------------
+    st.markdown("---")
+    st.subheader("🍕 Allocation (by Value)")
+
+    df_pie = df[["Asset", "Value (GHS)"]].copy()
+    df_pie["Value (GHS)"] = pd.to_numeric(df_pie["Value (GHS)"], errors="coerce")
+    df_pie = df_pie[df_pie["Value (GHS)"] > 0]
+
+    if not df_pie.empty:
+        pie = alt.Chart(df_pie).mark_arc(innerRadius=50).encode(
+            theta=alt.Theta(field="Value (GHS)", type="quantitative"),
+            color=alt.Color(field="Asset", type="nominal"),
+            tooltip=["Asset", "Value (GHS)"]
+        )
+        st.altair_chart(pie, use_container_width=True)
+    else:
+        st.info("Add holdings to see allocation.")
