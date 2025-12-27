@@ -13,6 +13,7 @@ from db import supabase
 # CONFIG
 # -----------------------------------------
 API_MAP = {
+    "USDT": "tether"
     "BTC": "bitcoin",
     "ETH": "ethereum",
     "SOL": "solana",
