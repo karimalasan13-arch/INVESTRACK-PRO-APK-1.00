@@ -3,28 +3,52 @@ from db import supabase
 
 
 # -------------------------------------
-# AUTH HELPERS
+# AUTH CORE
 # -------------------------------------
 def get_current_user():
     """
-    Always re-validate auth with Supabase.
-    This prevents ghost sessions after sleep / reload.
+    Single source of truth for authenticated user.
+    Always re-check Supabase session.
     """
     try:
         res = supabase.auth.get_user()
-        return res.user
+        if res and res.user:
+            return res.user
     except Exception:
-        return None
+        pass
+    return None
+
+
+def ensure_auth():
+    """
+    Ensures session_state.user is always valid.
+    Call this once at app startup.
+    """
+    user = get_current_user()
+
+    if user:
+        st.session_state.user = user
+        st.session_state.user_id = user.id
+        return True
+
+    # Clean stale session
+    st.session_state.pop("user", None)
+    st.session_state.pop("user_id", None)
+    return False
 
 
 def logout():
     """
-    Fully invalidate Supabase session
+    Fully log out user (Supabase + Streamlit state).
     """
     try:
         supabase.auth.sign_out()
     except Exception:
         pass
+
+    st.session_state.pop("user", None)
+    st.session_state.pop("user_id", None)
+    st.rerun()
 
 
 # -------------------------------------
@@ -33,23 +57,25 @@ def logout():
 def login_ui():
     st.title("🔐 Login")
 
-    tab1, tab2 = st.tabs(["Login", "Create Account"])
+    tab_login, tab_signup = st.tabs(["Login", "Create Account"])
 
     # --------------------
-    # LOGIN
+    # LOGIN TAB
     # --------------------
-    with tab1:
+    with tab_login:
         email = st.text_input("Email", key="login_email")
-        password = st.text_input("Password", type="password", key="login_pw")
+        password = st.text_input("Password", type="password", key="login_password")
 
-        if st.button("Login"):
+        if st.button("Login", use_container_width=True):
             try:
-                res = supabase.auth.sign_in_with_password({
-                    "email": email,
-                    "password": password
-                })
+                res = supabase.auth.sign_in_with_password(
+                    {
+                        "email": email,
+                        "password": password,
+                    }
+                )
 
-                if res.user:
+                if res and res.user:
                     st.session_state.user = res.user
                     st.session_state.user_id = res.user.id
                     st.success("Login successful")
@@ -57,25 +83,27 @@ def login_ui():
                 else:
                     st.error("Login failed")
 
-            except Exception as e:
+            except Exception:
                 st.error("Invalid email or password")
 
     # --------------------
-    # SIGN UP
+    # SIGNUP TAB
     # --------------------
-    with tab2:
+    with tab_signup:
         new_email = st.text_input("Email", key="signup_email")
-        new_password = st.text_input("Password", type="password", key="signup_pw")
+        new_password = st.text_input("Password", type="password", key="signup_password")
 
-        if st.button("Create Account"):
+        if st.button("Create Account", use_container_width=True):
             try:
-                res = supabase.auth.sign_up({
-                    "email": new_email,
-                    "password": new_password
-                })
+                res = supabase.auth.sign_up(
+                    {
+                        "email": new_email,
+                        "password": new_password,
+                    }
+                )
 
-                if res.user:
-                    st.success("Account created. You may now log in.")
+                if res and res.user:
+                    st.success("Account created. You can now log in.")
                 else:
                     st.error("Sign-up failed")
 
