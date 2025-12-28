@@ -1,21 +1,12 @@
-# price_history.py
-
-import os
 import requests
 import yfinance as yf
+import pandas as pd
 import streamlit as st
 
 # ---------------------------------------------
-# SECRETS
+# CRYPTO LIVE PRICES (CACHED)
 # ---------------------------------------------
-ALPHA_VANTAGE_API_KEY = (
-    st.secrets.get("ALPHA_VANTAGE_API_KEY")
-    or os.getenv("ALPHA_VANTAGE_API_KEY")
-)
-
-# ---------------------------------------------
-# CRYPTO LIVE PRICES (CoinGecko)
-# ---------------------------------------------
+@st.cache_data(ttl=60)
 def crypto_live_prices():
     ids = {
         "BTC": "bitcoin",
@@ -36,13 +27,12 @@ def crypto_live_prices():
             "?ids=" + ",".join(ids.values()) +
             "&vs_currencies=usd"
         )
-
         r = requests.get(url, timeout=10)
         data = r.json()
 
         prices = {}
-        for symbol, cg_id in ids.items():
-            prices[symbol] = float(data.get(cg_id, {}).get("usd", 0.0))
+        for sym, cid in ids.items():
+            prices[sym] = float(data.get(cid, {}).get("usd", 0.0))
 
         return prices
 
@@ -50,47 +40,20 @@ def crypto_live_prices():
         print("CRYPTO PRICE ERROR:", e)
         return {k: 0.0 for k in ids.keys()}
 
+
 # ---------------------------------------------
-# STOCK LIVE PRICES (Alpha Vantage → Yahoo)
+# STOCK LIVE PRICES (CACHED)
 # ---------------------------------------------
+@st.cache_data(ttl=60)
 def stock_live_prices(symbols=None):
     if not symbols:
         return {}
 
     prices = {}
 
-    # -----------------------------
-    # Alpha Vantage (single symbol)
-    # -----------------------------
-    if ALPHA_VANTAGE_API_KEY:
-        try:
-            symbol = symbols[0]
-            url = (
-                "https://www.alphavantage.co/query"
-                f"?function=GLOBAL_QUOTE&symbol={symbol}"
-                f"&apikey={ALPHA_VANTAGE_API_KEY}"
-            )
-
-            r = requests.get(url, timeout=10)
-            data = r.json()
-
-            quote = data.get("Global Quote", {})
-            price = quote.get("05. price")
-
-            if price:
-                prices[symbol] = float(price)
-                return prices
-
-        except Exception as e:
-            print("Alpha Vantage error:", e)
-
-    # -----------------------------
-    # Yahoo Finance fallback
-    # -----------------------------
     try:
-        tickers = " ".join(symbols)
         data = yf.download(
-            tickers=tickers,
+            tickers=" ".join(symbols),
             period="1d",
             interval="1m",
             progress=False,
@@ -104,7 +67,7 @@ def stock_live_prices(symbols=None):
                 prices[sym] = 0.0
 
     except Exception as e:
-        print("Yahoo Finance error:", e)
-        prices = {sym: 0.0 for sym in symbols}
+        print("STOCK PRICE ERROR:", e)
+        prices = {s: 0.0 for s in symbols}
 
     return prices
