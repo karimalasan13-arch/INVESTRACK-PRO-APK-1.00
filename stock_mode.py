@@ -8,6 +8,8 @@ from price_history import stock_live_prices
 from portfolio_tracker import autosave_portfolio_value
 from db import supabase
 
+        if not any(prices.values()):
+    st.warning("⚠️ Price data temporarily unavailable. Showing last saved values.")
 
 # -----------------------------------------
 # CONFIG
