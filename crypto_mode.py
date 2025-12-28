@@ -211,6 +211,7 @@ def crypto_app():
 
     # ---------- Pie ----------
     pie_df = df[df["Value (GHS)"] > 0][["Asset", "Value (GHS)"]]
+
     if not pie_df.empty:
         st.altair_chart(
             alt.Chart(pie_df).mark_arc().encode(
@@ -220,3 +221,4 @@ def crypto_app():
             ),
             use_container_width=True,
         )
+
