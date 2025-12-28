@@ -1,29 +1,25 @@
 import streamlit as st
-from auth import login_ui, get_current_user, logout
+from auth import login_ui, ensure_auth, logout
 
 # ------------------------------------
-# APP CONFIG
+# APP CONFIG (MUST BE FIRST)
 # ------------------------------------
 st.set_page_config(
     page_title="InvesTrack Pro",
     page_icon="📈",
-    layout="wide"
+    layout="wide",
 )
 
 # ------------------------------------
-# HARD AUTH GATE (CRITICAL)
+# HARD AUTH GATE (PRODUCTION-GRADE)
 # ------------------------------------
-user = get_current_user()
-
-if not user:
+if not ensure_auth():
     login_ui()
     st.stop()
 
-# ------------------------------------
-# NORMALIZE SESSION (SINGLE SOURCE)
-# ------------------------------------
-st.session_state.user = user
-st.session_state.user_id = user.id
+# At this point auth is guaranteed
+user = st.session_state.user
+user_id = st.session_state.user_id
 
 # ------------------------------------
 # SIDEBAR
@@ -32,17 +28,16 @@ st.sidebar.success(f"Logged in as\n{user.email}")
 
 if st.sidebar.button("🚪 Logout"):
     logout()
-    st.session_state.clear()
-    st.rerun()
+    st.stop()
 
 mode = st.sidebar.radio(
     "Select Mode",
     ["Crypto", "Stocks"],
-    key="mode_select"
+    key="mode_select",
 )
 
 # ------------------------------------
-# LAZY IMPORTS (PREVENT LOAD ISSUES)
+# LAZY IMPORTS (CRITICAL FOR STABILITY)
 # ------------------------------------
 if mode == "Crypto":
     from crypto_mode import crypto_app
