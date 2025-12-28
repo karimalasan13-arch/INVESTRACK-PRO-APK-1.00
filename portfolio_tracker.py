@@ -1,23 +1,25 @@
-from datetime import datetime, timedelta, timezone
+# portfolio_tracker.py
+
+from datetime import datetime, timedelta
 from db import supabase
 
 
-SAVE_INTERVAL_HOURS = 8
+SNAPSHOT_INTERVAL_HOURS = 8
 
 
 def autosave_portfolio_value(user_id: str, value_ghs: float):
     """
-    Save portfolio value at most once every 8 hours per user.
-    Safe for Streamlit Cloud sleep/restart.
+    Saves portfolio value at most once per SNAPSHOT_INTERVAL_HOURS.
+    Idempotent, safe, and production-grade.
     """
 
     if not user_id:
         return
 
-    now = datetime.now(timezone.utc)
+    now = datetime.utcnow()
 
     try:
-        # Fetch last saved snapshot
+        # 1️⃣ Get last snapshot
         res = (
             supabase.table("portfolio_history")
             .select("timestamp")
@@ -29,10 +31,10 @@ def autosave_portfolio_value(user_id: str, value_ghs: float):
 
         if res.data:
             last_ts = datetime.fromisoformat(res.data[0]["timestamp"])
-            if now - last_ts < timedelta(hours=SAVE_INTERVAL_HOURS):
-                return  # too soon → skip save
+            if now - last_ts < timedelta(hours=SNAPSHOT_INTERVAL_HOURS):
+                return  # ⛔ Skip save
 
-        # Insert new snapshot
+        # 2️⃣ Save snapshot
         supabase.table("portfolio_history").insert(
             {
                 "user_id": user_id,
@@ -43,4 +45,4 @@ def autosave_portfolio_value(user_id: str, value_ghs: float):
 
     except Exception as e:
         # Never crash the app
-        print("⚠️ Portfolio autosave failed:", e)
+        print("Autosave skipped:", e)
