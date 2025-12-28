@@ -22,51 +22,53 @@ API_MAP = {
     "DOGE": "dogecoin",
     "DOT": "polkadot",
     "LTC": "litecoin",
-    "USDT": "tether",   # ✅ added
+    "USDT": "tether",
 }
 
 
 # -----------------------------------------
-# SUPABASE HELPERS (USER-SCOPED)
+# SUPABASE HELPERS (USER-SAFE)
 # -----------------------------------------
-def load_setting(user_id: str, key: str, default):
+def load_setting(user_id: str, key: str, default: float):
     try:
-        res = supabase.table("user_settings") \
-            .select("value") \
-            .eq("user_id", user_id) \
-            .eq("key", key) \
-            .single() \
+        res = (
+            supabase.table("user_settings")
+            .select("value")
+            .eq("user_id", user_id)
+            .eq("key", key)
+            .single()
             .execute()
-
+        )
         if res.data and "value" in res.data:
             return float(res.data["value"])
-    except:
+    except Exception:
         pass
     return default
 
 
-def save_setting(user_id: str, key: str, value):
+def save_setting(user_id: str, key: str, value: float):
     supabase.table("user_settings").upsert(
         {
             "user_id": user_id,
             "key": key,
-            "value": value
+            "value": value,
         },
-        on_conflict="user_id,key"
+        on_conflict="user_id,key",
     ).execute()
 
 
 def load_crypto_holdings(user_id: str):
     holdings = {sym: 0.0 for sym in API_MAP}
     try:
-        res = supabase.table("crypto_holdings") \
-            .select("symbol,quantity") \
-            .eq("user_id", user_id) \
+        res = (
+            supabase.table("crypto_holdings")
+            .select("symbol,quantity")
+            .eq("user_id", user_id)
             .execute()
-
+        )
         for row in res.data or []:
             holdings[row["symbol"]] = float(row["quantity"])
-    except:
+    except Exception:
         pass
     return holdings
 
@@ -76,37 +78,39 @@ def save_crypto_holdings(user_id: str, holdings: dict):
         {
             "user_id": user_id,
             "symbol": sym,
-            "quantity": qty
+            "quantity": qty,
         }
         for sym, qty in holdings.items()
     ]
 
     supabase.table("crypto_holdings").upsert(
         rows,
-        on_conflict="user_id,symbol"
+        on_conflict="user_id,symbol",
     ).execute()
 
 
 def load_portfolio_history(user_id: str):
     try:
-        res = supabase.table("portfolio_history") \
-            .select("timestamp,value_ghs") \
-            .eq("user_id", user_id) \
-            .order("timestamp") \
+        res = (
+            supabase.table("portfolio_history")
+            .select("timestamp,value_ghs")
+            .eq("user_id", user_id)
+            .order("timestamp")
             .execute()
-
+        )
         return res.data or []
-    except:
+    except Exception:
         return []
 
 
 # -----------------------------------------
 # FORMATTERS
 # -----------------------------------------
-def fmt(v): 
+def fmt(v):
     return f"GHS {v:,.2f}"
 
-def pct(v): 
+
+def pct(v):
     return f"{v:.2f}%"
 
 
@@ -115,11 +119,10 @@ def pct(v):
 # -----------------------------------------
 def crypto_app():
     st.title("💰 Crypto Portfolio Tracker")
-
     user_id = st.session_state.user.id
 
     # -------------------------------------
-    # LOAD FROM SUPABASE
+    # LOAD USER DATA
     # -------------------------------------
     rate = load_setting(user_id, "crypto_rate", 14.5)
     invested = load_setting(user_id, "crypto_investment", 0.0)
@@ -133,13 +136,13 @@ def crypto_app():
     rate = st.sidebar.number_input(
         "Crypto Exchange Rate (USD → GHS)",
         value=float(rate),
-        step=0.1
+        step=0.1,
     )
 
     invested = st.sidebar.number_input(
         "Total Crypto Investment (GHS)",
         value=float(invested),
-        step=10.0
+        step=10.0,
     )
 
     if st.sidebar.button("Save Settings"):
@@ -158,7 +161,7 @@ def crypto_app():
             f"{sym} quantity",
             value=float(holdings.get(sym, 0.0)),
             step=0.0001,
-            key=f"crypto_{sym}"
+            key=f"crypto_{sym}",
         )
 
     if st.sidebar.button("Save Holdings"):
@@ -182,7 +185,7 @@ def crypto_app():
 
     df = pd.DataFrame(
         rows,
-        columns=["Asset", "Qty", "Price (USD)", "Value (USD)", "Value (GHS)"]
+        columns=["Asset", "Qty", "Price (USD)", "Value (USD)", "Value (GHS)"],
     )
 
     st.subheader("📘 Crypto Asset Breakdown")
@@ -195,7 +198,7 @@ def crypto_app():
     pnl_pct = (pnl / invested * 100) if invested > 0 else 0.0
 
     # -------------------------------------
-    # AUTOSAVE SNAPSHOT (8H)
+    # SNAPSHOT SAVE
     # -------------------------------------
     autosave_portfolio_value(user_id, total_value_ghs)
     history = load_portfolio_history(user_id)
@@ -217,17 +220,19 @@ def crypto_app():
     st.subheader("📈 Portfolio Value Over Time")
 
     if len(history) >= 2:
-        dates = [h["timestamp"] for h in history]
-        values = [h["value_ghs"] for h in history]
-
         fig = go.Figure()
-        fig.add_trace(go.Scatter(x=dates, y=values, mode="lines+markers"))
+        fig.add_trace(go.Scatter(
+            x=[h["timestamp"] for h in history],
+            y=[h["value_ghs"] for h in history],
+            mode="lines+markers",
+        ))
+
         fig.update_layout(
             dragmode="zoom",
             hovermode="x unified",
             height=350,
             xaxis_title="Date",
-            yaxis_title="Portfolio Value (GHS)"
+            yaxis_title="Portfolio Value (GHS)",
         )
 
         st.plotly_chart(fig, use_container_width=True)
@@ -235,7 +240,7 @@ def crypto_app():
         st.info("Portfolio history will appear as data is collected.")
 
     # -------------------------------------
-    # MTD / YTD PERFORMANCE
+    # MTD / YTD
     # -------------------------------------
     st.markdown("---")
     st.subheader("📆 MTD & YTD Performance")
@@ -272,11 +277,12 @@ def crypto_app():
     st.subheader("🍕 Allocation (by Value)")
 
     df_pie = df[df["Value (GHS)"] > 0][["Asset", "Value (GHS)"]]
-
     if not df_pie.empty:
         pie = alt.Chart(df_pie).mark_arc().encode(
             theta="Value (GHS):Q",
             color="Asset:N",
-            tooltip=["Asset", "Value (GHS)"]
+            tooltip=["Asset", "Value (GHS)"],
         )
         st.altair_chart(pie, use_container_width=True)
+    else:
+        st.info("No allocation to display yet.")
