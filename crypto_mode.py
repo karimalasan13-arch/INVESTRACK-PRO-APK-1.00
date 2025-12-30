@@ -194,50 +194,29 @@ def crypto_app():
         ))
         st.plotly_chart(fig, use_container_width=True)
 
-    # -------------------------------------
-    # MTD / YTD
-    # -------------------------------------
-    st.markdown("---")
-    st.subheader("📆 MTD & YTD Performance")
-
-    if history:
-        hist_df = pd.DataFrame(history)
-        hist_df["timestamp"] = pd.to_datetime(hist_df["timestamp"])
-        hist_df = hist_df.sort_values("timestamp")
-
+    # ---------- MTD / YTD ----------
+    hist = pd.DataFrame(history)
+    if not hist.empty:
+        hist["timestamp"] = pd.to_datetime(hist["timestamp"])
         now = datetime.utcnow()
+        mtd = hist[hist["timestamp"].dt.month == now.month]
+        ytd = hist[hist["timestamp"].dt.year == now.year]
 
-        month_df = hist_df[hist_df["timestamp"].dt.month == now.month]
-        year_df = hist_df[hist_df["timestamp"].dt.year == now.year]
+        mtd_start = mtd.iloc[0]["value_ghs"] if not mtd.empty else total_value
+        ytd_start = ytd.iloc[0]["value_ghs"] if not ytd.empty else total_value
 
-        mtd_start = month_df.iloc[0]["value_ghs"] if not month_df.empty else total_value_ghs
-        ytd_start = year_df.iloc[0]["value_ghs"] if not year_df.empty else total_value_ghs
+        c1, c2 = st.columns(2)
+        c1.metric("MTD", fmt(total_value - mtd_start))
+        c2.metric("YTD", fmt(total_value - ytd_start))
 
-        mtd_pnl = total_value_ghs - mtd_start
-        ytd_pnl = total_value_ghs - ytd_start
-
-        mtd_pct = (mtd_pnl / mtd_start * 100) if mtd_start > 0 else 0.0
-        ytd_pct = (ytd_pnl / ytd_start * 100) if ytd_start > 0 else 0.0
-    else:
-        mtd_pnl = ytd_pnl = mtd_pct = ytd_pct = 0.0
-
-    c1, c2 = st.columns(2)
-    c1.metric("MTD", fmt(mtd_pnl), pct(mtd_pct))
-    c2.metric("YTD", fmt(ytd_pnl), pct(ytd_pct))
-
-    # -------------------------------------
-    # ALLOCATION PIE
-    # -------------------------------------
-    st.markdown("---")
-    st.subheader("🍕 Allocation (by Value)")
-
-    df_pie = df[df["Value (GHS)"] > 0][["Asset", "Value (GHS)"]]
-    if not df_pie.empty:
-        pie = alt.Chart(df_pie).mark_arc().encode(
-            theta="Value (GHS):Q",
-            color="Asset:N",
-            tooltip=["Asset", "Value (GHS)"],
+    # ---------- Pie ----------
+    pie_df = df[df["Value (GHS)"] > 0][["Asset", "Value (GHS)"]]
+    if not pie_df.empty:
+        st.altair_chart(
+            alt.Chart(pie_df).mark_arc().encode(
+                theta="Value (GHS):Q",
+                color="Asset:N",
+                tooltip=["Asset", "Value (GHS)"],
+            ),
+            use_container_width=True,
         )
-        st.altair_chart(pie, use_container_width=True)
-    else:
-        st.info("No allocation to display yet.")
