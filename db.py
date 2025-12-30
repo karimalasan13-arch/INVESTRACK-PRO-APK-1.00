@@ -1,7 +1,7 @@
 # db.py
 import os
 import streamlit as st
-from supabase import create_user_id, User
+from supabase import create client, Client
 
 ALPHA_VANTAGE_API_KEY = (
     st.secrets.get("ALPHA_VANTAGE_API_KEY")
