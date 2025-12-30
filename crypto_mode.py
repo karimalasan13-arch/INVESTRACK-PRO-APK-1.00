@@ -4,7 +4,7 @@ import altair as alt
 from datetime import datetime
 import plotly.graph_objects as go
 
-from price_history import crypto_live_prices
+from price_history import crypto_live_prices  # 🔒 cached (3.2.1)
 from portfolio_tracker import autosave_portfolio_value
 from db import supabase
 
@@ -27,7 +27,7 @@ API_MAP = {
 
 
 # -----------------------------------------
-# SUPABASE HELPERS
+# SUPABASE HELPERS (USER-SCOPED)
 # -----------------------------------------
 def load_setting(user_id, key, default):
     try:
@@ -39,17 +39,15 @@ def load_setting(user_id, key, default):
             .single()
             .execute()
         )
-        if res.data:
-            return float(res.data["value"])
+        return float(res.data["value"])
     except Exception:
-        pass
-    return default
+        return default
 
 
 def save_setting(user_id, key, value):
     supabase.table("user_settings").upsert(
         {"user_id": user_id, "key": key, "value": value},
-        on_conflict="user_id,key",
+        on_conflict="user_id,key"
     ).execute()
 
 
@@ -71,11 +69,12 @@ def load_crypto_holdings(user_id):
 
 def save_crypto_holdings(user_id, holdings):
     rows = [
-        {"user_id": user_id, "symbol": sym, "quantity": qty}
-        for sym, qty in holdings.items()
+        {"user_id": user_id, "symbol": s, "quantity": q}
+        for s, q in holdings.items()
     ]
     supabase.table("crypto_holdings").upsert(
-        rows, on_conflict="user_id,symbol"
+        rows,
+        on_conflict="user_id,symbol"
     ).execute()
 
 
@@ -104,18 +103,23 @@ def pct(v): return f"{v:.2f}%"
 # MAIN APP
 # -----------------------------------------
 def crypto_app():
-    st.title("💰 Crypto Portfolio Tracker")
     user_id = st.session_state.user.id
+    st.title("💰 Crypto Portfolio Tracker")
 
+    # -------------------------------------
+    # LOAD USER DATA
+    # -------------------------------------
     rate = load_setting(user_id, "crypto_rate", 14.5)
     invested = load_setting(user_id, "crypto_investment", 0.0)
     holdings = load_crypto_holdings(user_id)
 
-    # ---------- SIDEBAR ----------
+    # -------------------------------------
+    # SIDEBAR — SETTINGS
+    # -------------------------------------
     st.sidebar.header("Crypto Settings")
 
     rate = st.sidebar.number_input("USD → GHS Rate", value=rate, step=0.1)
-    invested = st.sidebar.number_input("Total Invested (GHS)", value=invested, step=10.0)
+    invested = st.sidebar.number_input("Total Investment (GHS)", value=invested, step=10.0)
 
     if st.sidebar.button("Save Settings"):
         save_setting(user_id, "crypto_rate", rate)
@@ -127,87 +131,91 @@ def crypto_app():
 
     for sym in API_MAP:
         holdings[sym] = st.sidebar.number_input(
-            f"{sym}", value=holdings.get(sym, 0.0), step=0.0001, key=f"c_{sym}"
+            sym,
+            value=float(holdings.get(sym, 0.0)),
+            step=0.0001,
+            key=f"crypto_{sym}"
         )
 
     if st.sidebar.button("Save Holdings"):
         save_crypto_holdings(user_id, holdings)
         st.sidebar.success("Holdings saved")
 
-    # ---------- PRICING ----------
+    # -------------------------------------
+    # LIVE PRICES (CACHED)
+    # -------------------------------------
     prices = crypto_live_prices()
-    rows, total_value_ghs = [], 0.0
+
+    rows = []
+    total_value_ghs = 0.0
 
     for sym, qty in holdings.items():
-        usd_price = 1.0 if sym == "USDT" else prices.get(sym, 0.0)
-        value_usd = usd_price * qty
-        value_ghs = value_usd * rate
+        usd_price = prices.get(sym, 1.0 if sym == "USDT" else 0.0)
+        value_ghs = usd_price * qty * rate
         total_value_ghs += value_ghs
-        rows.append([sym, qty, usd_price, value_usd, value_ghs])
+        rows.append([sym, qty, usd_price, value_ghs])
 
-    df = pd.DataFrame(rows, columns=["Asset", "Qty", "Price USD", "Value USD", "Value GHS"])
+    df = pd.DataFrame(rows, columns=["Asset", "Qty", "Price (USD)", "Value (GHS)"])
     st.dataframe(df, use_container_width=True)
 
-    # ---------- AUTOSAVE ----------
+    # -------------------------------------
+    # AUTOSAVE (8H)
+    # -------------------------------------
     autosave_portfolio_value(user_id, total_value_ghs)
     history = load_portfolio_history(user_id)
 
-    # ---------- SUMMARY ----------
+    # -------------------------------------
+    # SUMMARY
+    # -------------------------------------
     pnl = total_value_ghs - invested
-    pnl_pct = (pnl / invested * 100) if invested > 0 else 0.0
+    pnl_pct = (pnl / invested * 100) if invested else 0
 
     c1, c2, c3 = st.columns(3)
     c1.metric("Total Value", fmt(total_value_ghs))
     c2.metric("Invested", fmt(invested))
-    c3.metric("All-Time PnL", fmt(pnl), pct(pnl_pct))
+    c3.metric("PnL", fmt(pnl), pct(pnl_pct))
 
-    # ---------- LINE CHART ----------
-    st.subheader("📈 Portfolio Value Over Time")
+    # -------------------------------------
+    # LINE CHART
+    # -------------------------------------
     if len(history) >= 2:
-        hist_df = pd.DataFrame(history)
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(
-            x=hist_df["timestamp"],
-            y=hist_df["value_ghs"],
-            mode="lines+markers"
-        ))
-        fig.update_layout(height=350, hovermode="x unified")
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.info("History builds over time.")
+        df_h = pd.DataFrame(history)
+        df_h["timestamp"] = pd.to_datetime(df_h["timestamp"])
+        st.plotly_chart(
+            go.Figure(go.Scatter(
+                x=df_h["timestamp"],
+                y=df_h["value_ghs"],
+                mode="lines+markers"
+            )),
+            use_container_width=True
+        )
 
-    # ---------- MTD / YTD ----------
-    st.subheader("📆 MTD & YTD Performance")
+    # -------------------------------------
+    # MTD / YTD
+    # -------------------------------------
     if history:
-        hist_df["timestamp"] = pd.to_datetime(hist_df["timestamp"])
         now = datetime.utcnow()
+        mtd = df_h[df_h["timestamp"].dt.month == now.month]
+        ytd = df_h[df_h["timestamp"].dt.year == now.year]
 
-        mtd_df = hist_df[hist_df["timestamp"].dt.month == now.month]
-        ytd_df = hist_df[hist_df["timestamp"].dt.year == now.year]
+        mtd_start = mtd.iloc[0]["value_ghs"] if not mtd.empty else total_value_ghs
+        ytd_start = ytd.iloc[0]["value_ghs"] if not ytd.empty else total_value_ghs
 
-        mtd_start = mtd_df.iloc[0]["value_ghs"] if not mtd_df.empty else total_value_ghs
-        ytd_start = ytd_df.iloc[0]["value_ghs"] if not ytd_df.empty else total_value_ghs
+        c1, c2 = st.columns(2)
+        c1.metric("MTD", fmt(total_value_ghs - mtd_start),
+                  pct((total_value_ghs - mtd_start) / mtd_start * 100 if mtd_start else 0))
+        c2.metric("YTD", fmt(total_value_ghs - ytd_start),
+                  pct((total_value_ghs - ytd_start) / ytd_start * 100 if ytd_start else 0))
 
-        mtd_pnl = total_value_ghs - mtd_start
-        ytd_pnl = total_value_ghs - ytd_start
-
-        mtd_pct = (mtd_pnl / mtd_start * 100) if mtd_start > 0 else 0
-        ytd_pct = (ytd_pnl / ytd_start * 100) if ytd_start > 0 else 0
-    else:
-        mtd_pnl = ytd_pnl = mtd_pct = ytd_pct = 0.0
-
-    c1, c2 = st.columns(2)
-    c1.metric("MTD", fmt(mtd_pnl), pct(mtd_pct))
-    c2.metric("YTD", fmt(ytd_pnl), pct(ytd_pct))
-
-    # ---------- PIE ----------
-    pie_df = df[df["Value GHS"] > 0][["Asset", "Value GHS"]]
-    if not pie_df.empty:
+    # -------------------------------------
+    # ALLOCATION PIE
+    # -------------------------------------
+    df_pie = df[df["Value (GHS)"] > 0]
+    if not df_pie.empty:
         st.altair_chart(
-            alt.Chart(pie_df).mark_arc().encode(
-                theta="Value GHS:Q",
-                color="Asset:N",
-                tooltip=["Asset", "Value GHS"],
+            alt.Chart(df_pie).mark_arc().encode(
+                theta="Value (GHS):Q",
+                color="Asset:N"
             ),
-            use_container_width=True,
+            use_container_width=True
         )
