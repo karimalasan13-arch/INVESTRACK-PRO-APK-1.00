@@ -100,7 +100,12 @@ def stock_app():
     if st.sidebar.button("Save Holdings"):
         save_stock_holdings(user_id, holdings)
 
-    prices = stock_live_prices(list(STOCK_MAP.keys()))
+    prices, status = stock_live_prices(list(STOCK_MAP.keys()))
+
+    if status == "cached":
+        st.warning("⚠ Using cached stock prices")
+    elif status == "offline":
+        st.error("❌ Market data unavailable — showing last known prices")
 
     rows, total = [], 0
     for s, q in holdings.items():
