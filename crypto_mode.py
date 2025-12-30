@@ -144,7 +144,13 @@ def crypto_app():
     # -------------------------------------
     # LIVE PRICES (CACHED)
     # -------------------------------------
-    prices = crypto_live_prices()
+    prices, status = crypto_live_prices()
+
+    if status == "cached":
+          st.warning("⚠ Using cached crypto prices")
+    elif status == "offline":
+          st.error("❌ Price feed offline — showing last known values")
+
 
     rows = []
     total_value_ghs = 0.0
