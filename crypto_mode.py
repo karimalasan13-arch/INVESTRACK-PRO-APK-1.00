@@ -209,16 +209,20 @@ def crypto_app():
         c1.metric("MTD", fmt(total_value - mtd_start))
         c2.metric("YTD", fmt(total_value - ytd_start))
 
-    # ---------- Pie ----------
-    pie_df = df[df["Value (GHS)"] > 0][["Asset", "Value (GHS)"]]
+    # -------------------------------------
+    # ALLOCATION PIE
+    # -------------------------------------
+    st.markdown("---")
+    st.subheader("🍕 Allocation (by Value)")
 
-    if not pie_df.empty:
-        st.altair_chart(
-            alt.Chart(pie_df).mark_arc().encode(
-                theta="Value (GHS):Q",
-                color="Asset:N",
-                tooltip=["Asset", "Value (GHS)"],
-            ),
-            use_container_width=True,
+    df_pie = df[df["Value (GHS)"] > 0][["Asset", "Value (GHS)"]]
+    if not df_pie.empty:
+        pie = alt.Chart(df_pie).mark_arc().encode(
+            theta="Value (GHS):Q",
+            color="Asset:N",
+            tooltip=["Asset", "Value (GHS)"],
         )
+        st.altair_chart(pie, use_container_width=True)
+    else:
+        st.info("No allocation to display yet.")
 
