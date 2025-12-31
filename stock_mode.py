@@ -9,9 +9,6 @@ from portfolio_tracker import autosave_portfolio_value
 from db import supabase
 
 
-# -----------------------------------------
-# CONFIG
-# -----------------------------------------
 STOCK_MAP = {
     "AAPL": "AAPL",
     "MSFT": "MSFT",
@@ -26,9 +23,6 @@ STOCK_MAP = {
 }
 
 
-# -----------------------------------------
-# SUPABASE HELPERS
-# -----------------------------------------
 def load_setting(user_id, key, default):
     try:
         res = (
@@ -39,11 +33,9 @@ def load_setting(user_id, key, default):
             .single()
             .execute()
         )
-        if res.data:
-            return float(res.data["value"])
+        return float(res.data["value"])
     except Exception:
-        pass
-    return default
+        return default
 
 
 def save_setting(user_id, key, value):
@@ -54,7 +46,7 @@ def save_setting(user_id, key, value):
 
 
 def load_stock_holdings(user_id):
-    holdings = {s: 0.0 for s in STOCK_MAP}
+    h = {k: 0.0 for k in STOCK_MAP}
     try:
         res = (
             supabase.table("stock_holdings")
@@ -63,17 +55,14 @@ def load_stock_holdings(user_id):
             .execute()
         )
         for r in res.data or []:
-            holdings[r["symbol"]] = float(r["quantity"])
+            h[r["symbol"]] = float(r["quantity"])
     except Exception:
         pass
-    return holdings
+    return h
 
 
 def save_stock_holdings(user_id, holdings):
-    rows = [
-        {"user_id": user_id, "symbol": s, "quantity": q}
-        for s, q in holdings.items()
-    ]
+    rows = [{"user_id": user_id, "symbol": s, "quantity": q} for s, q in holdings.items()]
     supabase.table("stock_holdings").upsert(
         rows, on_conflict="user_id,symbol"
     ).execute()
@@ -93,170 +82,79 @@ def load_portfolio_history(user_id):
         return []
 
 
-# -----------------------------------------
-# FORMATTERS
-# -----------------------------------------
 def fmt(v): return f"GHS {v:,.2f}"
 def pct(v): return f"{v:.2f}%"
 
 
-# -----------------------------------------
-# MAIN APP
-# -----------------------------------------
 def stock_app():
-    st.title("📊 Stock Portfolio Tracker")
     user_id = st.session_state.user.id
+    st.title("📊 Stock Portfolio")
 
-    # -------------------------------------
-    # LOAD DATA
-    # -------------------------------------
     rate = load_setting(user_id, "stock_rate", 14.5)
     invested = load_setting(user_id, "stock_investment", 0.0)
     assets = load_stock_holdings(user_id)
 
-    # -------------------------------------
-    # SIDEBAR
-    # -------------------------------------
     st.sidebar.header("Stock Settings")
-
-    rate = st.sidebar.number_input(
-        "Exchange Rate (USD → GHS)", value=rate, step=0.1
-    )
-    invested = st.sidebar.number_input(
-        "Total Investment (GHS)", value=invested, step=10.0
-    )
+    rate = st.sidebar.number_input("USD → GHS", value=rate, step=0.1)
+    invested = st.sidebar.number_input("Invested (GHS)", value=invested, step=10.0)
 
     if st.sidebar.button("Save Settings"):
         save_setting(user_id, "stock_rate", rate)
         save_setting(user_id, "stock_investment", invested)
-        st.sidebar.success("Settings saved")
 
-    st.sidebar.markdown("---")
-    st.sidebar.subheader("Stock Holdings")
-
-    for sym in STOCK_MAP:
-        assets[sym] = st.sidebar.number_input(
-            f"{sym} quantity",
-            value=float(assets.get(sym, 0.0)),
-            step=1.0,
-            key=f"stk_{sym}",
+    for s in STOCK_MAP:
+        assets[s] = st.sidebar.number_input(
+            f"{s} qty", assets[s], step=1.0, key=f"s_{s}"
         )
 
     if st.sidebar.button("Save Holdings"):
         save_stock_holdings(user_id, assets)
-        st.sidebar.success("Holdings saved")
 
-    # -------------------------------------
-    # LIVE PRICES
-    # -------------------------------------
     prices = stock_live_prices(list(STOCK_MAP.keys()))
+    if not isinstance(prices, dict):
+        prices = {}
 
-    rows = []
-    total_value_ghs = 0.0
+    rows, total = [], 0.0
+    for s, q in assets.items():
+        p = prices.get(s, 0.0)
+        v = p * q * rate
+        total += v
+        rows.append([s, q, p, v])
 
-    for sym, qty in assets.items():
-        usd_price = prices.get(sym, 0.0)
-        value_usd = usd_price * qty
-        value_ghs = value_usd * rate
-        total_value_ghs += value_ghs
-        rows.append([sym, qty, usd_price, value_usd, value_ghs])
-
-    df = pd.DataFrame(
-        rows, columns=["Asset", "Qty", "Price (USD)", "Value (USD)", "Value (GHS)"]
-    )
-
-    st.subheader("📘 Stock Asset Breakdown")
+    df = pd.DataFrame(rows, columns=["Asset", "Qty", "USD", "GHS Value"])
     st.dataframe(df, use_container_width=True)
 
-    # -------------------------------------
-    # PnL
-    # -------------------------------------
-    pnl = total_value_ghs - invested
-    pnl_pct = (pnl / invested * 100) if invested > 0 else 0.0
-
-    # -------------------------------------
-    # AUTOSAVE + HISTORY
-    # -------------------------------------
-    autosave_portfolio_value(user_id, total_value_ghs)
+    autosave_portfolio_value(user_id, total)
     history = load_portfolio_history(user_id)
 
-    # -------------------------------------
-    # SUMMARY
-    # -------------------------------------
-    st.markdown("---")
-    st.subheader("📈 Portfolio Summary")
+    pnl = total - invested
+    pnl_pct = (pnl / invested * 100) if invested else 0
 
     c1, c2, c3 = st.columns(3)
-    c1.metric("Total Value", fmt(total_value_ghs))
+    c1.metric("Total", fmt(total))
     c2.metric("Invested", fmt(invested))
-    c3.metric("All-Time PnL", fmt(pnl), pct(pnl_pct))
-
-    # -------------------------------------
-    # LINE CHART
-    # -------------------------------------
-    st.subheader("📈 Portfolio Value Over Time")
+    c3.metric("PnL", fmt(pnl), pct(pnl_pct))
 
     if len(history) >= 2:
-        dates = [h["timestamp"] for h in history]
-        values = [h["value_ghs"] for h in history]
+        df_h = pd.DataFrame(history)
+        df_h["timestamp"] = pd.to_datetime(df_h["timestamp"])
 
         fig = go.Figure()
-        fig.add_trace(go.Scatter(x=dates, y=values, mode="lines+markers"))
-        fig.update_layout(
-            hovermode="x unified",
-            dragmode="zoom",
-            height=350,
-            xaxis_title="Date",
-            yaxis_title="Value (GHS)",
-        )
+        fig.add_trace(go.Scatter(
+            x=df_h["timestamp"], y=df_h["value_ghs"], mode="lines+markers"
+        ))
+        fig.update_layout(dragmode="zoom")
         st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.info("Portfolio history will appear as data is collected.")
-
-    # -------------------------------------
-    # MTD / YTD (FIXED)
-    # -------------------------------------
-    st.markdown("---")
-    st.subheader("📆 MTD & YTD Performance")
-
-    df_h = pd.DataFrame(history)
-
-    if not df_h.empty:
-        df_h["timestamp"] = pd.to_datetime(df_h["timestamp"])
-        df_h = df_h.sort_values("timestamp")
 
         now = datetime.utcnow()
+        mtd = df_h[df_h["timestamp"].dt.month == now.month]
+        ytd = df_h[df_h["timestamp"].dt.year == now.year]
 
-        mtd_df = df_h[df_h["timestamp"].dt.month == now.month]
-        ytd_df = df_h[df_h["timestamp"].dt.year == now.year]
+        mtd_start = mtd.iloc[0]["value_ghs"] if not mtd.empty else total
+        ytd_start = ytd.iloc[0]["value_ghs"] if not ytd.empty else total
 
-        mtd_start = mtd_df.iloc[0]["value_ghs"] if not mtd_df.empty else total_value_ghs
-        ytd_start = ytd_df.iloc[0]["value_ghs"] if not ytd_df.empty else total_value_ghs
-
-        mtd_pnl = total_value_ghs - mtd_start
-        ytd_pnl = total_value_ghs - ytd_start
-
-        mtd_pct = (mtd_pnl / mtd_start * 100) if mtd_start > 0 else 0.0
-        ytd_pct = (ytd_pnl / ytd_start * 100) if ytd_start > 0 else 0.0
-    else:
-        mtd_pnl = ytd_pnl = mtd_pct = ytd_pct = 0.0
-
-    c1, c2 = st.columns(2)
-    c1.metric("MTD", fmt(mtd_pnl), pct(mtd_pct))
-    c2.metric("YTD", fmt(ytd_pnl), pct(ytd_pct))
-
-    # -------------------------------------
-    # ALLOCATION PIE
-    # -------------------------------------
-    st.markdown("---")
-    st.subheader("🍕 Allocation")
-
-    df_pie = df[df["Value (GHS)"] > 0][["Asset", "Value (GHS)"]]
-
-    if not df_pie.empty:
-        pie = alt.Chart(df_pie).mark_arc().encode(
-            theta="Value (GHS):Q",
-            color="Asset:N",
-            tooltip=["Asset", "Value (GHS)"],
-        )
-        st.altair_chart(pie, use_container_width=True)
+        c1, c2 = st.columns(2)
+        c1.metric("MTD", fmt(total - mtd_start),
+                  pct((total - mtd_start) / mtd_start * 100 if mtd_start else 0))
+        c2.metric("YTD", fmt(total - ytd_start),
+                  pct((total - ytd_start) / ytd_start * 100 if ytd_start else 0))
