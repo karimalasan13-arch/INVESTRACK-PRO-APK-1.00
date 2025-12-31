@@ -46,7 +46,7 @@ def save_setting(user_id, key, value):
 
 
 def load_stock_holdings(user_id):
-    h = {k: 0.0 for k in STOCK_MAP}
+    holdings = {k: 0.0 for k in STOCK_MAP}
     try:
         res = (
             supabase.table("stock_holdings")
@@ -54,11 +54,11 @@ def load_stock_holdings(user_id):
             .eq("user_id", user_id)
             .execute()
         )
-        for r in res.data or []:
-            h[r["symbol"]] = float(r["quantity"])
+        for r in res.data:
+            holdings[r["symbol"]] = float(r["quantity"])
     except Exception:
         pass
-    return h
+    return holdings
 
 
 def save_stock_holdings(user_id, holdings):
@@ -68,6 +68,7 @@ def save_stock_holdings(user_id, holdings):
     ).execute()
 
 
+@st.cache_data(ttl=60)
 def load_portfolio_history(user_id):
     try:
         res = (
@@ -82,13 +83,9 @@ def load_portfolio_history(user_id):
         return []
 
 
-def fmt(v): return f"GHS {v:,.2f}"
-def pct(v): return f"{v:.2f}%"
-
-
 def stock_app():
-    user_id = st.session_state.user.id
-    st.title("📊 Stock Portfolio")
+    user_id = st.session_state.user_id
+    st.title("📊 Stock Portfolio Tracker")
 
     rate = load_setting(user_id, "stock_rate", 14.5)
     invested = load_setting(user_id, "stock_investment", 0.0)
@@ -96,65 +93,51 @@ def stock_app():
 
     st.sidebar.header("Stock Settings")
     rate = st.sidebar.number_input("USD → GHS", value=rate, step=0.1)
-    invested = st.sidebar.number_input("Invested (GHS)", value=invested, step=10.0)
+    invested = st.sidebar.number_input("Total Invested", value=invested, step=10.0)
 
     if st.sidebar.button("Save Settings"):
         save_setting(user_id, "stock_rate", rate)
         save_setting(user_id, "stock_investment", invested)
+        st.sidebar.success("Saved")
 
-    for s in STOCK_MAP:
-        assets[s] = st.sidebar.number_input(
-            f"{s} qty", assets[s], step=1.0, key=f"s_{s}"
+    for sym in STOCK_MAP:
+        assets[sym] = st.sidebar.number_input(
+            f"{sym} quantity", value=assets[sym], step=1.0, key=f"stk_{sym}"
         )
 
     if st.sidebar.button("Save Holdings"):
         save_stock_holdings(user_id, assets)
+        st.sidebar.success("Holdings saved")
 
     prices = stock_live_prices(list(STOCK_MAP.keys()))
-    if not isinstance(prices, dict):
-        prices = {}
 
     rows, total = [], 0.0
-    for s, q in assets.items():
-        p = prices.get(s, 0.0)
-        v = p * q * rate
-        total += v
-        rows.append([s, q, p, v])
+    for sym, qty in assets.items():
+        usd = prices.get(sym, 0.0)
+        ghs = usd * qty * rate
+        total += ghs
+        rows.append([sym, qty, usd, usd * qty, ghs])
 
-    df = pd.DataFrame(rows, columns=["Asset", "Qty", "USD", "GHS Value"])
+    df = pd.DataFrame(rows, columns=["Asset", "Qty", "Price USD", "Value USD", "Value GHS"])
     st.dataframe(df, use_container_width=True)
-
-    autosave_portfolio_value(user_id, total)
-    history = load_portfolio_history(user_id)
 
     pnl = total - invested
     pnl_pct = (pnl / invested * 100) if invested else 0
 
+    if not st.session_state.get("stock_saved_today"):
+        autosave_portfolio_value(user_id, total)
+        st.session_state.stock_saved_today = True
+
+    history = load_portfolio_history(user_id)
+
+    st.markdown("---")
     c1, c2, c3 = st.columns(3)
-    c1.metric("Total", fmt(total))
-    c2.metric("Invested", fmt(invested))
-    c3.metric("PnL", fmt(pnl), pct(pnl_pct))
+    c1.metric("Total Value", f"GHS {total:,.2f}")
+    c2.metric("Invested", f"GHS {invested:,.2f}")
+    c3.metric("PnL", f"GHS {pnl:,.2f}", f"{pnl_pct:.2f}%")
 
     if len(history) >= 2:
         df_h = pd.DataFrame(history)
-        df_h["timestamp"] = pd.to_datetime(df_h["timestamp"])
-
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(
-            x=df_h["timestamp"], y=df_h["value_ghs"], mode="lines+markers"
-        ))
-        fig.update_layout(dragmode="zoom")
+        fig = go.Figure(go.Scatter(x=df_h["timestamp"], y=df_h["value_ghs"]))
+        fig.update_layout(height=350, dragmode="zoom")
         st.plotly_chart(fig, use_container_width=True)
-
-        now = datetime.utcnow()
-        mtd = df_h[df_h["timestamp"].dt.month == now.month]
-        ytd = df_h[df_h["timestamp"].dt.year == now.year]
-
-        mtd_start = mtd.iloc[0]["value_ghs"] if not mtd.empty else total
-        ytd_start = ytd.iloc[0]["value_ghs"] if not ytd.empty else total
-
-        c1, c2 = st.columns(2)
-        c1.metric("MTD", fmt(total - mtd_start),
-                  pct((total - mtd_start) / mtd_start * 100 if mtd_start else 0))
-        c2.metric("YTD", fmt(total - ytd_start),
-                  pct((total - ytd_start) / ytd_start * 100 if ytd_start else 0))
