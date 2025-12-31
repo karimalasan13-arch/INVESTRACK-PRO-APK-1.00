@@ -23,7 +23,9 @@ API_MAP = {
 }
 
 
-# ---------------- SETTINGS ----------------
+# -----------------------------------------
+# SUPABASE HELPERS (USER-SCOPED)
+# -----------------------------------------
 def load_setting(user_id, key, default):
     try:
         res = (
@@ -46,7 +48,6 @@ def save_setting(user_id, key, value):
     ).execute()
 
 
-# ---------------- HOLDINGS ----------------
 def load_crypto_holdings(user_id):
     holdings = {k: 0.0 for k in API_MAP}
     try:
@@ -56,7 +57,7 @@ def load_crypto_holdings(user_id):
             .eq("user_id", user_id)
             .execute()
         )
-        for r in res.data or []:
+        for r in res.data:
             holdings[r["symbol"]] = float(r["quantity"])
     except Exception:
         pass
@@ -73,6 +74,7 @@ def save_crypto_holdings(user_id, holdings):
     ).execute()
 
 
+@st.cache_data(ttl=60)
 def load_portfolio_history(user_id):
     try:
         res = (
@@ -87,23 +89,21 @@ def load_portfolio_history(user_id):
         return []
 
 
-# ---------------- FORMAT ----------------
-def fmt(v): return f"GHS {v:,.2f}"
-def pct(v): return f"{v:.2f}%"
-
-
-# ---------------- MAIN APP ----------------
+# -----------------------------------------
+# MAIN APP
+# -----------------------------------------
 def crypto_app():
-    user_id = st.session_state.user.id
-    st.title("💰 Crypto Portfolio")
+    user_id = st.session_state.user_id
+    st.title("💰 Crypto Portfolio Tracker")
 
     rate = load_setting(user_id, "crypto_rate", 14.5)
     invested = load_setting(user_id, "crypto_investment", 0.0)
     holdings = load_crypto_holdings(user_id)
 
+    # Sidebar
     st.sidebar.header("Crypto Settings")
     rate = st.sidebar.number_input("USD → GHS", value=rate, step=0.1)
-    invested = st.sidebar.number_input("Invested (GHS)", value=invested, step=10.0)
+    invested = st.sidebar.number_input("Total Invested (GHS)", value=invested, step=10.0)
 
     if st.sidebar.button("Save Settings"):
         save_setting(user_id, "crypto_rate", rate)
@@ -113,70 +113,72 @@ def crypto_app():
     st.sidebar.markdown("---")
     for sym in API_MAP:
         holdings[sym] = st.sidebar.number_input(
-            f"{sym} qty", holdings[sym], step=0.0001, key=f"c_{sym}"
+            f"{sym} quantity",
+            value=float(holdings[sym]),
+            step=0.0001,
+            key=f"crypto_{sym}",
         )
 
     if st.sidebar.button("Save Holdings"):
         save_crypto_holdings(user_id, holdings)
-        st.sidebar.success("Saved")
+        st.sidebar.success("Holdings saved")
 
     prices = crypto_live_prices()
-    if not isinstance(prices, dict):
-        prices = {}
-    prices.setdefault("USDT", 1.0)
 
     rows, total = [], 0.0
-    for s, q in holdings.items():
-        p = prices.get(s, 0.0)
-        v_usd = p * q
-        v_ghs = v_usd * rate
-        total += v_ghs
-        rows.append([s, q, p, v_usd, v_ghs])
+    for sym, qty in holdings.items():
+        usd = prices.get(sym, 1.0 if sym == "USDT" else 0.0)
+        ghs = usd * qty * rate
+        total += ghs
+        rows.append([sym, qty, usd, usd * qty, ghs])
 
-    df = pd.DataFrame(rows, columns=["Asset", "Qty", "USD", "USD Value", "GHS Value"])
+    df = pd.DataFrame(rows, columns=["Asset", "Qty", "Price (USD)", "Value USD", "Value GHS"])
     st.dataframe(df, use_container_width=True)
-
-    autosave_portfolio_value(user_id, total)
-    history = load_portfolio_history(user_id)
 
     pnl = total - invested
     pnl_pct = (pnl / invested * 100) if invested else 0
 
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Total", fmt(total))
-    c2.metric("Invested", fmt(invested))
-    c3.metric("PnL", fmt(pnl), pct(pnl_pct))
+    # Autosave (debounced)
+    if not st.session_state.get("crypto_saved_today"):
+        autosave_portfolio_value(user_id, total)
+        st.session_state.crypto_saved_today = True
 
+    history = load_portfolio_history(user_id)
+
+    # Summary
+    st.markdown("---")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Total Value", f"GHS {total:,.2f}")
+    c2.metric("Invested", f"GHS {invested:,.2f}")
+    c3.metric("PnL", f"GHS {pnl:,.2f}", f"{pnl_pct:.2f}%")
+
+    # Line Chart
     if len(history) >= 2:
         df_h = pd.DataFrame(history)
-        df_h["timestamp"] = pd.to_datetime(df_h["timestamp"])
-
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(
-            x=df_h["timestamp"],
-            y=df_h["value_ghs"],
-            mode="lines+markers"
-        ))
-        fig.update_layout(dragmode="zoom", hovermode="x unified")
+        fig = go.Figure(go.Scatter(x=df_h["timestamp"], y=df_h["value_ghs"]))
+        fig.update_layout(height=350, dragmode="zoom")
         st.plotly_chart(fig, use_container_width=True)
 
+    # MTD / YTD
+    if history:
+        df_h["timestamp"] = pd.to_datetime(df_h["timestamp"])
         now = datetime.utcnow()
+
         mtd = df_h[df_h["timestamp"].dt.month == now.month]
         ytd = df_h[df_h["timestamp"].dt.year == now.year]
 
-        mtd_start = mtd.iloc[0]["value_ghs"] if not mtd.empty else total
-        ytd_start = ytd.iloc[0]["value_ghs"] if not ytd.empty else total
+        mtd_pnl = total - mtd.iloc[0]["value_ghs"] if not mtd.empty else 0
+        ytd_pnl = total - ytd.iloc[0]["value_ghs"] if not ytd.empty else 0
 
-        mtd_pnl = total - mtd_start
-        ytd_pnl = total - ytd_start
-
+        st.markdown("---")
         c1, c2 = st.columns(2)
-        c1.metric("MTD", fmt(mtd_pnl), pct(mtd_pnl / mtd_start * 100 if mtd_start else 0))
-        c2.metric("YTD", fmt(ytd_pnl), pct(ytd_pnl / ytd_start * 100 if ytd_start else 0))
+        c1.metric("MTD", f"GHS {mtd_pnl:,.2f}")
+        c2.metric("YTD", f"GHS {ytd_pnl:,.2f}")
 
-    pie_df = df[df["GHS Value"] > 0][["Asset", "GHS Value"]]
+    # Allocation Pie
+    pie_df = df[df["Value GHS"] > 0][["Asset", "Value GHS"]]
     if not pie_df.empty:
         pie = alt.Chart(pie_df).mark_arc().encode(
-            theta="GHS Value:Q", color="Asset:N"
+            theta="Value GHS:Q", color="Asset:N"
         )
         st.altair_chart(pie, use_container_width=True)
