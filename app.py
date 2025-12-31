@@ -28,6 +28,7 @@ st.sidebar.success(f"Logged in as\n{user.email}")
 
 if st.sidebar.button("🚪 Logout"):
     logout()
+    st.session_state.clear()
     st.stop()
 
 mode = st.sidebar.radio(
@@ -37,11 +38,23 @@ mode = st.sidebar.radio(
 )
 
 # ------------------------------------
-# LAZY IMPORTS (CRITICAL FOR STABILITY)
+# MODE EXECUTION WITH GLOBAL CRASH GUARD
+# (PHASE 3.1.1)
 # ------------------------------------
-if mode == "Crypto":
-    from crypto_mode import crypto_app
-    crypto_app()
-else:
-    from stock_mode import stock_app
-    stock_app()
+try:
+    if mode == "Crypto":
+        from crypto_mode import crypto_app
+        crypto_app()
+    else:
+        from stock_mode import stock_app
+        stock_app()
+
+except Exception as e:
+    # User-safe message
+    st.error("⚠️ Something went wrong. Please refresh the app.")
+
+    # Developer diagnostics (visible in Streamlit logs)
+    print("🔥 APPLICATION ERROR")
+    print("User:", user.email if user else "Unknown")
+    print("Mode:", mode)
+    print("Error:", repr(e))
