@@ -1,9 +1,11 @@
 import requests
 import yfinance as yf
+import streamlit as st
 
 # ---------------------------------------------
-# CRYPTO LIVE PRICES (DEFENSIVE)
+# CRYPTO LIVE PRICES (CACHED)
 # ---------------------------------------------
+@st.cache_data(ttl=90, show_spinner=False)
 def crypto_live_prices():
     ids = {
         "BTC": "bitcoin",
@@ -24,25 +26,26 @@ def crypto_live_prices():
             "?ids=" + ",".join(ids.values()) +
             "&vs_currencies=usd"
         )
-
         r = requests.get(url, timeout=10)
         data = r.json()
 
         prices = {}
-        for sym, cid in ids.items():
-            prices[sym] = float(data.get(cid, {}).get("usd", 0.0))
+        for symbol, cg_id in ids.items():
+            prices[symbol] = float(data.get(cg_id, {}).get("usd", 0.0))
 
-        prices.setdefault("USDT", 1.0)
+        # USDT safety fallback
+        prices["USDT"] = prices.get("USDT", 1.0) or 1.0
         return prices
 
-    except Exception as e:
-        print("CRYPTO PRICE ERROR:", e)
-        return {k: (1.0 if k == "USDT" else 0.0) for k in ids}
+    except Exception:
+        # Safe fallback — app never crashes
+        return {k: (1.0 if k == "USDT" else 0.0) for k in ids.keys()}
 
 
 # ---------------------------------------------
-# STOCK LIVE PRICES (DEFENSIVE)
+# STOCK LIVE PRICES (CACHED)
 # ---------------------------------------------
+@st.cache_data(ttl=600, show_spinner=False)
 def stock_live_prices(symbols):
     prices = {}
 
@@ -56,14 +59,14 @@ def stock_live_prices(symbols):
             threads=False,
         )
 
-        for sym in symbols:
+        for symbol in symbols:
             try:
-                prices[sym] = float(data["Close"][sym].dropna().iloc[-1])
+                price = data["Close"][symbol].dropna().iloc[-1]
+                prices[symbol] = float(price)
             except Exception:
-                prices[sym] = 0.0
+                prices[symbol] = 0.0
 
-    except Exception as e:
-        print("STOCK PRICE ERROR:", e)
+    except Exception:
         prices = {s: 0.0 for s in symbols}
 
     return prices
