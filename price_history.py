@@ -2,8 +2,9 @@ import requests
 import yfinance as yf
 import streamlit as st
 
+
 # ---------------------------------------------
-# CRYPTO LIVE PRICES (CACHED)
+# CRYPTO LIVE PRICES (RESILIENT)
 # ---------------------------------------------
 @st.cache_data(ttl=90, show_spinner=False)
 def crypto_live_prices():
@@ -27,46 +28,46 @@ def crypto_live_prices():
             "&vs_currencies=usd"
         )
         r = requests.get(url, timeout=10)
+
+        if r.status_code != 200:
+            raise RuntimeError("CoinGecko unavailable")
+
         data = r.json()
+        prices = {
+            sym: float(data.get(cid, {}).get("usd", 0.0))
+            for sym, cid in ids.items()
+        }
 
-        prices = {}
-        for symbol, cg_id in ids.items():
-            prices[symbol] = float(data.get(cg_id, {}).get("usd", 0.0))
-
-        # USDT safety fallback
-        prices["USDT"] = prices.get("USDT", 1.0) or 1.0
-        return prices
+        prices["USDT"] = prices.get("USDT") or 1.0
+        return prices, True
 
     except Exception:
-        # Safe fallback — app never crashes
-        return {k: (1.0 if k == "USDT" else 0.0) for k in ids.keys()}
+        fallback = {k: (1.0 if k == "USDT" else 0.0) for k in ids}
+        return fallback, False
 
 
 # ---------------------------------------------
-# STOCK LIVE PRICES (CACHED)
+# STOCK LIVE PRICES (RESILIENT)
 # ---------------------------------------------
 @st.cache_data(ttl=600, show_spinner=False)
 def stock_live_prices(symbols):
-    prices = {}
-
     try:
-        tickers = " ".join(symbols)
         data = yf.download(
-            tickers=tickers,
+            tickers=" ".join(symbols),
             period="1d",
             interval="1m",
             progress=False,
             threads=False,
         )
 
-        for symbol in symbols:
+        prices = {}
+        for sym in symbols:
             try:
-                price = data["Close"][symbol].dropna().iloc[-1]
-                prices[symbol] = float(price)
+                prices[sym] = float(data["Close"][sym].dropna().iloc[-1])
             except Exception:
-                prices[symbol] = 0.0
+                prices[sym] = 0.0
+
+        return prices, True
 
     except Exception:
-        prices = {s: 0.0 for s in symbols}
-
-    return prices
+        return {s: 0.0 for s in symbols}, False
