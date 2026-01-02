@@ -108,4 +108,5 @@ def login_ui():
                     st.error("Sign-up failed")
 
             except Exception as e:
-                st.error("Account creation error")
+                st.error(f"Signup failed: {str(e)}")
+
