@@ -9,16 +9,24 @@ from portfolio_tracker import autosave_portfolio_value
 from db import supabase
 
 
-# -----------------------------------------
-# CONFIG
-# -----------------------------------------
-CRYPTO_ASSETS = ["BTC", "ETH", "SOL", "BNB", "XRP", "ADA", "DOGE", "DOT", "LTC", "USDT"]
+API_MAP = {
+    "BTC": "bitcoin",
+    "ETH": "ethereum",
+    "SOL": "solana",
+    "BNB": "binancecoin",
+    "XRP": "ripple",
+    "ADA": "cardano",
+    "DOGE": "dogecoin",
+    "DOT": "polkadot",
+    "LTC": "litecoin",
+    "USDT": "tether",
+}
 
 
 # -----------------------------------------
-# SUPABASE HELPERS
+# DB HELPERS
 # -----------------------------------------
-def load_setting(user_id: str, key: str, default: float):
+def load_setting(user_id, key, default):
     try:
         res = (
             supabase.table("user_settings")
@@ -28,66 +36,56 @@ def load_setting(user_id: str, key: str, default: float):
             .single()
             .execute()
         )
-        if res.data:
-            return float(res.data["value"])
+        return float(res.data["value"])
     except Exception:
-        pass
-    return default
+        return default
 
 
-def save_setting(user_id: str, key: str, value: float):
+def save_setting(user_id, key, value):
     supabase.table("user_settings").upsert(
         {"user_id": user_id, "key": key, "value": value},
         on_conflict="user_id,key",
     ).execute()
 
 
-def load_crypto_holdings(user_id: str):
-    holdings = {a: 0.0 for a in CRYPTO_ASSETS}
+def load_holdings(user_id):
+    holdings = {k: 0.0 for k in API_MAP}
     try:
         res = (
             supabase.table("crypto_holdings")
-            .select("symbol, quantity")
+            .select("symbol,quantity")
             .eq("user_id", user_id)
             .execute()
         )
-        for r in res.data:
+        for r in res.data or []:
             holdings[r["symbol"]] = float(r["quantity"])
     except Exception:
         pass
     return holdings
 
 
-def save_crypto_holdings(user_id: str, holdings: dict):
+def save_holdings(user_id, holdings):
     rows = [
-        {"user_id": user_id, "symbol": k, "quantity": float(v)}
+        {"user_id": user_id, "symbol": k, "quantity": v}
         for k, v in holdings.items()
     ]
     supabase.table("crypto_holdings").upsert(
-        rows,
-        on_conflict="user_id,symbol",
+        rows, on_conflict="user_id,symbol"
     ).execute()
 
 
-def load_crypto_history(user_id: str):
+def load_history(user_id):
     try:
-        res = (
-            supabase.table("crypto_history")
+        return (
+            supabase.table("portfolio_history")
             .select("timestamp,value_ghs")
             .eq("user_id", user_id)
             .order("timestamp")
             .execute()
+            .data
         )
-        return res.data or []
     except Exception:
         return []
-
-
-# -----------------------------------------
-# FORMATTERS
-# -----------------------------------------
-def fmt(v): return f"GHS {v:,.2f}"
-def pct(v): return f"{v:.2f}%"
 
 
 # -----------------------------------------
@@ -97,16 +95,17 @@ def crypto_app():
     user_id = st.session_state.user_id
     st.title("💰 Crypto Portfolio Tracker")
 
-    # ---------------- LOAD DATA ----------------
+    # -------------------------------------
+    # SIDEBAR — SETTINGS
+    # -------------------------------------
     rate = load_setting(user_id, "crypto_rate", 14.5)
     invested = load_setting(user_id, "crypto_investment", 0.0)
-    holdings = load_crypto_holdings(user_id)
+    holdings = load_holdings(user_id)
 
-    # ---------------- SIDEBAR ----------------
     st.sidebar.header("Crypto Settings")
 
     rate = st.sidebar.number_input("USD → GHS Rate", value=rate, step=0.1)
-    invested = st.sidebar.number_input("Total Crypto Investment (GHS)", value=invested, step=10.0)
+    invested = st.sidebar.number_input("Total Invested (GHS)", value=invested, step=10.0)
 
     if st.sidebar.button("Save Settings"):
         save_setting(user_id, "crypto_rate", rate)
@@ -116,85 +115,85 @@ def crypto_app():
     st.sidebar.markdown("---")
     st.sidebar.subheader("Holdings")
 
-    for a in CRYPTO_ASSETS:
-        holdings[a] = st.sidebar.number_input(
-            f"{a} Quantity",
-            value=float(holdings[a]),
-            step=0.0001,
-            key=f"crypto_{a}",
+    for sym in API_MAP:
+        holdings[sym] = st.sidebar.number_input(
+            f"{sym} Qty", value=holdings[sym], step=0.0001, key=f"c_{sym}"
         )
 
     if st.sidebar.button("Save Holdings"):
-        save_crypto_holdings(user_id, holdings)
+        save_holdings(user_id, holdings)
         st.sidebar.success("Holdings saved")
 
-    # ---------------- PRICES ----------------
-    prices = crypto_live_prices()
-    rows, total_value_ghs = [], 0.0
+    # -------------------------------------
+    # PRICES
+    # -------------------------------------
+    with st.spinner("Fetching prices…"):
+        prices, api_ok = crypto_live_prices()
 
+    if not api_ok:
+        st.warning("⚠️ Live prices unavailable")
+
+    rows, total_value = [], 0.0
     for sym, qty in holdings.items():
-        usd_price = 1.0 if sym == "USDT" else float(prices.get(sym, 0.0))
-        value_usd = usd_price * qty
-        value_ghs = value_usd * rate
-        total_value_ghs += value_ghs
-        rows.append([sym, qty, usd_price, value_ghs])
+        usd = prices.get(sym, 1.0 if sym == "USDT" else 0.0)
+        ghs = usd * qty * rate
+        total_value += ghs
+        rows.append([sym, qty, usd, ghs])
 
-    df = pd.DataFrame(rows, columns=["Asset", "Qty", "USD Price", "Value (GHS)"])
-    st.subheader("📘 Crypto Breakdown")
+    df = pd.DataFrame(rows, columns=["Asset", "Qty", "USD", "GHS"])
     st.dataframe(df, use_container_width=True)
 
-    # ---------------- PNL ----------------
-    pnl = total_value_ghs - invested
+    # -------------------------------------
+    # HISTORY
+    # -------------------------------------
+    autosave_portfolio_value(user_id, total_value)
+    history = load_history(user_id)
+
+    # -------------------------------------
+    # SUMMARY
+    # -------------------------------------
+    pnl = total_value - invested
     pnl_pct = (pnl / invested * 100) if invested > 0 else 0.0
 
-    autosave_portfolio_value(user_id, total_value_ghs)
-    history = load_crypto_history(user_id)
-
-    # ---------------- DASHBOARD ----------------
-    st.markdown("---")
-    st.subheader("📈 Portfolio Summary")
-
     c1, c2, c3 = st.columns(3)
-    c1.metric("Total Value", fmt(total_value_ghs))
-    c2.metric("Invested", fmt(invested))
-    c3.metric("All-Time PnL", fmt(pnl), pct(pnl_pct))
+    c1.metric("Value", f"GHS {total_value:,.2f}")
+    c2.metric("Invested", f"GHS {invested:,.2f}")
+    c3.metric("PnL", f"GHS {pnl:,.2f}", f"{pnl_pct:.2f}%")
 
-    st.markdown("---")
-    st.subheader("📈 Portfolio Value Over Time")
-
+    # -------------------------------------
+    # LINE CHART
+    # -------------------------------------
+    st.subheader("📈 Portfolio History")
     if len(history) >= 2:
-        df_h = pd.DataFrame(history)
-        df_h["timestamp"] = pd.to_datetime(df_h["timestamp"])
-
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(
-            x=df_h["timestamp"],
-            y=df_h["value_ghs"],
-            mode="lines+markers",
-        ))
-
-        fig.update_layout(height=350, hovermode="x unified")
+        h = pd.DataFrame(history)
+        h["timestamp"] = pd.to_datetime(h["timestamp"])
+        fig = go.Figure(go.Scatter(x=h["timestamp"], y=h["value_ghs"], mode="lines"))
         st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("History builds automatically over time")
 
-        st.markdown("---")
-        st.subheader("📆 MTD & YTD Performance")
+    # -------------------------------------
+    # MTD / YTD
+    # -------------------------------------
+    now = datetime.utcnow()
+    if history:
+        h = pd.DataFrame(history)
+        h["timestamp"] = pd.to_datetime(h["timestamp"])
 
-        now = datetime.utcnow()
-        mtd_df = df_h[df_h["timestamp"].dt.month == now.month]
-        ytd_df = df_h[df_h["timestamp"].dt.year == now.year]
+        mtd = h[h["timestamp"].dt.month == now.month]
+        ytd = h[h["timestamp"].dt.year == now.year]
 
-        mtd_start = mtd_df.iloc[0]["value_ghs"] if not mtd_df.empty else total_value_ghs
-        ytd_start = ytd_df.iloc[0]["value_ghs"] if not ytd_df.empty else total_value_ghs
+        mtd_start = mtd.iloc[0]["value_ghs"] if not mtd.empty else total_value
+        ytd_start = ytd.iloc[0]["value_ghs"] if not ytd.empty else total_value
 
-        mtd_pnl = total_value_ghs - mtd_start
-        ytd_pnl = total_value_ghs - ytd_start
+        mtd_pnl = total_value - mtd_start
+        ytd_pnl = total_value - ytd_start
 
         mtd_pct = (mtd_pnl / mtd_start * 100) if mtd_start > 0 else 0
         ytd_pct = (ytd_pnl / ytd_start * 100) if ytd_start > 0 else 0
-
-        c1, c2 = st.columns(2)
-        c1.metric("MTD", fmt(mtd_pnl), pct(mtd_pct))
-        c2.metric("YTD", fmt(ytd_pnl), pct(ytd_pct))
-
     else:
-        st.info("📊 Portfolio history will appear after multiple snapshots are saved.")
+        mtd_pnl = ytd_pnl = mtd_pct = ytd_pct = 0.0
+
+    c1, c2 = st.columns(2)
+    c1.metric("MTD", f"GHS {mtd_pnl:,.2f}", f"{mtd_pct:.2f}%")
+    c2.metric("YTD", f"GHS {ytd_pnl:,.2f}", f"{ytd_pct:.2f}%")
