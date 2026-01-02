@@ -198,3 +198,22 @@ def crypto_app():
 
     else:
         st.info("📊 Portfolio history will appear after multiple snapshots are saved.")
+
+        st.markdown("---")
+        st.subheader("🍕 Allocation (by Value)")
+
+        df_pie = df.copy()
+        df_pie["Value (GHS)"] = pd.to_numeric(df_pie["Value (GHS)"], errors="coerce").fillna(0)
+
+        df_pie = df_pie[df_pie["Value (GHS)"] > 0]
+
+        if df_pie.empty:
+        st.info("Allocation will appear once assets have non-zero value.")
+        else:
+            pie = alt.Chart(df_pie).mark_arc().encode(
+                theta=alt.Theta(field="Value (GHS)", type="quantitative"),
+                color=alt.Color(field="Asset", type="nominal"),
+                tooltip=["Asset", "Value (GHS)"]
+            )
+            st.altair_chart(pie, use_container_width=True)
+
