@@ -142,6 +142,12 @@ def stock_app():
     prices = stock_live_prices(list(STOCK_MAP.keys()))
     rows, total_value_ghs = [], 0.0
 
+    if all(v == 0 for v in prices.values()):
+    st.warning(
+        "⚠️ Live stock prices temporarily unavailable (rate-limited). "
+        "Displaying last saved portfolio values."
+    )
+
     for sym, qty in holdings.items():
         price = float(prices.get(sym, 0.0))
         value_ghs = price * qty * rate
