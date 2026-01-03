@@ -1,104 +1,80 @@
 import requests
 import yfinance as yf
-from datetime import datetime
-from db import supabase
+import streamlit as st
+from datetime import datetime, timedelta
+
+# ---------------------------------------------
+# INTERNAL CACHE TTL
+# ---------------------------------------------
+CRYPTO_CACHE_TTL = 300       # 5 minutes
+STOCK_CACHE_TTL = 300        # 5 minutes
 
 
-# -----------------------------------------
-# INTERNAL HELPERS
-# -----------------------------------------
-def cache_prices(asset_type: str, prices: dict):
-    rows = []
-    for sym, price in prices.items():
-        rows.append({
-            "asset_type": asset_type,
-            "symbol": sym,
-            "price": float(price),
-            "updated_at": datetime.utcnow().isoformat(),
-        })
-
-    if rows:
-        supabase.table("price_cache").upsert(
-            rows,
-            on_conflict="asset_type,symbol",
-        ).execute()
-
-
-def load_cached_prices(asset_type: str, symbols: list):
-    try:
-        res = (
-            supabase.table("price_cache")
-            .select("symbol,price")
-            .eq("asset_type", asset_type)
-            .in_("symbol", symbols)
-            .execute()
-        )
-        return {r["symbol"]: float(r["price"]) for r in res.data or []}
-    except Exception:
-        return {}
-
-
-# -----------------------------------------
-# CRYPTO — SAFE
-# -----------------------------------------
+# ---------------------------------------------
+# CRYPTO LIVE PRICES (CACHED)
+# ---------------------------------------------
+@st.cache_data(ttl=CRYPTO_CACHE_TTL, show_spinner=False)
 def crypto_live_prices():
-    try:
-        ids = {
-            "BTC": "bitcoin",
-            "ETH": "ethereum",
-            "SOL": "solana",
-            "BNB": "binancecoin",
-            "XRP": "ripple",
-            "ADA": "cardano",
-            "DOGE": "dogecoin",
-            "DOT": "polkadot",
-            "LTC": "litecoin",
-            "USDT": "tether",
-        }
+    ids = {
+        "BTC": "bitcoin",
+        "ETH": "ethereum",
+        "SOL": "solana",
+        "BNB": "binancecoin",
+        "XRP": "ripple",
+        "ADA": "cardano",
+        "DOGE": "dogecoin",
+        "DOT": "polkadot",
+        "LTC": "litecoin",
+        "USDT": "tether",
+    }
 
-        url = "https://api.coingecko.com/api/v3/simple/price"
-        r = requests.get(
-            url,
-            params={"ids": ",".join(ids.values()), "vs_currencies": "usd"},
-            timeout=10,
+    try:
+        url = (
+            "https://api.coingecko.com/api/v3/simple/price"
+            "?ids=" + ",".join(ids.values()) +
+            "&vs_currencies=usd"
         )
+
+        r = requests.get(url, timeout=8)
         r.raise_for_status()
         data = r.json()
 
-        prices = {
-            sym: float(data[cg]["usd"])
-            for sym, cg in ids.items()
-            if cg in data
-        }
+        prices = {}
+        for sym, cg_id in ids.items():
+            prices[sym] = float(data.get(cg_id, {}).get("usd", 0.0))
 
-        cache_prices("crypto", prices)
         return prices
 
     except Exception:
-        # ⛔ Fallback to cache
-        return load_cached_prices("crypto", [
-            "BTC","ETH","SOL","BNB","XRP","ADA","DOGE","DOT","LTC","USDT"
-        ])
+        # Return empty dict → UI handles offline mode
+        return {}
+        
 
+# ---------------------------------------------
+# STOCK LIVE PRICES (CACHED)
+# ---------------------------------------------
+@st.cache_data(ttl=STOCK_CACHE_TTL, show_spinner=False)
+def stock_live_prices(symbols):
+    prices = {}
 
-# -----------------------------------------
-# STOCKS — SAFE
-# -----------------------------------------
-def stock_live_prices(symbols: list):
     try:
-        prices = {}
-        tickers = yf.Tickers(" ".join(symbols))
+        tickers = " ".join(symbols)
+        data = yf.download(
+            tickers=tickers,
+            period="1d",
+            interval="1m",
+            progress=False,
+            threads=False,
+        )
 
         for sym in symbols:
-            info = tickers.tickers[sym].fast_info
-            price = info.get("lastPrice")
-            if price:
+            try:
+                price = data["Close"][sym].dropna().iloc[-1]
                 prices[sym] = float(price)
-
-        if prices:
-            cache_prices("stock", prices)
+            except Exception:
+                prices[sym] = 0.0
 
         return prices
 
     except Exception:
-        return load_cached_prices("stock", symbols)
+        return {}
