@@ -1,5 +1,6 @@
 import streamlit as st
 from auth import login_ui, ensure_auth, logout
+import traceback
 
 # ------------------------------------
 # APP CONFIG (MUST BE FIRST)
@@ -11,37 +12,44 @@ st.set_page_config(
 )
 
 # ------------------------------------
-# HARD AUTH GATE (PRODUCTION-GRADE)
+# GLOBAL ERROR BOUNDARY (PLAY STORE SAFE)
 # ------------------------------------
-if not ensure_auth():
-    login_ui()
-    st.stop()
+def safe_run(fn):
+    try:
+        fn()
+    except Exception as e:
+        st.error("Something went wrong. Please refresh the app.")
+        st.caption("If the issue persists, contact support.")
+        print("APP ERROR:")
+        traceback.print_exc()
 
-# At this point auth is guaranteed
-user = st.session_state.user
-user_id = st.session_state.user_id
-
-# ------------------------------------
-# SIDEBAR
-# ------------------------------------
-st.sidebar.success(f"Logged in as\n{user.email}")
-
-if st.sidebar.button("🚪 Logout"):
-    logout()
-    st.session_state.clear()
-    st.stop()
-
-mode = st.sidebar.radio(
-    "Select Mode",
-    ["Crypto", "Stocks"],
-    key="mode_select",
-)
 
 # ------------------------------------
-# MODE EXECUTION WITH GLOBAL CRASH GUARD
-# (PHASE 3.1.1)
+# MAIN APP LOGIC
 # ------------------------------------
-try:
+def main():
+    # HARD AUTH GATE
+    if not ensure_auth():
+        login_ui()
+        return
+
+    user = st.session_state.user
+    user_id = st.session_state.user_id
+
+    # SIDEBAR
+    st.sidebar.success(f"Logged in as\n{user.email}")
+
+    if st.sidebar.button("🚪 Logout"):
+        logout()
+        st.stop()
+
+    mode = st.sidebar.radio(
+        "Select Mode",
+        ["Crypto", "Stocks"],
+        key="mode_select",
+    )
+
+    # LAZY LOAD MODES
     if mode == "Crypto":
         from crypto_mode import crypto_app
         crypto_app()
@@ -49,12 +57,8 @@ try:
         from stock_mode import stock_app
         stock_app()
 
-except Exception as e:
-    # User-safe message
-    st.error("⚠️ Something went wrong. Please refresh the app.")
 
-    # Developer diagnostics (visible in Streamlit logs)
-    print("🔥 APPLICATION ERROR")
-    print("User:", user.email if user else "Unknown")
-    print("Mode:", mode)
-    print("Error:", repr(e))
+# ------------------------------------
+# SAFE EXECUTION
+# ------------------------------------
+safe_run(main)
