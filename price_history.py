@@ -1,117 +1,104 @@
-import time
 import requests
 import yfinance as yf
-
-# ---------------------------------------------
-# GLOBAL CACHE (STREAMLIT SAFE)
-# ---------------------------------------------
-_PRICE_CACHE = {
-    "crypto": {"ts": 0, "data": {}},
-    "stocks": {"ts": 0, "data": {}},
-}
-
-CACHE_TTL_SECONDS = 300  # 5 minutes
+from datetime import datetime
+from db import supabase
 
 
-# ---------------------------------------------
-# CRYPTO LIVE PRICES (COINGECKO, HARDENED)
-# ---------------------------------------------
-def crypto_live_prices():
-    now = time.time()
+# -----------------------------------------
+# INTERNAL HELPERS
+# -----------------------------------------
+def cache_prices(asset_type: str, prices: dict):
+    rows = []
+    for sym, price in prices.items():
+        rows.append({
+            "asset_type": asset_type,
+            "symbol": sym,
+            "price": float(price),
+            "updated_at": datetime.utcnow().isoformat(),
+        })
 
-    # Serve from cache if fresh
-    if now - _PRICE_CACHE["crypto"]["ts"] < CACHE_TTL_SECONDS:
-        return _PRICE_CACHE["crypto"]["data"]
+    if rows:
+        supabase.table("price_cache").upsert(
+            rows,
+            on_conflict="asset_type,symbol",
+        ).execute()
 
-    ids = {
-        "BTC": "bitcoin",
-        "ETH": "ethereum",
-        "SOL": "solana",
-        "BNB": "binancecoin",
-        "XRP": "ripple",
-        "ADA": "cardano",
-        "DOGE": "dogecoin",
-        "DOT": "polkadot",
-        "LTC": "litecoin",
-        "USDT": "tether",
-    }
 
+def load_cached_prices(asset_type: str, symbols: list):
     try:
-        url = (
-            "https://api.coingecko.com/api/v3/simple/price"
-            "?ids=" + ",".join(ids.values()) +
-            "&vs_currencies=usd"
+        res = (
+            supabase.table("price_cache")
+            .select("symbol,price")
+            .eq("asset_type", asset_type)
+            .in_("symbol", symbols)
+            .execute()
         )
+        return {r["symbol"]: float(r["price"]) for r in res.data or []}
+    except Exception:
+        return {}
 
-        r = requests.get(url, timeout=8)
+
+# -----------------------------------------
+# CRYPTO — SAFE
+# -----------------------------------------
+def crypto_live_prices():
+    try:
+        ids = {
+            "BTC": "bitcoin",
+            "ETH": "ethereum",
+            "SOL": "solana",
+            "BNB": "binancecoin",
+            "XRP": "ripple",
+            "ADA": "cardano",
+            "DOGE": "dogecoin",
+            "DOT": "polkadot",
+            "LTC": "litecoin",
+            "USDT": "tether",
+        }
+
+        url = "https://api.coingecko.com/api/v3/simple/price"
+        r = requests.get(
+            url,
+            params={"ids": ",".join(ids.values()), "vs_currencies": "usd"},
+            timeout=10,
+        )
         r.raise_for_status()
         data = r.json()
 
-        prices = {}
-        for sym, cg_id in ids.items():
-            usd = data.get(cg_id, {}).get("usd")
-            prices[sym] = float(usd) if usd is not None else 0.0
-
-        # Cache result
-        _PRICE_CACHE["crypto"] = {
-            "ts": now,
-            "data": prices,
+        prices = {
+            sym: float(data[cg]["usd"])
+            for sym, cg in ids.items()
+            if cg in data
         }
 
+        cache_prices("crypto", prices)
         return prices
 
-    except Exception as e:
-        print("CRYPTO PRICE ERROR:", e)
+    except Exception:
+        # ⛔ Fallback to cache
+        return load_cached_prices("crypto", [
+            "BTC","ETH","SOL","BNB","XRP","ADA","DOGE","DOT","LTC","USDT"
+        ])
 
-        # Fallback to last cache
-        return _PRICE_CACHE["crypto"]["data"] or {k: 0.0 for k in ids}
 
-
-# ---------------------------------------------
-# STOCK LIVE PRICES (YAHOO ONLY, HARDENED)
-# ---------------------------------------------
-def stock_live_prices(symbols):
-    if not symbols:
-        return {}
-
-    now = time.time()
-
-    # Serve from cache if fresh
-    if now - _PRICE_CACHE["stocks"]["ts"] < CACHE_TTL_SECONDS:
-        cached = _PRICE_CACHE["stocks"]["data"]
-        return {s: cached.get(s, 0.0) for s in symbols}
-
-    prices = {}
-
+# -----------------------------------------
+# STOCKS — SAFE
+# -----------------------------------------
+def stock_live_prices(symbols: list):
     try:
-        tickers = " ".join(symbols)
-
-        data = yf.download(
-            tickers=tickers,
-            period="1d",
-            interval="1m",
-            progress=False,
-            threads=False,
-        )
+        prices = {}
+        tickers = yf.Tickers(" ".join(symbols))
 
         for sym in symbols:
-            try:
-                price = data["Close"][sym].dropna().iloc[-1]
+            info = tickers.tickers[sym].fast_info
+            price = info.get("lastPrice")
+            if price:
                 prices[sym] = float(price)
-            except Exception:
-                prices[sym] = 0.0
 
-        # Cache result
-        _PRICE_CACHE["stocks"] = {
-            "ts": now,
-            "data": prices,
-        }
+        if prices:
+            cache_prices("stock", prices)
 
         return prices
 
-    except Exception as e:
-        print("STOCK PRICE ERROR:", e)
-
-        # Fallback to last cache
-        cached = _PRICE_CACHE["stocks"]["data"]
-        return {s: cached.get(s, 0.0) for s in symbols}
+    except Exception:
+        return load_cached_prices("stock", symbols)
