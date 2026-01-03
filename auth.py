@@ -79,34 +79,20 @@ def login_ui():
         )
 
         if st.button("Create Account"):
-            if len(new_password) < 6:
-                st.error("Password must be at least 6 characters")
-                return
-
             try:
-                # 1️⃣ Create account
-                res = supabase.auth.sign_up({
-                    "email": new_email.strip(),
-                    "password": new_password,
-                })
+               res = supabase.auth.sign_up({
+                   "email": new_email.strip(),
+                   "password": new_password,
+               })
 
-                if not res.user:
-                    st.error("Account creation failed")
-                    return
+               st.write("DEBUG RESPONSE:", res)
 
-                # 2️⃣ Auto-login immediately
-                res_login = supabase.auth.sign_in_with_password({
-                    "email": new_email.strip(),
-                    "password": new_password,
-                })
-
-                if res_login.user:
-                    st.session_state.user = res_login.user
-                    st.session_state.user_id = res_login.user.id
-                    st.success("Account created & logged in")
-                    st.rerun()
-                else:
-                    st.success("Account created. Please log in.")
+               if res.user:
+                   st.success("User object created")
+               else:
+            st.error("No user returned")
 
             except Exception as e:
-                st.error("Account creation error")
+                st.error("RAW SIGNUP ERROR:")
+                st.exception(e)
+            
