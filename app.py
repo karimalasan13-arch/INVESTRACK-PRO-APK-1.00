@@ -1,9 +1,8 @@
 import streamlit as st
 from auth import login_ui, ensure_auth, logout
-import traceback
 
 # ------------------------------------
-# APP CONFIG (MUST BE FIRST)
+# APP CONFIG
 # ------------------------------------
 st.set_page_config(
     page_title="InvesTrack Pro",
@@ -12,44 +11,34 @@ st.set_page_config(
 )
 
 # ------------------------------------
-# GLOBAL ERROR BOUNDARY (PLAY STORE SAFE)
+# AUTH GATE
 # ------------------------------------
-def safe_run(fn):
-    try:
-        fn()
-    except Exception as e:
-        st.error("Something went wrong. Please refresh the app.")
-        st.caption("If the issue persists, contact support.")
-        print("APP ERROR:")
-        traceback.print_exc()
+if not ensure_auth():
+    login_ui()
+    st.stop()
 
+user = st.session_state.user
+user_id = st.session_state.user_id
 
 # ------------------------------------
-# MAIN APP LOGIC
+# SIDEBAR
 # ------------------------------------
-def main():
-    # HARD AUTH GATE
-    if not ensure_auth():
-        login_ui()
-        return
+st.sidebar.success(f"Logged in as\n{user.email}")
 
-    user = st.session_state.user
-    user_id = st.session_state.user_id
+if st.sidebar.button("🚪 Logout"):
+    logout()
+    st.stop()
 
-    # SIDEBAR
-    st.sidebar.success(f"Logged in as\n{user.email}")
+mode = st.sidebar.radio(
+    "Select Mode",
+    ["Crypto", "Stocks"],
+    key="mode_select",
+)
 
-    if st.sidebar.button("🚪 Logout"):
-        logout()
-        st.stop()
-
-    mode = st.sidebar.radio(
-        "Select Mode",
-        ["Crypto", "Stocks"],
-        key="mode_select",
-    )
-
-    # LAZY LOAD MODES
+# ------------------------------------
+# SAFE MODE LOADER (CRITICAL)
+# ------------------------------------
+try:
     if mode == "Crypto":
         from crypto_mode import crypto_app
         crypto_app()
@@ -57,8 +46,10 @@ def main():
         from stock_mode import stock_app
         stock_app()
 
+except Exception as e:
+    # Production-safe fallback
+    st.error("⚠️ Something went wrong. The app is running in safe mode.")
+    st.info("Please refresh the app. If the issue persists, try again later.")
 
-# ------------------------------------
-# SAFE EXECUTION
-# ------------------------------------
-safe_run(main)
+    # Optional debug log (not user-facing)
+    print("APP SAFE MODE ERROR:", e)
