@@ -1,9 +1,6 @@
 import streamlit as st
 from auth import login_ui, ensure_auth, logout
 
-# ------------------------------------
-# APP CONFIG
-# ------------------------------------
 st.set_page_config(
     page_title="InvesTrack Pro",
     page_icon="📈",
@@ -11,14 +8,18 @@ st.set_page_config(
 )
 
 # ------------------------------------
-# AUTH GATE
+# HARD AUTH GATE
 # ------------------------------------
 if not ensure_auth():
     login_ui()
     st.stop()
 
+# Normalize session ONCE
+if "user" not in st.session_state:
+    st.session_state.user = st.session_state.user
+    st.session_state.user_id = st.session_state.user.id
+
 user = st.session_state.user
-user_id = st.session_state.user_id
 
 # ------------------------------------
 # SIDEBAR
@@ -32,11 +33,10 @@ if st.sidebar.button("🚪 Logout"):
 mode = st.sidebar.radio(
     "Select Mode",
     ["Crypto", "Stocks"],
-    key="mode_select",
 )
 
 # ------------------------------------
-# SAFE MODE LOADER (CRITICAL)
+# LAZY LOAD MODES
 # ------------------------------------
 try:
     if mode == "Crypto":
@@ -45,11 +45,5 @@ try:
     else:
         from stock_mode import stock_app
         stock_app()
-
-except Exception as e:
-    # Production-safe fallback
-    st.error("⚠️ Something went wrong. The app is running in safe mode.")
-    st.info("Please refresh the app. If the issue persists, try again later.")
-
-    # Optional debug log (not user-facing)
-    print("APP SAFE MODE ERROR:", e)
+except Exception:
+    st.error("Something went wrong. Please refresh the app.")
