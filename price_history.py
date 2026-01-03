@@ -1,14 +1,28 @@
+import time
 import requests
 import yfinance as yf
-import pandas as pd
-import streamlit as st
-from datetime import datetime
 
 # ---------------------------------------------
-# CRYPTO LIVE PRICES (SAFE)
+# GLOBAL CACHE (STREAMLIT SAFE)
 # ---------------------------------------------
-@st.cache_data(ttl=300)
+_PRICE_CACHE = {
+    "crypto": {"ts": 0, "data": {}},
+    "stocks": {"ts": 0, "data": {}},
+}
+
+CACHE_TTL_SECONDS = 300  # 5 minutes
+
+
+# ---------------------------------------------
+# CRYPTO LIVE PRICES (COINGECKO, HARDENED)
+# ---------------------------------------------
 def crypto_live_prices():
+    now = time.time()
+
+    # Serve from cache if fresh
+    if now - _PRICE_CACHE["crypto"]["ts"] < CACHE_TTL_SECONDS:
+        return _PRICE_CACHE["crypto"]["data"]
+
     ids = {
         "BTC": "bitcoin",
         "ETH": "ethereum",
@@ -28,37 +42,52 @@ def crypto_live_prices():
             "?ids=" + ",".join(ids.values()) +
             "&vs_currencies=usd"
         )
-        r = requests.get(url, timeout=10)
+
+        r = requests.get(url, timeout=8)
+        r.raise_for_status()
         data = r.json()
 
         prices = {}
-        for symbol, cg_id in ids.items():
-            prices[symbol] = float(data.get(cg_id, {}).get("usd", 0.0))
+        for sym, cg_id in ids.items():
+            usd = data.get(cg_id, {}).get("usd")
+            prices[sym] = float(usd) if usd is not None else 0.0
+
+        # Cache result
+        _PRICE_CACHE["crypto"] = {
+            "ts": now,
+            "data": prices,
+        }
 
         return prices
 
     except Exception as e:
-        print("Crypto price fetch failed:", e)
-        return {k: 0.0 for k in ids.keys()}
+        print("CRYPTO PRICE ERROR:", e)
+
+        # Fallback to last cache
+        return _PRICE_CACHE["crypto"]["data"] or {k: 0.0 for k in ids}
 
 
 # ---------------------------------------------
-# STOCK LIVE PRICES (RATE-LIMIT SAFE)
+# STOCK LIVE PRICES (YAHOO ONLY, HARDENED)
 # ---------------------------------------------
-@st.cache_data(ttl=300)
 def stock_live_prices(symbols):
-    """
-    Fetch stock prices safely.
-    NEVER crash UI due to rate limits.
-    """
+    if not symbols:
+        return {}
+
+    now = time.time()
+
+    # Serve from cache if fresh
+    if now - _PRICE_CACHE["stocks"]["ts"] < CACHE_TTL_SECONDS:
+        cached = _PRICE_CACHE["stocks"]["data"]
+        return {s: cached.get(s, 0.0) for s in symbols}
+
     prices = {}
 
-    if not symbols:
-        return prices
-
     try:
+        tickers = " ".join(symbols)
+
         data = yf.download(
-            tickers=" ".join(symbols),
+            tickers=tickers,
             period="1d",
             interval="1m",
             progress=False,
@@ -67,17 +96,22 @@ def stock_live_prices(symbols):
 
         for sym in symbols:
             try:
-                if isinstance(data, pd.DataFrame):
-                    price = data["Close"][sym].dropna().iloc[-1]
-                    prices[sym] = float(price)
-                else:
-                    prices[sym] = 0.0
+                price = data["Close"][sym].dropna().iloc[-1]
+                prices[sym] = float(price)
             except Exception:
                 prices[sym] = 0.0
 
-    except Exception as e:
-        # 🔴 RATE LIMIT OR NETWORK ISSUE — DO NOT CRASH
-        print("Yahoo Finance blocked request:", e)
-        prices = {sym: 0.0 for sym in symbols}
+        # Cache result
+        _PRICE_CACHE["stocks"] = {
+            "ts": now,
+            "data": prices,
+        }
 
-    return prices
+        return prices
+
+    except Exception as e:
+        print("STOCK PRICE ERROR:", e)
+
+        # Fallback to last cache
+        cached = _PRICE_CACHE["stocks"]["data"]
+        return {s: cached.get(s, 0.0) for s in symbols}
