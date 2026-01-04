@@ -1,18 +1,20 @@
 {
   "name": "InvesTrack Pro",
   "short_name": "InvesTrack",
+  "description": "Crypto & Stock Portfolio Tracker",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0e1117",
-  "theme_color": "#0e1117",
+  "background_color": "#0E1117",
+  "theme_color": "#0E1117",
+  "orientation": "portrait",
   "icons": [
     {
-      "src": "/static/icon-192.png",
+      "src": "https://raw.githubusercontent.com/karimalasan13-arch/INVESTRACK-PRO-APK-1.00/main/icons/icon-192.png",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "/static/icon-512.png",
+      "src": "https://raw.githubusercontent.com/karimalasan13-arch/INVESTRACK-PRO-APK-1.00/main/icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png"
     }
