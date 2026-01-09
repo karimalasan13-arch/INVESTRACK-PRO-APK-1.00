@@ -72,3 +72,15 @@ def login_ui():
             except Exception as e:
                 st.error("Account creation failed. Contact support.")
                 print("SIGNUP ERROR:", e)
+
+st.markdown(
+    """
+    ---
+    🗑 **Request Account Deletion**
+
+    To delete your account and all associated data,  
+    email **delete@investrackpro.app**
+    """
+)
+
+
