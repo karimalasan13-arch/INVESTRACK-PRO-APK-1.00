@@ -34,6 +34,14 @@ mode = st.sidebar.radio(
     "Select Mode",
     ["Crypto", "Stocks"],
 )
+st.sidebar.markdown(
+    """
+    ---
+    🗑 **Delete Account**
+    
+    Email **delete@investrackpro.app**
+    """
+)
 
 # ------------------------------------
 # LAZY LOAD MODES
