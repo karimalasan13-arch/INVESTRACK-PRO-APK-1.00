@@ -21,8 +21,16 @@ We do **not** sell, rent, or share your personal data with third parties.
 ## Data Security
 All data is transmitted securely using encryption and stored using industry-standard security practices.
 
-## User Control & Data Deletion
-Users may request deletion of their account and associated data at any time by contacting us.
+## Account Deletion
+
+Users may request deletion of their account and all associated data at any time.
+
+To request account deletion, please email:
+
+**delete@investrackpro.app**
+
+Include the email address associated with your InvesTrack Pro account.  
+Account deletion requests are processed within 7 business days.
 
 ## Contact Information
 If you have any questions about this Privacy Policy, please contact:
