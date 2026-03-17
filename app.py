@@ -1,4 +1,5 @@
 import streamlit as st
+import time
 from auth import login_ui, ensure_auth, logout
 
 st.set_page_config(
@@ -8,16 +9,21 @@ st.set_page_config(
 )
 
 # ------------------------------------
-# AUTO REFRESH (60 seconds)
-# ------------------------------------
-st.autorefresh(interval=60000, key="auto_refresh")
-
-# ------------------------------------
 # HARD AUTH GATE
 # ------------------------------------
 if not ensure_auth():
     login_ui()
     st.stop()
+
+# ------------------------------------
+# AUTO REFRESH (SAFE)
+# ------------------------------------
+if "last_refresh" not in st.session_state:
+    st.session_state.last_refresh = time.time()
+
+if time.time() - st.session_state.last_refresh > 60:
+    st.session_state.last_refresh = time.time()
+    st.rerun()
 
 # ------------------------------------
 # SESSION
