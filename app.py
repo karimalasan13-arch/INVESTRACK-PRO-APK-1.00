@@ -8,6 +8,11 @@ st.set_page_config(
 )
 
 # ------------------------------------
+# AUTO REFRESH (60 seconds)
+# ------------------------------------
+st.autorefresh(interval=60000, key="auto_refresh")
+
+# ------------------------------------
 # HARD AUTH GATE
 # ------------------------------------
 if not ensure_auth():
