@@ -9,30 +9,52 @@ import streamlit as st
 # -----------------------------------------
 SNAPSHOT_INTERVAL_HOURS = 8
 
+# tolerance settings
+MIN_CHANGE_THRESHOLD = 0.5        # ignore tiny noise (GHS)
+MAX_DROP_RATIO = 0.5             # ignore >50% drop (API failure)
+MAX_SPIKE_RATIO = 2.5            # ignore >150% spike (bad API)
 
+
+# -----------------------------------------
+# MAIN AUTOSAVE FUNCTION
+# -----------------------------------------
 def autosave_portfolio_value(user_id: str, value_ghs: float, mode: str):
     """
-    Production-grade autosave with:
-    ✔ Mode separation (crypto / stocks)
+    Ultra-stable autosave system
+
+    ✔ Mode separation (crypto / stock)
     ✔ Zero-value protection
     ✔ Duplicate prevention
     ✔ Interval control
-    ✔ Crash-safe execution
+    ✔ Spike/drop filtering
+    ✔ Chart smoothing
+    ✔ Session fallback memory
+    ✔ Crash-safe
     """
 
     if not user_id or not mode:
         return
 
-    # 🚫 Prevent bad values
+    # -------------------------------------
+    # SESSION FALLBACK MEMORY
+    # -------------------------------------
+    key = f"last_valid_{mode}_value"
+
+    if key not in st.session_state:
+        st.session_state[key] = value_ghs
+
+    # prevent zero corruption
     if value_ghs <= 0:
-        return
+        value_ghs = st.session_state[key]
+    else:
+        st.session_state[key] = value_ghs
 
     now = datetime.utcnow()
-    today = date.today()
+    today = now.date()
 
     try:
         # -------------------------------------
-        # Fetch last snapshot (PER MODE)
+        # FETCH LAST SNAPSHOT (PER MODE)
         # -------------------------------------
         res = (
             supabase.table("portfolio_history")
@@ -45,7 +67,7 @@ def autosave_portfolio_value(user_id: str, value_ghs: float, mode: str):
         )
 
         # -------------------------------------
-        # First snapshot
+        # FIRST SNAPSHOT
         # -------------------------------------
         if not res.data:
             _insert_snapshot(user_id, now, value_ghs, mode)
@@ -57,26 +79,32 @@ def autosave_portfolio_value(user_id: str, value_ghs: float, mode: str):
         last_date = last_ts.date()
 
         # -------------------------------------
-        # 🚫 Prevent duplicate values
+        # IGNORE MICRO FLUCTUATIONS
         # -------------------------------------
-        if abs(last_value - value_ghs) < 0.01:
+        if abs(last_value - value_ghs) < MIN_CHANGE_THRESHOLD:
             return
 
         # -------------------------------------
-        # 🚫 Prevent extreme drops (API glitch)
+        # PREVENT API GLITCH DROPS
         # -------------------------------------
-        if value_ghs < last_value * 0.5:
+        if value_ghs < last_value * MAX_DROP_RATIO:
             return
 
         # -------------------------------------
-        # Save if new day
+        # PREVENT API SPIKES
+        # -------------------------------------
+        if value_ghs > last_value * MAX_SPIKE_RATIO:
+            return
+
+        # -------------------------------------
+        # SAVE IF NEW DAY
         # -------------------------------------
         if today != last_date:
             _insert_snapshot(user_id, now, value_ghs, mode)
             return
 
         # -------------------------------------
-        # Save if interval passed
+        # SAVE IF INTERVAL PASSED
         # -------------------------------------
         if now - last_ts >= timedelta(hours=SNAPSHOT_INTERVAL_HOURS):
             _insert_snapshot(user_id, now, value_ghs, mode)
@@ -86,15 +114,22 @@ def autosave_portfolio_value(user_id: str, value_ghs: float, mode: str):
         print("Portfolio autosave skipped:", e)
 
 
+# -----------------------------------------
+# INSERT SNAPSHOT
+# -----------------------------------------
 def _insert_snapshot(user_id: str, timestamp: datetime, value_ghs: float, mode: str):
     """
-    Safe insert
+    Safe insert with normalization
     """
-    supabase.table("portfolio_history").insert(
-        {
-            "user_id": user_id,
-            "timestamp": timestamp.isoformat(),
-            "value_ghs": float(value_ghs),
-            "mode": mode,
-        }
-    ).execute()
+
+    try:
+        supabase.table("portfolio_history").insert(
+            {
+                "user_id": user_id,
+                "timestamp": timestamp.isoformat(),
+                "value_ghs": round(float(value_ghs), 2),
+                "mode": mode,
+            }
+        ).execute()
+    except Exception as e:
+        print("Insert failed:", e)
