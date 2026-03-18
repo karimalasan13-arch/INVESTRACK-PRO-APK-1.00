@@ -27,7 +27,61 @@ API_MAP = {
 
 
 # -----------------------------------------
-# PRICE MEMORY (ANTI-ZERO)
+# SETTINGS HELPERS
+# -----------------------------------------
+def load_setting(user_id, key, default):
+    try:
+        res = (
+            supabase.table("user_settings")
+            .select("value")
+            .eq("user_id", user_id)
+            .eq("key", key)
+            .single()
+            .execute()
+        )
+        return float(res.data["value"])
+    except:
+        return default
+
+
+def save_setting(user_id, key, value):
+    supabase.table("user_settings").upsert(
+        {"user_id": user_id, "key": key, "value": float(value)},
+        on_conflict="user_id,key",
+    ).execute()
+
+
+# -----------------------------------------
+# HOLDINGS
+# -----------------------------------------
+def load_crypto_holdings(user_id):
+    holdings = {k: 0.0 for k in API_MAP}
+    try:
+        res = (
+            supabase.table("crypto_holdings")
+            .select("symbol,quantity")
+            .eq("user_id", user_id)
+            .execute()
+        )
+        for r in res.data or []:
+            holdings[r["symbol"]] = float(r["quantity"])
+    except:
+        pass
+    return holdings
+
+
+def save_crypto_holdings(user_id, holdings):
+    rows = [
+        {"user_id": user_id, "symbol": k, "quantity": float(v)}
+        for k, v in holdings.items()
+    ]
+    supabase.table("crypto_holdings").upsert(
+        rows, on_conflict="user_id,symbol"
+    ).execute()
+
+
+# -----------------------------------------
+# PRICE MEMORY
 # -----------------------------------------
 def safe_price(symbol, price):
     if "crypto_price_memory" not in st.session_state:
@@ -41,7 +95,7 @@ def safe_price(symbol, price):
 
 
 # -----------------------------------------
-# HISTORY LOADER (MODE SAFE)
+# HISTORY
 # -----------------------------------------
 def load_portfolio_history(user_id):
     try:
@@ -54,12 +108,12 @@ def load_portfolio_history(user_id):
             .execute()
         )
         return res.data or []
-    except Exception:
+    except:
         return []
 
 
 # -----------------------------------------
-# MAIN APP
+# MAIN
 # -----------------------------------------
 def crypto_app():
 
@@ -67,25 +121,39 @@ def crypto_app():
 
     user_id = st.session_state.user_id
 
-    rate = 14.5
-    invested = 0.0
+    # SETTINGS
+    rate = load_setting(user_id, "crypto_rate", 14.5)
+    invested = load_setting(user_id, "crypto_investment", 0.0)
+
+    holdings = load_crypto_holdings(user_id)
 
     # -------------------------------------
-    # LOAD HOLDINGS
+    # SIDEBAR
     # -------------------------------------
-    holdings = {k: 0.0 for k in API_MAP}
+    st.sidebar.header("⚙️ Crypto Settings")
 
-    try:
-        res = (
-            supabase.table("crypto_holdings")
-            .select("symbol,quantity")
-            .eq("user_id", user_id)
-            .execute()
+    rate = st.sidebar.number_input("USD → GHS", value=float(rate), step=0.1)
+    invested = st.sidebar.number_input("Total Investment (GHS)", value=float(invested), step=10.0)
+
+    if st.sidebar.button("💾 Save Crypto Settings"):
+        save_setting(user_id, "crypto_rate", rate)
+        save_setting(user_id, "crypto_investment", invested)
+        st.sidebar.success("Saved")
+
+    st.sidebar.markdown("---")
+
+    st.sidebar.subheader("🪙 Crypto Holdings")
+
+    for sym in API_MAP:
+        holdings[sym] = st.sidebar.number_input(
+            sym,
+            value=float(holdings.get(sym, 0.0)),
+            key=f"c_{sym}"
         )
-        for r in res.data or []:
-            holdings[r["symbol"]] = float(r["quantity"])
-    except:
-        pass
+
+    if st.sidebar.button("📥 Save Crypto Holdings"):
+        save_crypto_holdings(user_id, holdings)
+        st.sidebar.success("Saved")
 
     # -------------------------------------
     # PRICES
@@ -96,7 +164,6 @@ def crypto_app():
     total_value = 0.0
 
     for sym, qty in holdings.items():
-
         raw_price = prices.get(sym, 1.0 if sym == "USDT" else 0.0)
         usd_price = safe_price(sym, raw_price)
 
@@ -105,15 +172,10 @@ def crypto_app():
 
         rows.append([sym, qty, usd_price, value_ghs])
 
-    df = pd.DataFrame(
-        rows, columns=["Asset", "Qty", "Price (USD)", "Value (GHS)"]
-    )
-
+    df = pd.DataFrame(rows, columns=["Asset", "Qty", "Price (USD)", "Value (GHS)"])
     st.dataframe(df, use_container_width=True)
 
-    # -------------------------------------
-    # FINAL VALUE PROTECTION
-    # -------------------------------------
+    # PROTECT VALUE
     if "last_valid_crypto_total" not in st.session_state:
         st.session_state.last_valid_crypto_total = total_value
 
@@ -122,36 +184,19 @@ def crypto_app():
     else:
         st.session_state.last_valid_crypto_total = total_value
 
-    # -------------------------------------
-    # SAVE (MODE SAFE)
-    # -------------------------------------
     autosave_portfolio_value(user_id, total_value, "crypto")
 
     history = load_portfolio_history(user_id)
 
-    # -------------------------------------
-    # CHART (CLEAN)
-    # -------------------------------------
     st.subheader("📈 Portfolio Value Over Time")
 
     if len(history) >= 2:
-
         h = pd.DataFrame(history)
         h["timestamp"] = pd.to_datetime(h["timestamp"])
-
-        # Remove bad data
         h = h[h["value_ghs"] > 0]
 
         fig = go.Figure()
-        fig.add_trace(go.Scatter(
-            x=h["timestamp"],
-            y=h["value_ghs"],
-            mode="lines"
-        ))
-
-        fig.update_layout(height=350)
-
+        fig.add_trace(go.Scatter(x=h["timestamp"], y=h["value_ghs"], mode="lines"))
         st.plotly_chart(fig, use_container_width=True)
-
     else:
         st.info("Waiting for data...")
