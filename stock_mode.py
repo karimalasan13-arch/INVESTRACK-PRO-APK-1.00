@@ -87,30 +87,41 @@ def save_setting(user_id, key, value):
 # MAIN APP
 # -----------------------------------------
 def stock_app():
-
     st.title("📊 Stock Portfolio Tracker")
-
     user_id = st.session_state.user_id
 
-    # -------------------------------------
-    # LOAD SETTINGS
-    # -------------------------------------
-        rate = load_setting(user_id, "stock_rate", 14.5)
+    rate = load_setting(user_id, "stock_rate", 14.5)
     invested = load_setting(user_id, "stock_investment", 0.0)
+    holdings = load_stock_holdings(user_id)
 
-    st.sidebar.header("⚙️ Stock Settings")
+    # -------------------------------------
+    # SIDEBAR
+    # -------------------------------------
+    st.sidebar.header("Stock Settings")
 
     rate = st.sidebar.number_input("USD → GHS", value=float(rate), step=0.1)
-    invested = st.sidebar.number_input("Total Investment (GHS)", value=float(invested), step=10.0)
+    invested = st.sidebar.number_input(
+        "Total Invested (GHS)", value=float(invested), step=10.0
+    )
 
-    if st.sidebar.button("💾 Save Stock Settings"):
+    if st.sidebar.button("Save Settings"):
         save_setting(user_id, "stock_rate", rate)
         save_setting(user_id, "stock_investment", invested)
-        st.sidebar.success("Saved")
+        st.sidebar.success("Settings saved")
 
     st.sidebar.markdown("---")
-    st.sidebar.subheader("📊 Stock Holdings")
+    st.sidebar.subheader("Stock Holdings")
 
+    for sym in STOCK_MAP:
+        holdings[sym] = st.sidebar.number_input(
+            sym, value=float(holdings.get(sym, 0.0)), step=1.0, key=f"s_{sym}"
+        )
+
+    if st.sidebar.button("Save Holdings"):
+        save_stock_holdings(user_id, holdings)
+        st.sidebar.success("Holdings saved")    
+
+   
     # -------------------------------------
     # LOAD HOLDINGS
     # -------------------------------------
