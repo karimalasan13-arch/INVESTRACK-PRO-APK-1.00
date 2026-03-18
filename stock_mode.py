@@ -61,7 +61,45 @@ def load_portfolio_history(user_id):
 
 def fmt(v): return f"GHS {v:,.2f}"
 def pct(v): return f"{v:.2f}%"
+def load_setting(user_id, key, default):
+    try:
+        res = (
+            supabase.table("user_settings")
+            .select("value")
+            .eq("user_id", user_id)
+            .eq("key", key)
+            .single()
+            .execute()
+        )
+        return float(res.data["value"])
+    except:
+        return default
 
+
+def save_setting(user_id, key, value):
+    supabase.table("user_settings").upsert(
+        {"user_id": user_id, "key": key, "value": float(value)},
+        on_conflict="user_id,key",
+    ).execute()
+
+
+# INSIDE stock_app() REPLACE SETTINGS + SIDEBAR
+
+rate = load_setting(user_id, "stock_rate", 14.5)
+invested = load_setting(user_id, "stock_investment", 0.0)
+
+st.sidebar.header("⚙️ Stock Settings")
+
+rate = st.sidebar.number_input("USD → GHS", value=float(rate), step=0.1)
+invested = st.sidebar.number_input("Total Investment (GHS)", value=float(invested), step=10.0)
+
+if st.sidebar.button("💾 Save Stock Settings"):
+    save_setting(user_id, "stock_rate", rate)
+    save_setting(user_id, "stock_investment", invested)
+    st.sidebar.success("Saved")
+
+st.sidebar.markdown("---")
+st.sidebar.subheader("📊 Stock Holdings")
 
 # -----------------------------------------
 # MAIN APP
