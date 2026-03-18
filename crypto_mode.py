@@ -1,4 +1,4 @@
-import streamlit as st 
+import streamlit as st
 import pandas as pd
 import altair as alt
 from datetime import datetime
@@ -38,6 +38,28 @@ def safe_price(symbol, price):
         return price
 
     return st.session_state.crypto_price_memory.get(symbol, 0)
+
+
+# -----------------------------------------
+# PnL HISTORY BUILDER (NEW)
+# -----------------------------------------
+def build_pnl_history(history, invested):
+    if not history:
+        return pd.DataFrame()
+
+    h = pd.DataFrame(history)
+
+    if h.empty:
+        return pd.DataFrame()
+
+    h["timestamp"] = pd.to_datetime(h["timestamp"])
+
+    # remove bad values
+    h = h[h["value_ghs"] > 0]
+
+    h["pnl"] = h["value_ghs"] - invested
+
+    return h.sort_values("timestamp")
 
 
 # -----------------------------------------
@@ -100,7 +122,7 @@ def load_portfolio_history(user_id):
             supabase.table("portfolio_history")
             .select("timestamp,value_ghs")
             .eq("user_id", user_id)
-            .eq("mode", "crypto")  # ✅ isolation fix
+            .eq("mode", "crypto")
             .order("timestamp")
             .execute()
         )
@@ -120,57 +142,80 @@ def pct(v): return f"{v:.2f}%"
 # MAIN APP
 # -----------------------------------------
 def crypto_app():
+
     st.title("💰 Crypto Portfolio Tracker")
+
+    if "user_id" not in st.session_state:
+        st.error("User not logged in.")
+        return
+
     user_id = st.session_state.user_id
 
+    # -------------------------------------
+    # LOAD DATA
+    # -------------------------------------
     rate = load_setting(user_id, "crypto_rate", 14.5)
     invested = load_setting(user_id, "crypto_investment", 0.0)
     holdings = load_crypto_holdings(user_id)
 
     # -------------------------------------
-    # SIDEBAR
+    # SIDEBAR (FIXED KEYS)
     # -------------------------------------
-    st.sidebar.header("Crypto Settings")
+    st.sidebar.header("💰 Crypto Settings")
 
-    rate = st.sidebar.number_input("USD → GHS", value=float(rate), step=0.1)
-    invested = st.sidebar.number_input(
-        "Total Invested (GHS)", value=float(invested), step=10.0
+    rate = st.sidebar.number_input(
+        "USD → GHS",
+        value=float(rate),
+        step=0.1,
+        key="crypto_rate_input"
     )
 
-    if st.sidebar.button("Save Settings"):
+    invested = st.sidebar.number_input(
+        "Total Invested (GHS)",
+        value=float(invested),
+        step=10.0,
+        key="crypto_investment_input"
+    )
+
+    if st.sidebar.button("💾 Save Settings", key="crypto_save_settings"):
         save_setting(user_id, "crypto_rate", rate)
         save_setting(user_id, "crypto_investment", invested)
         st.sidebar.success("Settings saved")
 
     st.sidebar.markdown("---")
-    st.sidebar.subheader("Crypto Holdings")
+    st.sidebar.subheader("📦 Crypto Holdings")
 
     for sym in API_MAP:
         holdings[sym] = st.sidebar.number_input(
             sym,
             value=float(holdings.get(sym, 0.0)),
             step=0.0001,
-            key=f"c_{sym}",
+            key=f"crypto_{sym}"
         )
 
-    if st.sidebar.button("Save Holdings"):
+    if st.sidebar.button("💾 Save Holdings", key="crypto_save_holdings"):
         save_crypto_holdings(user_id, holdings)
         st.sidebar.success("Holdings saved")
 
     # -------------------------------------
-    # LIVE / SAFE PRICES
+    # LIVE PRICES
     # -------------------------------------
-    prices = crypto_live_prices() or {}
+    try:
+        prices = crypto_live_prices() or {}
+    except Exception:
+        prices = {}
+
     using_cache = not bool(prices)
 
     if using_cache:
-        st.warning("⚠️ Live crypto prices unavailable. Using last known values.")
+        st.warning("⚠️ Using cached prices (API unavailable)")
 
-    rows, total_value = [], 0.0
+    rows = []
+    total_value = 0.0
 
     for sym, qty in holdings.items():
         raw_price = prices.get(sym, 1.0 if sym == "USDT" else 0.0)
-        usd_price = safe_price(sym, raw_price)  # ✅ FIX
+        usd_price = safe_price(sym, raw_price)
 
         value_ghs = qty * usd_price * rate
         total_value += value_ghs
@@ -185,7 +230,7 @@ def crypto_app():
     st.dataframe(df, use_container_width=True)
 
     # -------------------------------------
-    # FINAL VALUE PROTECTION (CRITICAL FIX)
+    # FINAL VALUE PROTECTION
     # -------------------------------------
     if "last_valid_crypto_total" not in st.session_state:
         st.session_state.last_valid_crypto_total = total_value
@@ -196,7 +241,7 @@ def crypto_app():
         st.session_state.last_valid_crypto_total = total_value
 
     # -------------------------------------
-    # SAVE SAFE (MODE AWARE)
+    # SAVE (MODE SAFE)
     # -------------------------------------
     if total_value > 0:
         autosave_portfolio_value(user_id, total_value, "crypto")
@@ -218,20 +263,20 @@ def crypto_app():
     c3.metric("All-Time PnL", fmt(pnl), pct(pnl_pct))
 
     # -------------------------------------
-    # LINE CHART (STABLE)
+    # VALUE CHART
     # -------------------------------------
     st.subheader("📈 Portfolio Value Over Time")
 
     if len(history) >= 2:
         h = pd.DataFrame(history)
         h["timestamp"] = pd.to_datetime(h["timestamp"])
-
-        # ✅ remove bad values
         h = h[h["value_ghs"] > 0]
 
         fig = go.Figure()
         fig.add_trace(go.Scatter(
-            x=h["timestamp"], y=h["value_ghs"], mode="lines+markers"
+            x=h["timestamp"],
+            y=h["value_ghs"],
+            mode="lines+markers"
         ))
 
         fig.update_layout(
@@ -243,9 +288,36 @@ def crypto_app():
         )
 
         st.plotly_chart(fig, use_container_width=True)
-
     else:
         st.info("Portfolio history will appear after multiple snapshots.")
+
+    # -------------------------------------
+    # 🔥 ALL-TIME PnL CHART (NEW)
+    # -------------------------------------
+    st.subheader("📊 All-Time PnL")
+
+    pnl_df = build_pnl_history(history, invested)
+
+    if len(pnl_df) >= 2:
+        fig = go.Figure()
+
+        fig.add_trace(go.Scatter(
+            x=pnl_df["timestamp"],
+            y=pnl_df["pnl"],
+            mode="lines+markers"
+        ))
+
+        fig.update_layout(
+            dragmode="zoom",
+            hovermode="x unified",
+            height=350,
+            xaxis_title="Date",
+            yaxis_title="PnL (GHS)",
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("PnL chart will appear after multiple data points.")
 
     # -------------------------------------
     # MTD / YTD
