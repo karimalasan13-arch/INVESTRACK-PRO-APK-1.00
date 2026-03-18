@@ -27,7 +27,7 @@ STOCK_MAP = {
 
 
 # -----------------------------------------
-# PRICE MEMORY (CRITICAL FIX)
+# PRICE MEMORY (ANTI-ZERO FIX)
 # -----------------------------------------
 def safe_price(symbol, price):
     if "stock_price_memory" not in st.session_state:
@@ -38,6 +38,28 @@ def safe_price(symbol, price):
         return price
 
     return st.session_state.stock_price_memory.get(symbol, 0)
+
+
+# -----------------------------------------
+# PnL HISTORY BUILDER (NEW)
+# -----------------------------------------
+def build_pnl_history(history, invested):
+    if not history:
+        return pd.DataFrame()
+
+    h = pd.DataFrame(history)
+
+    if h.empty:
+        return pd.DataFrame()
+
+    h["timestamp"] = pd.to_datetime(h["timestamp"])
+
+    # remove bad values
+    h = h[h["value_ghs"] > 0]
+
+    h["pnl"] = h["value_ghs"] - invested
+
+    return h.sort_values("timestamp")
 
 
 # -----------------------------------------
@@ -91,12 +113,16 @@ def save_stock_holdings(user_id, holdings):
     ).execute()
 
 
+# -----------------------------------------
+# HISTORY (MODE SAFE)
+# -----------------------------------------
 def load_portfolio_history(user_id):
     try:
         res = (
             supabase.table("portfolio_history")
             .select("timestamp,value_ghs")
             .eq("user_id", user_id)
+            .eq("mode", "stock")   # ✅ isolation fix
             .order("timestamp")
             .execute()
         )
@@ -119,7 +145,6 @@ def stock_app():
 
     st.title("📊 Stock Portfolio Tracker")
 
-    # SAFETY: prevent crash if session missing
     if "user_id" not in st.session_state:
         st.error("User not logged in.")
         return
@@ -134,7 +159,7 @@ def stock_app():
     holdings = load_stock_holdings(user_id)
 
     # -------------------------------------
-    # SIDEBAR (FORCED REFRESH FIX)
+    # SIDEBAR (FIXED KEYS)
     # -------------------------------------
     st.sidebar.header("📊 Stock Settings")
 
@@ -173,7 +198,7 @@ def stock_app():
         st.sidebar.success("Holdings saved")
 
     # -------------------------------------
-    # LIVE PRICES (FIXED)
+    # LIVE PRICES
     # -------------------------------------
     try:
         prices = stock_live_prices(list(STOCK_MAP.keys())) or {}
@@ -189,7 +214,6 @@ def stock_app():
     total_value = 0.0
 
     for sym, qty in holdings.items():
-
         raw_price = prices.get(sym, 0.0)
         usd_price = safe_price(sym, raw_price)
 
@@ -206,40 +230,46 @@ def stock_app():
     st.dataframe(df, use_container_width=True)
 
     # -------------------------------------
-    # PnL
+    # VALUE PROTECTION
     # -------------------------------------
-    pnl = total_value - invested
-    pnl_pct = (pnl / invested * 100) if invested > 0 else 0.0
+    if "last_valid_stock_total" not in st.session_state:
+        st.session_state.last_valid_stock_total = total_value
 
-    # CRITICAL FIX: don't save garbage
+    if total_value <= 0:
+        total_value = st.session_state.last_valid_stock_total
+    else:
+        st.session_state.last_valid_stock_total = total_value
+
+    # -------------------------------------
+    # SAVE (MODE SAFE)
+    # -------------------------------------
     if total_value > 0:
-        autosave_portfolio_value(user_id, total_value)
+        autosave_portfolio_value(user_id, total_value, "stock")
 
     history = load_portfolio_history(user_id)
 
     # -------------------------------------
     # SUMMARY
     # -------------------------------------
+    pnl = total_value - invested
+    pnl_pct = (pnl / invested * 100) if invested > 0 else 0.0
+
     st.markdown("---")
     st.subheader("📈 Portfolio Summary")
 
     c1, c2, c3 = st.columns(3)
-
     c1.metric("Total Value", fmt(total_value))
     c2.metric("Invested", fmt(invested))
     c3.metric("All-Time PnL", fmt(pnl), pct(pnl_pct))
 
     # -------------------------------------
-    # CHART
+    # VALUE CHART
     # -------------------------------------
     st.subheader("📈 Portfolio Value Over Time")
 
     if len(history) >= 2:
-
         h = pd.DataFrame(history)
         h["timestamp"] = pd.to_datetime(h["timestamp"])
-
-        # REMOVE BAD DATA
         h = h[h["value_ghs"] > 0]
 
         fig = go.Figure()
@@ -258,9 +288,36 @@ def stock_app():
         )
 
         st.plotly_chart(fig, use_container_width=True)
-
     else:
         st.info("Portfolio history will appear after multiple updates.")
+
+    # -------------------------------------
+    # 🔥 ALL-TIME PnL CHART
+    # -------------------------------------
+    st.subheader("📊 All-Time PnL")
+
+    pnl_df = build_pnl_history(history, invested)
+
+    if len(pnl_df) >= 2:
+        fig = go.Figure()
+
+        fig.add_trace(go.Scatter(
+            x=pnl_df["timestamp"],
+            y=pnl_df["pnl"],
+            mode="lines+markers"
+        ))
+
+        fig.update_layout(
+            dragmode="zoom",
+            hovermode="x unified",
+            height=350,
+            xaxis_title="Date",
+            yaxis_title="PnL (GHS)",
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("PnL chart will appear after multiple data points.")
 
     # -------------------------------------
     # MTD / YTD
@@ -269,7 +326,6 @@ def stock_app():
     st.subheader("📆 MTD & YTD Performance")
 
     if history:
-
         h = pd.DataFrame(history)
         h["timestamp"] = pd.to_datetime(h["timestamp"])
         h = h[h["value_ghs"] > 0]
@@ -288,12 +344,10 @@ def stock_app():
 
         mtd_pct = (mtd_pnl / mtd_start * 100) if mtd_start > 0 else 0.0
         ytd_pct = (ytd_pnl / ytd_start * 100) if ytd_start > 0 else 0.0
-
     else:
         mtd_pnl = ytd_pnl = mtd_pct = ytd_pct = 0.0
 
     c1, c2 = st.columns(2)
-
     c1.metric("MTD", fmt(mtd_pnl), pct(mtd_pct))
     c2.metric("YTD", fmt(ytd_pnl), pct(ytd_pct))
 
