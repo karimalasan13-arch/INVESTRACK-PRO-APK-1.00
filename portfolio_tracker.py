@@ -1,40 +1,28 @@
 # portfolio_tracker.py
 
-from datetime import datetime, timedelta, date
-from db import get_supabase
-supabase = get_supabase()
+from datetime import datetime, timedelta
 import streamlit as st
+from auth import get_auth_client   # ✅ CRITICAL FIX
 
 # -----------------------------------------
 # CONFIG
 # -----------------------------------------
 SNAPSHOT_INTERVAL_HOURS = 8
 
-# tolerance settings
-MIN_CHANGE_THRESHOLD = 0.5        # ignore tiny noise (GHS)
-MAX_DROP_RATIO = 0.5             # ignore >50% drop (API failure)
-MAX_SPIKE_RATIO = 2.5            # ignore >150% spike (bad API)
+MIN_CHANGE_THRESHOLD = 0.5
+MAX_DROP_RATIO = 0.5
+MAX_SPIKE_RATIO = 2.5
 
 
 # -----------------------------------------
 # MAIN AUTOSAVE FUNCTION
 # -----------------------------------------
 def autosave_portfolio_value(user_id: str, value_ghs: float, mode: str):
-    """
-    Ultra-stable autosave system
-
-    ✔ Mode separation (crypto / stock)
-    ✔ Zero-value protection
-    ✔ Duplicate prevention
-    ✔ Interval control
-    ✔ Spike/drop filtering
-    ✔ Chart smoothing
-    ✔ Session fallback memory
-    ✔ Crash-safe
-    """
 
     if not user_id or not mode:
         return
+
+    supabase = get_auth_client()  # ✅ ALWAYS AUTHENTICATED
 
     # -------------------------------------
     # SESSION FALLBACK MEMORY
@@ -44,7 +32,6 @@ def autosave_portfolio_value(user_id: str, value_ghs: float, mode: str):
     if key not in st.session_state:
         st.session_state[key] = value_ghs
 
-    # prevent zero corruption
     if value_ghs <= 0:
         value_ghs = st.session_state[key]
     else:
@@ -71,7 +58,7 @@ def autosave_portfolio_value(user_id: str, value_ghs: float, mode: str):
         # FIRST SNAPSHOT
         # -------------------------------------
         if not res.data:
-            _insert_snapshot(user_id, now, value_ghs, mode)
+            _insert_snapshot(supabase, user_id, now, value_ghs, mode)
             return
 
         last_row = res.data[0]
@@ -101,14 +88,14 @@ def autosave_portfolio_value(user_id: str, value_ghs: float, mode: str):
         # SAVE IF NEW DAY
         # -------------------------------------
         if today != last_date:
-            _insert_snapshot(user_id, now, value_ghs, mode)
+            _insert_snapshot(supabase, user_id, now, value_ghs, mode)
             return
 
         # -------------------------------------
         # SAVE IF INTERVAL PASSED
         # -------------------------------------
         if now - last_ts >= timedelta(hours=SNAPSHOT_INTERVAL_HOURS):
-            _insert_snapshot(user_id, now, value_ghs, mode)
+            _insert_snapshot(supabase, user_id, now, value_ghs, mode)
             return
 
     except Exception as e:
@@ -116,12 +103,9 @@ def autosave_portfolio_value(user_id: str, value_ghs: float, mode: str):
 
 
 # -----------------------------------------
-# INSERT SNAPSHOT
+# INSERT SNAPSHOT (AUTH SAFE)
 # -----------------------------------------
-def _insert_snapshot(user_id: str, timestamp: datetime, value_ghs: float, mode: str):
-    """
-    Safe insert with normalization
-    """
+def _insert_snapshot(supabase, user_id, timestamp, value_ghs, mode):
 
     try:
         supabase.table("portfolio_history").insert(
@@ -132,5 +116,6 @@ def _insert_snapshot(user_id: str, timestamp: datetime, value_ghs: float, mode: 
                 "mode": mode,
             }
         ).execute()
+
     except Exception as e:
         print("Insert failed:", e)
