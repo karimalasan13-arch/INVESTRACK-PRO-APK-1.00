@@ -1,6 +1,6 @@
 import streamlit as st
-from db import supabase
-
+from db import get_supabase
+supabase = get_supabase()
 
 # -----------------------------------------
 # ENSURE AUTH (SESSION ISOLATED)
