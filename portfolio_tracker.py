@@ -1,7 +1,8 @@
 # portfolio_tracker.py
 
 from datetime import datetime, timedelta, date
-from db import supabase
+from db import get_supabase
+supabase = get_supabase()
 import streamlit as st
 
 # -----------------------------------------
