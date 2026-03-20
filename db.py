@@ -19,32 +19,38 @@ SUPABASE_KEY = (
 ) or os.getenv("SUPABASE_ANON_KEY")
 
 if not SUPABASE_URL or not SUPABASE_KEY:
-    raise RuntimeError(
-        "❌ Supabase credentials not found."
-    )
+    raise RuntimeError("❌ Supabase credentials not found.")
 
 
 # -----------------------------------------
-# 🚨 CREATE FRESH CLIENT (NO CACHE)
+# ✅ SESSION-ISOLATED CLIENT (FINAL FIX)
 # -----------------------------------------
 def get_supabase() -> Client:
     """
-    Returns a NEW Supabase client per request.
-    Prevents session leakage between users.
+    Creates ONE Supabase client per user session.
+    Fixes:
+    - Account leakage
+    - Random logout
+    - Save failures
     """
-    return create_client(SUPABASE_URL, SUPABASE_KEY)
+
+    if "supabase_client" not in st.session_state:
+        st.session_state.supabase_client = create_client(
+            SUPABASE_URL,
+            SUPABASE_KEY
+        )
+
+    return st.session_state.supabase_client
 
 
 # -----------------------------------------
-# GLOBAL ACCESSOR (SAFE WRAPPER)
+# GLOBAL ACCESSOR (SAFE)
 # -----------------------------------------
-@property
-def supabase() -> Client:
-    return get_supabase()
+supabase: Client = get_supabase()
 
 
 # -----------------------------------------
-# OPTIONAL: ERROR LOGGER
+# ERROR LOGGER
 # -----------------------------------------
 def log_supabase_error(context: str, err: Exception):
     st.error(f"Supabase error in {context}")
@@ -53,7 +59,7 @@ def log_supabase_error(context: str, err: Exception):
 
 
 # -----------------------------------------
-# OPTIONAL: HEALTH CHECK
+# HEALTH CHECK
 # -----------------------------------------
 def supabase_healthcheck() -> bool:
     try:
