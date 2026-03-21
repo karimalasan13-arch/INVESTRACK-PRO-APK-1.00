@@ -73,7 +73,6 @@ def build_pnl_history(history, invested):
         return pd.DataFrame()
 
     h["timestamp"] = pd.to_datetime(h["timestamp"])
-
     h = h[h["value_ghs"] > 0]
 
     h["pnl"] = h["value_ghs"] - invested
@@ -195,16 +194,10 @@ def crypto_app():
 
     user_id = st.session_state.user_id
 
-    # -------------------------------------
-    # LOAD DATA
-    # -------------------------------------
     rate = load_setting(user_id, "crypto_rate", 14.5)
     invested = load_setting(user_id, "crypto_investment", 0.0)
     holdings = load_crypto_holdings(user_id)
 
-    # -------------------------------------
-    # SIDEBAR
-    # -------------------------------------
     st.sidebar.header("💰 Crypto Settings")
 
     rate = st.sidebar.number_input(
@@ -243,12 +236,8 @@ def crypto_app():
     if st.sidebar.button("💾 Save Holdings"):
 
         save_crypto_holdings(user_id, holdings)
-
         st.sidebar.success("Holdings saved")
 
-    # -------------------------------------
-    # LIVE PRICES
-    # -------------------------------------
     try:
         prices = crypto_live_prices() or {}
     except Exception:
@@ -263,11 +252,9 @@ def crypto_app():
     for sym, qty in holdings.items():
 
         raw_price = prices.get(sym, 1.0 if sym == "USDT" else 0.0)
-
         usd_price = safe_price(sym, raw_price)
 
         value_ghs = qty * usd_price * rate
-
         total_value += value_ghs
 
         rows.append([sym, qty, usd_price, value_ghs])
@@ -278,26 +265,17 @@ def crypto_app():
     )
 
     st.subheader("📘 Crypto Assets")
-
     st.dataframe(df, use_container_width=True)
 
-    # -------------------------------------
-    # SAVE SNAPSHOT
-    # -------------------------------------
     if total_value > 0:
         autosave_portfolio_value(user_id, total_value, "crypto")
 
     history = load_portfolio_history(user_id)
 
-    # -------------------------------------
-    # SUMMARY
-    # -------------------------------------
     pnl = total_value - invested
-
     pnl_pct = (pnl / invested * 100) if invested > 0 else 0.0
 
     st.markdown("---")
-
     st.subheader("📈 Portfolio Summary")
 
     c1, c2, c3 = st.columns(3)
@@ -307,17 +285,49 @@ def crypto_app():
     c3.metric("All-Time PnL", fmt(pnl), pct(pnl_pct))
 
     # -------------------------------------
-    # PORTFOLIO VALUE CHART (UPGRADED)
+    # CHART TIME SELECTOR
+    # -------------------------------------
+    range_option = st.radio(
+        "Chart Range",
+        ["1D", "7D", "1M", "3M", "1Y", "ALL"],
+        horizontal=True,
+    )
+
+    filtered_history = history
+
+    if history:
+
+        h = pd.DataFrame(history)
+        h["timestamp"] = pd.to_datetime(h["timestamp"])
+        h = h[h["value_ghs"] > 0]
+
+        now = datetime.utcnow()
+
+        if range_option == "1D":
+            h = h[h["timestamp"] >= now - pd.Timedelta(days=1)]
+
+        elif range_option == "7D":
+            h = h[h["timestamp"] >= now - pd.Timedelta(days=7)]
+
+        elif range_option == "1M":
+            h = h[h["timestamp"] >= now - pd.Timedelta(days=30)]
+
+        elif range_option == "3M":
+            h = h[h["timestamp"] >= now - pd.Timedelta(days=90)]
+
+        elif range_option == "1Y":
+            h = h[h["timestamp"] >= now - pd.Timedelta(days=365)]
+
+        filtered_history = h.to_dict("records")
+
+    # -------------------------------------
+    # VALUE CHART
     # -------------------------------------
     st.subheader("📈 Portfolio Value Over Time")
 
-    if len(history) >= 2:
+    if len(filtered_history) >= 2:
 
-        h = pd.DataFrame(history)
-
-        h["timestamp"] = pd.to_datetime(h["timestamp"])
-
-        h = h[h["value_ghs"] > 0]
+        h = pd.DataFrame(filtered_history)
 
         fig = go.Figure()
 
@@ -343,14 +353,14 @@ def crypto_app():
         st.plotly_chart(fig, use_container_width=True)
 
     else:
-        st.info("Waiting for data...")
+        st.info("Not enough data for this range.")
 
     # -------------------------------------
-    # ALL TIME PnL CHART (UPGRADED)
+    # PNL CHART
     # -------------------------------------
     st.subheader("📊 All-Time PnL")
 
-    pnl_df = build_pnl_history(history, invested)
+    pnl_df = build_pnl_history(filtered_history, invested)
 
     if len(pnl_df) >= 2:
 
@@ -383,23 +393,18 @@ def crypto_app():
     # MTD / YTD
     # -------------------------------------
     st.markdown("---")
-
     st.subheader("📆 MTD & YTD Performance")
 
     if history:
 
         h = pd.DataFrame(history)
-
         h["timestamp"] = pd.to_datetime(h["timestamp"])
-
         h = h[h["value_ghs"] > 0]
-
         h = h.sort_values("timestamp")
 
         now = datetime.utcnow()
 
         mtd = h[h["timestamp"].dt.month == now.month]
-
         ytd = h[h["timestamp"].dt.year == now.year]
 
         mtd_start = mtd.iloc[0]["value_ghs"] if not mtd.empty else total_value
@@ -424,7 +429,6 @@ def crypto_app():
     # ALLOCATION
     # -------------------------------------
     st.markdown("---")
-
     st.subheader("🍕 Allocation")
 
     pie_df = df[df["Value (GHS)"] > 0]
