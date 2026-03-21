@@ -288,3 +288,25 @@ def crypto_app():
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("PnL chart will appear soon.")
+
+    # -------------------------------------
+    # ALLOCATION PIE CHART
+    # -------------------------------------
+    st.markdown("---")
+    st.subheader("🍕 Portfolio Allocation")
+
+    pie_df = df.copy()
+    pie_df = pie_df[pie_df["Value (GHS)"] > 0]
+
+    if not pie_df.empty:
+
+        pie = alt.Chart(pie_df).mark_arc(innerRadius=40).encode(
+            theta=alt.Theta(field="Value (GHS)", type="quantitative"),
+            color=alt.Color(field="Asset", type="nominal"),
+            tooltip=["Asset", "Value (GHS)"]
+        )
+
+        st.altair_chart(pie, use_container_width=True)
+
+    else:
+        st.info("Allocation chart will appear once assets have value.")
