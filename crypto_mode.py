@@ -290,23 +290,51 @@ def crypto_app():
         st.info("PnL chart will appear soon.")
 
     # -------------------------------------
-    # ALLOCATION PIE CHART
+    # MTD / YTD
     # -------------------------------------
     st.markdown("---")
-    st.subheader("🍕 Portfolio Allocation")
+    st.subheader("📆 MTD & YTD Performance")
 
-    pie_df = df.copy()
-    pie_df = pie_df[pie_df["Value (GHS)"] > 0]
+    if history:
+        h = pd.DataFrame(history)
+        h["timestamp"] = pd.to_datetime(h["timestamp"])
+        h = h[h["value_ghs"] > 0]
+        h = h.sort_values("timestamp")
+
+        now = datetime.utcnow()
+
+        mtd = h[h["timestamp"].dt.month == now.month]
+        ytd = h[h["timestamp"].dt.year == now.year]
+
+        mtd_start = mtd.iloc[0]["value_ghs"] if not mtd.empty else total_value
+        ytd_start = ytd.iloc[0]["value_ghs"] if not ytd.empty else total_value
+
+        mtd_pnl = total_value - mtd_start
+        ytd_pnl = total_value - ytd_start
+
+        mtd_pct = (mtd_pnl / mtd_start * 100) if mtd_start > 0 else 0.0
+        ytd_pct = (ytd_pnl / ytd_start * 100) if ytd_start > 0 else 0.0
+    else:
+        mtd_pnl = ytd_pnl = mtd_pct = ytd_pct = 0.0
+
+    c1, c2 = st.columns(2)
+    c1.metric("MTD", fmt(mtd_pnl), pct(mtd_pct))
+    c2.metric("YTD", fmt(ytd_pnl), pct(ytd_pct))
+
+    # -------------------------------------
+    # ALLOCATION
+    # -------------------------------------
+    st.markdown("---")
+    st.subheader("🍕 Allocation")
+
+    pie_df = df[df["Value (GHS)"] > 0]
 
     if not pie_df.empty:
-
-        pie = alt.Chart(pie_df).mark_arc(innerRadius=40).encode(
-            theta=alt.Theta(field="Value (GHS)", type="quantitative"),
-            color=alt.Color(field="Asset", type="nominal"),
-            tooltip=["Asset", "Value (GHS)"]
+        pie = alt.Chart(pie_df).mark_arc().encode(
+            theta="Value (GHS):Q",
+            color="Asset:N",
+            tooltip=["Asset", "Value (GHS)"],
         )
-
         st.altair_chart(pie, use_container_width=True)
-
     else:
-        st.info("Allocation chart will appear once assets have value.")
+        st.info("Allocation will appear once assets have value.")
