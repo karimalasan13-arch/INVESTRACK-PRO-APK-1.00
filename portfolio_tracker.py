@@ -7,7 +7,7 @@ import streamlit as st
 # -----------------------------------------
 # CONFIG
 # -----------------------------------------
-SNAPSHOT_INTERVAL_HOURS = 8
+SNAPSHOT_INTERVAL_HOURS = 2   # ← UPDATED FROM 8 → 2 HOURS
 
 MIN_CHANGE_THRESHOLD = 0.5
 MAX_DROP_RATIO = 0.5
@@ -56,7 +56,21 @@ def autosave_portfolio_value(user_id: str, value_ghs: float, mode: str):
     now = datetime.utcnow()
     today = now.date()
 
+    # -------------------------------------
+    # DUPLICATE SNAPSHOT LOCK
+    # -------------------------------------
+    lock_key = f"snapshot_lock_{mode}"
+
+    if lock_key in st.session_state:
+        last_lock = st.session_state[lock_key]
+
+        if (now - last_lock).seconds < 60:
+            return
+
+    st.session_state[lock_key] = now
+
     try:
+
         res = (
             db().table("portfolio_history")
             .select("timestamp,value_ghs")
@@ -75,6 +89,7 @@ def autosave_portfolio_value(user_id: str, value_ghs: float, mode: str):
             return
 
         last_row = res.data[0]
+
         last_ts = datetime.fromisoformat(last_row["timestamp"])
         last_value = float(last_row["value_ghs"])
         last_date = last_ts.date()
@@ -98,12 +113,15 @@ def autosave_portfolio_value(user_id: str, value_ghs: float, mode: str):
             return
 
         # -------------------------------------
-        # SAVE RULES
+        # NEW DAY SNAPSHOT
         # -------------------------------------
         if today != last_date:
             _insert_snapshot(user_id, now, value_ghs, mode)
             return
 
+        # -------------------------------------
+        # INTERVAL SNAPSHOT
+        # -------------------------------------
         if now - last_ts >= timedelta(hours=SNAPSHOT_INTERVAL_HOURS):
             _insert_snapshot(user_id, now, value_ghs, mode)
             return
@@ -118,6 +136,7 @@ def autosave_portfolio_value(user_id: str, value_ghs: float, mode: str):
 def _insert_snapshot(user_id: str, timestamp: datetime, value_ghs: float, mode: str):
 
     try:
+
         db().table("portfolio_history").insert(
             {
                 "user_id": user_id,
