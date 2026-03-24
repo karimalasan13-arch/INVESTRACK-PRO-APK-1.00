@@ -29,7 +29,7 @@ STOCK_MAP = {
 
 
 # -----------------------------------------
-# PRICE MEMORY (ANTI-ZERO FIX)
+# PRICE MEMORY
 # -----------------------------------------
 def safe_price(symbol, price):
 
@@ -44,7 +44,7 @@ def safe_price(symbol, price):
 
 
 # -----------------------------------------
-# BUILD PnL HISTORY
+# BUILD PNL HISTORY
 # -----------------------------------------
 def build_pnl_history(history, invested):
 
@@ -57,7 +57,6 @@ def build_pnl_history(history, invested):
         return pd.DataFrame()
 
     h["timestamp"] = pd.to_datetime(h["timestamp"])
-
     h = h[h["value_ghs"] > 0]
 
     h["pnl"] = h["value_ghs"] - invested
@@ -176,16 +175,11 @@ def stock_app():
 
     user_id = st.session_state.user_id
 
-    # -------------------------------------
-    # LOAD DATA
-    # -------------------------------------
     rate = load_setting(user_id, "stock_rate", 14.5)
     invested = load_setting(user_id, "stock_investment", 0.0)
     holdings = load_stock_holdings(user_id)
 
-    # -------------------------------------
     # SIDEBAR
-    # -------------------------------------
     st.sidebar.header("📊 Stock Settings")
 
     rate = st.sidebar.number_input(
@@ -227,18 +221,11 @@ def stock_app():
 
         st.sidebar.success("Holdings saved")
 
-    # -------------------------------------
     # LIVE PRICES
-    # -------------------------------------
     try:
         prices = stock_live_prices(list(STOCK_MAP.keys())) or {}
     except Exception:
         prices = {}
-
-    using_cache = not bool(prices)
-
-    if using_cache:
-        st.warning("⚠️ Using cached prices (API unavailable)")
 
     rows = []
     total_value = 0.0
@@ -264,28 +251,11 @@ def stock_app():
 
     st.dataframe(df, use_container_width=True)
 
-    # -------------------------------------
-    # VALUE PROTECTION
-    # -------------------------------------
-    if "last_valid_stock_total" not in st.session_state:
-        st.session_state.last_valid_stock_total = total_value
-
-    if total_value <= 0:
-        total_value = st.session_state.last_valid_stock_total
-    else:
-        st.session_state.last_valid_stock_total = total_value
-
-    # -------------------------------------
-    # SAVE SNAPSHOT
-    # -------------------------------------
     if total_value > 0:
         autosave_portfolio_value(user_id, total_value, "stock")
 
     history = load_portfolio_history(user_id)
 
-    # -------------------------------------
-    # SUMMARY
-    # -------------------------------------
     pnl = total_value - invested
     pnl_pct = (pnl / invested * 100) if invested > 0 else 0.0
 
@@ -299,17 +269,48 @@ def stock_app():
     c3.metric("All-Time PnL", fmt(pnl), pct(pnl_pct))
 
     # -------------------------------------
-    # PORTFOLIO VALUE CHART (UPGRADED)
+    # CHART RANGE SELECTOR
     # -------------------------------------
-    st.subheader("📈 Portfolio Value Over Time")
+    range_option = st.radio(
+        "Chart Range",
+        ["1D", "7D", "1M", "3M", "1Y", "ALL"],
+        horizontal=True,
+    )
 
-    if len(history) >= 2:
+    filtered_history = []
+
+    if history:
 
         h = pd.DataFrame(history)
 
         h["timestamp"] = pd.to_datetime(h["timestamp"])
-
         h = h[h["value_ghs"] > 0]
+
+        now = datetime.utcnow()
+
+        if range_option == "1D":
+            h = h[h["timestamp"] >= now - pd.Timedelta(days=1)]
+
+        elif range_option == "7D":
+            h = h[h["timestamp"] >= now - pd.Timedelta(days=7)]
+
+        elif range_option == "1M":
+            h = h[h["timestamp"] >= now - pd.Timedelta(days=30)]
+
+        elif range_option == "3M":
+            h = h[h["timestamp"] >= now - pd.Timedelta(days=90)]
+
+        elif range_option == "1Y":
+            h = h[h["timestamp"] >= now - pd.Timedelta(days=365)]
+
+        filtered_history = h.sort_values("timestamp").to_dict("records")
+
+    # VALUE CHART
+    st.subheader("📈 Portfolio Value Over Time")
+
+    if filtered_history and len(filtered_history) >= 2:
+
+        h = pd.DataFrame(filtered_history)
 
         fig = go.Figure()
 
@@ -324,27 +325,23 @@ def stock_app():
         )
 
         fig.update_layout(
-            dragmode="zoom",
             hovermode="x unified",
             height=350,
             xaxis_title="Date",
             yaxis_title="Value (GHS)",
-            plot_bgcolor="rgba(0,0,0,0)",
         )
 
         st.plotly_chart(fig, use_container_width=True)
 
     else:
-        st.info("Portfolio history will appear after multiple updates.")
+        st.info("Not enough data for this range.")
 
-    # -------------------------------------
-    # ALL-TIME PnL CHART (UPGRADED)
-    # -------------------------------------
+    # PNL CHART
     st.subheader("📊 All-Time PnL")
 
-    pnl_df = build_pnl_history(history, invested)
+    pnl_df = build_pnl_history(filtered_history, invested)
 
-    if len(pnl_df) >= 2:
+    if pnl_df is not None and len(pnl_df) >= 2:
 
         fig = go.Figure()
 
@@ -358,57 +355,16 @@ def stock_app():
         )
 
         fig.update_layout(
-            dragmode="zoom",
             hovermode="x unified",
             height=350,
             xaxis_title="Date",
             yaxis_title="PnL (GHS)",
-            plot_bgcolor="rgba(0,0,0,0)",
         )
 
         st.plotly_chart(fig, use_container_width=True)
 
     else:
-        st.info("PnL chart will appear after multiple data points.")
-
-    # -------------------------------------
-    # MTD / YTD
-    # -------------------------------------
-    st.markdown("---")
-    st.subheader("📆 MTD & YTD Performance")
-
-    if history:
-
-        h = pd.DataFrame(history)
-
-        h["timestamp"] = pd.to_datetime(h["timestamp"])
-
-        h = h[h["value_ghs"] > 0]
-
-        h = h.sort_values("timestamp")
-
-        now = datetime.utcnow()
-
-        mtd = h[h["timestamp"].dt.month == now.month]
-        ytd = h[h["timestamp"].dt.year == now.year]
-
-        mtd_start = mtd.iloc[0]["value_ghs"] if not mtd.empty else total_value
-        ytd_start = ytd.iloc[0]["value_ghs"] if not ytd.empty else total_value
-
-        mtd_pnl = total_value - mtd_start
-        ytd_pnl = total_value - ytd_start
-
-        mtd_pct = (mtd_pnl / mtd_start * 100) if mtd_start > 0 else 0.0
-        ytd_pct = (ytd_pnl / ytd_start * 100) if ytd_start > 0 else 0.0
-
-    else:
-
-        mtd_pnl = ytd_pnl = mtd_pct = ytd_pct = 0.0
-
-    c1, c2 = st.columns(2)
-
-    c1.metric("MTD", fmt(mtd_pnl), pct(mtd_pct))
-    c2.metric("YTD", fmt(ytd_pnl), pct(ytd_pct))
+        st.info("PnL chart will appear once enough history exists.")
 
     # -------------------------------------
     # ALLOCATION
