@@ -27,7 +27,7 @@ API_MAP = {
 
 
 # -----------------------------------------
-# 🔐 SESSION-BOUND CLIENT
+# SESSION CLIENT
 # -----------------------------------------
 def db():
     supabase = get_supabase()
@@ -45,7 +45,7 @@ def db():
 
 
 # -----------------------------------------
-# PRICE MEMORY (ANTI ZERO PROTECTION)
+# PRICE MEMORY
 # -----------------------------------------
 def safe_price(symbol, price):
 
@@ -60,7 +60,7 @@ def safe_price(symbol, price):
 
 
 # -----------------------------------------
-# BUILD PnL HISTORY
+# BUILD PNL HISTORY
 # -----------------------------------------
 def build_pnl_history(history, invested):
 
@@ -171,7 +171,7 @@ def load_portfolio_history(user_id):
 
 
 # -----------------------------------------
-# FORMATTERS
+# FORMAT
 # -----------------------------------------
 def fmt(v):
     return f"GHS {v:,.2f}"
@@ -198,27 +198,15 @@ def crypto_app():
     invested = load_setting(user_id, "crypto_investment", 0.0)
     holdings = load_crypto_holdings(user_id)
 
+    # SIDEBAR
     st.sidebar.header("💰 Crypto Settings")
 
-    rate = st.sidebar.number_input(
-        "USD → GHS",
-        value=float(rate),
-        step=0.1,
-        key="crypto_rate_input",
-    )
-
-    invested = st.sidebar.number_input(
-        "Total Invested (GHS)",
-        value=float(invested),
-        step=10.0,
-        key="crypto_investment_input",
-    )
+    rate = st.sidebar.number_input("USD → GHS", value=float(rate), step=0.1)
+    invested = st.sidebar.number_input("Total Invested (GHS)", value=float(invested), step=10.0)
 
     if st.sidebar.button("💾 Save Settings"):
-
         save_setting(user_id, "crypto_rate", rate)
         save_setting(user_id, "crypto_investment", invested)
-
         st.sidebar.success("Settings saved")
 
     st.sidebar.markdown("---")
@@ -234,20 +222,17 @@ def crypto_app():
         )
 
     if st.sidebar.button("💾 Save Holdings"):
-
         save_crypto_holdings(user_id, holdings)
         st.sidebar.success("Holdings saved")
 
+    # LIVE PRICES
     try:
         prices = crypto_live_prices() or {}
     except Exception:
         prices = {}
 
-    if not prices:
-        st.warning("⚠️ Using cached prices")
-
     rows = []
-    total_value = 0.0
+    total_value = 0
 
     for sym, qty in holdings.items():
 
@@ -259,10 +244,7 @@ def crypto_app():
 
         rows.append([sym, qty, usd_price, value_ghs])
 
-    df = pd.DataFrame(
-        rows,
-        columns=["Asset", "Qty", "Price (USD)", "Value (GHS)"],
-    )
+    df = pd.DataFrame(rows, columns=["Asset", "Qty", "Price (USD)", "Value (GHS)"])
 
     st.subheader("📘 Crypto Assets")
     st.dataframe(df, use_container_width=True)
@@ -273,27 +255,24 @@ def crypto_app():
     history = load_portfolio_history(user_id)
 
     pnl = total_value - invested
-    pnl_pct = (pnl / invested * 100) if invested > 0 else 0.0
+    pnl_pct = (pnl / invested * 100) if invested > 0 else 0
 
     st.markdown("---")
     st.subheader("📈 Portfolio Summary")
 
     c1, c2, c3 = st.columns(3)
-
     c1.metric("Total Value", fmt(total_value))
     c2.metric("Invested", fmt(invested))
     c3.metric("All-Time PnL", fmt(pnl), pct(pnl_pct))
 
-    # -------------------------------------
-    # CHART TIME SELECTOR
-    # -------------------------------------
+    # RANGE SELECTOR
     range_option = st.radio(
         "Chart Range",
         ["1D", "7D", "1M", "3M", "1Y", "ALL"],
         horizontal=True,
     )
 
-    filtered_history = history
+    filtered_history = []
 
     if history:
 
@@ -318,14 +297,12 @@ def crypto_app():
         elif range_option == "1Y":
             h = h[h["timestamp"] >= now - pd.Timedelta(days=365)]
 
-        filtered_history = h.to_dict("records")
+        filtered_history = h.sort_values("timestamp").to_dict("records")
 
-    # -------------------------------------
     # VALUE CHART
-    # -------------------------------------
     st.subheader("📈 Portfolio Value Over Time")
 
-    if len(filtered_history) >= 2:
+    if filtered_history and len(filtered_history) >= 2:
 
         h = pd.DataFrame(filtered_history)
 
@@ -342,12 +319,10 @@ def crypto_app():
         )
 
         fig.update_layout(
-            dragmode="zoom",
             hovermode="x unified",
             height=350,
             xaxis_title="Date",
             yaxis_title="Value (GHS)",
-            plot_bgcolor="rgba(0,0,0,0)",
         )
 
         st.plotly_chart(fig, use_container_width=True)
@@ -355,14 +330,12 @@ def crypto_app():
     else:
         st.info("Not enough data for this range.")
 
-    # -------------------------------------
     # PNL CHART
-    # -------------------------------------
     st.subheader("📊 All-Time PnL")
 
     pnl_df = build_pnl_history(filtered_history, invested)
 
-    if len(pnl_df) >= 2:
+    if pnl_df is not None and len(pnl_df) >= 2:
 
         fig = go.Figure()
 
@@ -376,22 +349,18 @@ def crypto_app():
         )
 
         fig.update_layout(
-            dragmode="zoom",
             hovermode="x unified",
             height=350,
             xaxis_title="Date",
             yaxis_title="PnL (GHS)",
-            plot_bgcolor="rgba(0,0,0,0)",
         )
 
         st.plotly_chart(fig, use_container_width=True)
 
     else:
-        st.info("PnL chart will appear soon.")
+        st.info("PnL chart will appear once enough history exists.")
 
-    # -------------------------------------
     # MTD / YTD
-    # -------------------------------------
     st.markdown("---")
     st.subheader("📆 MTD & YTD Performance")
 
@@ -413,21 +382,17 @@ def crypto_app():
         mtd_pnl = total_value - mtd_start
         ytd_pnl = total_value - ytd_start
 
-        mtd_pct = (mtd_pnl / mtd_start * 100) if mtd_start > 0 else 0.0
-        ytd_pct = (ytd_pnl / ytd_start * 100) if ytd_start > 0 else 0.0
+        mtd_pct = (mtd_pnl / mtd_start * 100) if mtd_start > 0 else 0
+        ytd_pct = (ytd_pnl / ytd_start * 100) if ytd_start > 0 else 0
 
     else:
-
-        mtd_pnl = ytd_pnl = mtd_pct = ytd_pct = 0.0
+        mtd_pnl = ytd_pnl = mtd_pct = ytd_pct = 0
 
     c1, c2 = st.columns(2)
-
     c1.metric("MTD", fmt(mtd_pnl), pct(mtd_pct))
     c2.metric("YTD", fmt(ytd_pnl), pct(ytd_pct))
 
-    # -------------------------------------
     # ALLOCATION
-    # -------------------------------------
     st.markdown("---")
     st.subheader("🍕 Allocation")
 
