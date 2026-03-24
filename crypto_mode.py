@@ -314,136 +314,139 @@ def crypto_app():
     c1.metric("Total Value", fmt(total_value))
     c2.metric("Invested", fmt(invested))
     c3.metric("All-Time PnL", fmt(pnl), pct(pnl_pct))
+    
+    # -------------------------------------
+    # PORTFOLIO VALUE CHART (UPGRADED)
+    # -------------------------------------
+    st.subheader("📈 Portfolio Value Over Time")
 
-# -------------------------------------
-# PORTFOLIO VALUE CHART
-# -------------------------------------
-st.subheader("📈 Portfolio Value Over Time")
+    if len(history) >= 2:
 
-if len(history) >= 2:
+        h = pd.DataFrame(history)
 
-    h = pd.DataFrame(history)
+        h["timestamp"] = pd.to_datetime(h["timestamp"])
 
-    h["timestamp"] = pd.to_datetime(h["timestamp"])
-    h = h[h["value_ghs"] > 0]
+        h = h[h["value_ghs"] > 0]
 
-    fig = go.Figure()
+        fig = go.Figure()
 
-    fig.add_trace(
-        go.Scatter(
-            x=h["timestamp"],
-            y=h["value_ghs"],
-            mode="lines",
-            line=dict(shape="spline", smoothing=1.2, width=3),
-            fill="tozeroy",
+        fig.add_trace(
+            go.Scatter(
+                x=h["timestamp"],
+                y=h["value_ghs"],
+                mode="lines",
+                line=dict(shape="spline", smoothing=1.2, width=3),
+                fill="tozeroy",
+            )
         )
-    )
 
-    fig.update_layout(
-        dragmode="zoom",
-        hovermode="x unified",
-        height=350,
-        xaxis_title="Date",
-        yaxis_title="Value (GHS)",
-        plot_bgcolor="rgba(0,0,0,0)",
-    )
-
-    st.plotly_chart(fig, use_container_width=True)
-
-else:
-    st.info("Portfolio history will appear after multiple updates.")
-
-
-# -------------------------------------
-# ALL TIME PNL CHART
-# -------------------------------------
-st.subheader("📊 All-Time PnL")
-
-pnl_df = build_pnl_history(history, invested)
-
-if len(pnl_df) >= 2:
-
-    fig = go.Figure()
-
-    fig.add_trace(
-        go.Scatter(
-            x=pnl_df["timestamp"],
-            y=pnl_df["pnl"],
-            mode="lines",
-            line=dict(shape="spline", smoothing=1.2, width=3),
+        fig.update_layout(
+            dragmode="zoom",
+            hovermode="x unified",
+            height=350,
+            xaxis_title="Date",
+            yaxis_title="Value (GHS)",
+            plot_bgcolor="rgba(0,0,0,0)",
         )
-    )
 
-    fig.update_layout(
-        dragmode="zoom",
-        hovermode="x unified",
-        height=350,
-        xaxis_title="Date",
-        yaxis_title="PnL (GHS)",
-        plot_bgcolor="rgba(0,0,0,0)",
-    )
+        st.plotly_chart(fig, use_container_width=True)
 
-    st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("Waiting for data...")
 
-else:
-    st.info("PnL chart will appear after multiple data points.")
+    # -------------------------------------
+    # ALL TIME PnL CHART (UPGRADED)
+    # -------------------------------------
+    st.subheader("📊 All-Time PnL")
 
+    pnl_df = build_pnl_history(history, invested)
 
-# -------------------------------------
-# MTD / YTD
-# -------------------------------------
-st.markdown("---")
-st.subheader("📆 MTD & YTD Performance")
+    if len(pnl_df) >= 2:
 
-if history:
+        fig = go.Figure()
 
-    h = pd.DataFrame(history)
+        fig.add_trace(
+            go.Scatter(
+                x=pnl_df["timestamp"],
+                y=pnl_df["pnl"],
+                mode="lines",
+                line=dict(shape="spline", smoothing=1.2, width=3),
+            )
+        )
 
-    h["timestamp"] = pd.to_datetime(h["timestamp"])
-    h = h[h["value_ghs"] > 0]
-    h = h.sort_values("timestamp")
+        fig.update_layout(
+            dragmode="zoom",
+            hovermode="x unified",
+            height=350,
+            xaxis_title="Date",
+            yaxis_title="PnL (GHS)",
+            plot_bgcolor="rgba(0,0,0,0)",
+        )
 
-    now = datetime.utcnow()
+        st.plotly_chart(fig, use_container_width=True)
 
-    mtd = h[h["timestamp"].dt.month == now.month]
-    ytd = h[h["timestamp"].dt.year == now.year]
+    else:
+        st.info("PnL chart will appear soon.")
 
-    mtd_start = mtd.iloc[0]["value_ghs"] if not mtd.empty else total_value
-    ytd_start = ytd.iloc[0]["value_ghs"] if not ytd.empty else total_value
+    # -------------------------------------
+    # MTD / YTD
+    # -------------------------------------
+    st.markdown("---")
 
-    mtd_pnl = total_value - mtd_start
-    ytd_pnl = total_value - ytd_start
+    st.subheader("📆 MTD & YTD Performance")
 
-    mtd_pct = (mtd_pnl / mtd_start * 100) if mtd_start > 0 else 0.0
-    ytd_pct = (ytd_pnl / ytd_start * 100) if ytd_start > 0 else 0.0
+    if history:
 
-else:
+        h = pd.DataFrame(history)
 
-    mtd_pnl = ytd_pnl = mtd_pct = ytd_pct = 0.0
+        h["timestamp"] = pd.to_datetime(h["timestamp"])
 
-c1, c2 = st.columns(2)
+        h = h[h["value_ghs"] > 0]
 
-c1.metric("MTD", fmt(mtd_pnl), pct(mtd_pct))
-c2.metric("YTD", fmt(ytd_pnl), pct(ytd_pct))
+        h = h.sort_values("timestamp")
 
+        now = datetime.utcnow()
 
-# -------------------------------------
-# ALLOCATION PIE
-# -------------------------------------
-st.markdown("---")
-st.subheader("🍕 Allocation")
+        mtd = h[h["timestamp"].dt.month == now.month]
 
-pie_df = df[df["Value (GHS)"] > 0]
+        ytd = h[h["timestamp"].dt.year == now.year]
 
-if not pie_df.empty:
+        mtd_start = mtd.iloc[0]["value_ghs"] if not mtd.empty else total_value
+        ytd_start = ytd.iloc[0]["value_ghs"] if not ytd.empty else total_value
 
-    pie = alt.Chart(pie_df).mark_arc().encode(
-        theta="Value (GHS):Q",
-        color="Asset:N",
-        tooltip=["Asset", "Value (GHS)"],
-    )
+        mtd_pnl = total_value - mtd_start
+        ytd_pnl = total_value - ytd_start
 
-    st.altair_chart(pie, use_container_width=True)
+        mtd_pct = (mtd_pnl / mtd_start * 100) if mtd_start > 0 else 0.0
+        ytd_pct = (ytd_pnl / ytd_start * 100) if ytd_start > 0 else 0.0
 
-else:
-    st.info("Allocation will appear once assets have value.")
+    else:
+
+        mtd_pnl = ytd_pnl = mtd_pct = ytd_pct = 0.0
+
+    c1, c2 = st.columns(2)
+
+    c1.metric("MTD", fmt(mtd_pnl), pct(mtd_pct))
+    c2.metric("YTD", fmt(ytd_pnl), pct(ytd_pct))
+
+    # -------------------------------------
+    # ALLOCATION
+    # -------------------------------------
+    st.markdown("---")
+
+    st.subheader("🍕 Allocation")
+
+    pie_df = df[df["Value (GHS)"] > 0]
+
+    if not pie_df.empty:
+
+        pie = alt.Chart(pie_df).mark_arc().encode(
+            theta="Value (GHS):Q",
+            color="Asset:N",
+            tooltip=["Asset", "Value (GHS)"],
+        )
+
+        st.altair_chart(pie, use_container_width=True)
+
+    else:
+        st.info("Allocation will appear once assets have value.")
