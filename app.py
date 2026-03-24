@@ -2,6 +2,9 @@ import streamlit as st
 import time
 from auth import login_ui, ensure_auth, logout
 
+# ------------------------------------
+# PAGE CONFIG
+# ------------------------------------
 st.set_page_config(
     page_title="InvesTrack Pro",
     page_icon="📈",
@@ -16,20 +19,31 @@ if not ensure_auth():
     st.stop()
 
 # ------------------------------------
-# AUTO REFRESH (SAFE)
+# SESSION VALIDATION
 # ------------------------------------
-if "last_refresh" not in st.session_state:
-    st.session_state.last_refresh = time.time()
+if "user" not in st.session_state or "user_id" not in st.session_state:
+    st.error("Session expired. Please login again.")
+    logout()
+    st.stop()
 
-if time.time() - st.session_state.last_refresh > 60:
-    st.session_state.last_refresh = time.time()
-    st.rerun()
-
-# ------------------------------------
-# SESSION
-# ------------------------------------
 user = st.session_state.user
 user_id = st.session_state.user_id
+
+
+# ------------------------------------
+# SAFE AUTO REFRESH (60s)
+# ------------------------------------
+REFRESH_INTERVAL = 60
+
+now = time.time()
+
+if "last_refresh" not in st.session_state:
+    st.session_state.last_refresh = now
+
+elif now - st.session_state.last_refresh > REFRESH_INTERVAL:
+    st.session_state.last_refresh = now
+    st.rerun()
+
 
 # ------------------------------------
 # SIDEBAR
@@ -54,6 +68,7 @@ st.sidebar.markdown(
     """
 )
 
+
 # ------------------------------------
 # LAZY LOAD MODES
 # ------------------------------------
@@ -68,5 +83,8 @@ try:
         stock_app()
 
 except Exception as e:
+
     st.error("Something went wrong. Please refresh the app.")
-    print("APP ERROR:", e)
+
+    # Print full error to server logs
+    print("APP ERROR:", type(e).__name__, e)
