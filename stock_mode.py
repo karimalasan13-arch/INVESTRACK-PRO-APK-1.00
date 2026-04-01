@@ -27,7 +27,7 @@ STOCK_MAP = {
 
 
 # -----------------------------------------
-# 🔐 SESSION-BOUND CLIENT
+# SESSION DB CLIENT
 # -----------------------------------------
 def db():
     supabase = get_supabase()
@@ -45,7 +45,7 @@ def db():
 
 
 # -----------------------------------------
-# PRICE MEMORY (ANTI-ZERO FIX)
+# PRICE MEMORY
 # -----------------------------------------
 def safe_price(symbol, price):
 
@@ -60,7 +60,7 @@ def safe_price(symbol, price):
 
 
 # -----------------------------------------
-# BUILD PnL HISTORY
+# BUILD PNL HISTORY
 # -----------------------------------------
 def build_pnl_history(history, invested):
 
@@ -195,67 +195,36 @@ def stock_app():
 
     user_id = st.session_state.user_id
 
-    # -------------------------------------
-    # LOAD DATA
-    # -------------------------------------
     rate = load_setting(user_id, "stock_rate", 14.5)
     invested = load_setting(user_id, "stock_investment", 0.0)
     holdings = load_stock_holdings(user_id)
 
-    # -------------------------------------
     # SIDEBAR
-    # -------------------------------------
     st.sidebar.header("📊 Stock Settings")
 
-    rate = st.sidebar.number_input(
-        "USD → GHS",
-        value=float(rate),
-        step=0.1,
-        key="stock_rate_input",
-    )
+    rate = st.sidebar.number_input("USD → GHS", value=float(rate), step=0.1)
+    invested = st.sidebar.number_input("Total Invested (GHS)", value=float(invested), step=10.0)
 
-    invested = st.sidebar.number_input(
-        "Total Invested (GHS)",
-        value=float(invested),
-        step=10.0,
-        key="stock_investment_input",
-    )
-
-    if st.sidebar.button("💾 Save Settings", key="stock_save_settings"):
-
+    if st.sidebar.button("💾 Save Settings"):
         save_setting(user_id, "stock_rate", rate)
         save_setting(user_id, "stock_investment", invested)
-
         st.sidebar.success("Settings saved")
 
     st.sidebar.markdown("---")
     st.sidebar.subheader("📦 Stock Holdings")
 
     for sym in STOCK_MAP:
+        holdings[sym] = st.sidebar.number_input(sym, value=float(holdings.get(sym, 0.0)), step=1.0)
 
-        holdings[sym] = st.sidebar.number_input(
-            sym,
-            value=float(holdings.get(sym, 0.0)),
-            step=1.0,
-            key=f"stock_{sym}",
-        )
-
-    if st.sidebar.button("💾 Save Holdings", key="stock_save_holdings"):
-
+    if st.sidebar.button("💾 Save Holdings"):
         save_stock_holdings(user_id, holdings)
-
         st.sidebar.success("Holdings saved")
 
-    # -------------------------------------
     # LIVE PRICES
-    # -------------------------------------
     try:
         prices = stock_live_prices(list(STOCK_MAP.keys())) or {}
     except Exception:
         prices = {}
-
-    if not prices:
-        st.warning("⚠️ Using cached prices (API unavailable)")
 
     rows = []
     total_value = 0.0
@@ -263,27 +232,19 @@ def stock_app():
     for sym, qty in holdings.items():
 
         raw_price = prices.get(sym, 0.0)
-
         usd_price = safe_price(sym, raw_price)
 
         value_ghs = usd_price * qty * rate
-
         total_value += value_ghs
 
         rows.append([sym, qty, usd_price, value_ghs])
 
-    df = pd.DataFrame(
-        rows,
-        columns=["Asset", "Qty", "Price (USD)", "Value (GHS)"],
-    )
+    df = pd.DataFrame(rows, columns=["Asset", "Qty", "Price (USD)", "Value (GHS)"])
 
     st.subheader("📘 Stock Assets")
-
     st.dataframe(df, use_container_width=True)
 
-    # -------------------------------------
     # VALUE PROTECTION
-    # -------------------------------------
     if "last_valid_stock_total" not in st.session_state:
         st.session_state.last_valid_stock_total = total_value
 
@@ -292,13 +253,26 @@ def stock_app():
     else:
         st.session_state.last_valid_stock_total = total_value
 
-    # -------------------------------------
     # SAVE SNAPSHOT
-    # -------------------------------------
     if total_value > 0:
         autosave_portfolio_value(user_id, total_value, "stock")
 
     history = load_portfolio_history(user_id)
+
+    # -------------------------------------
+    # PORTFOLIO SUMMARY (RESTORED)
+    # -------------------------------------
+    pnl = total_value - invested
+    pnl_pct = (pnl / invested * 100) if invested > 0 else 0.0
+
+    st.markdown("---")
+    st.subheader("📈 Portfolio Summary")
+
+    c1, c2, c3 = st.columns(3)
+
+    c1.metric("Total Value", fmt(total_value))
+    c2.metric("Invested", fmt(invested))
+    c3.metric("All-Time PnL", fmt(pnl), pct(pnl_pct))
 
     # -------------------------------------
     # PORTFOLIO VALUE CHART (UPGRADED)
