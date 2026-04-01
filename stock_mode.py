@@ -27,7 +27,7 @@ STOCK_MAP = {
 
 
 # -----------------------------------------
-# SESSION DB CLIENT
+# DB CLIENT
 # -----------------------------------------
 def db():
     supabase = get_supabase()
@@ -57,28 +57,6 @@ def safe_price(symbol, price):
         return price
 
     return st.session_state.stock_price_memory.get(symbol, 0)
-
-
-# -----------------------------------------
-# BUILD PNL HISTORY
-# -----------------------------------------
-def build_pnl_history(history, invested):
-
-    if not history:
-        return pd.DataFrame()
-
-    h = pd.DataFrame(history)
-
-    if h.empty:
-        return pd.DataFrame()
-
-    h["timestamp"] = pd.to_datetime(h["timestamp"])
-
-    h = h[h["value_ghs"] > 0]
-
-    h["pnl"] = h["value_ghs"] - invested
-
-    return h.sort_values("timestamp")
 
 
 # -----------------------------------------
@@ -197,9 +175,13 @@ def stock_app():
 
     rate = load_setting(user_id, "stock_rate", 14.5)
     invested = load_setting(user_id, "stock_investment", 0.0)
+    cash = load_setting(user_id, "stock_cash", 0.0)
+
     holdings = load_stock_holdings(user_id)
 
+    # -------------------------------------
     # SIDEBAR
+    # -------------------------------------
     st.sidebar.header("📊 Stock Settings")
 
     rate = st.sidebar.number_input("USD → GHS", value=float(rate), step=0.1)
@@ -211,23 +193,31 @@ def stock_app():
         st.sidebar.success("Settings saved")
 
     st.sidebar.markdown("---")
+
     st.sidebar.subheader("📦 Stock Holdings")
 
     for sym in STOCK_MAP:
         holdings[sym] = st.sidebar.number_input(sym, value=float(holdings.get(sym, 0.0)), step=1.0)
 
+    cash = st.sidebar.number_input("💵 Cash (GHS)", value=float(cash), step=10.0)
+
     if st.sidebar.button("💾 Save Holdings"):
+
         save_stock_holdings(user_id, holdings)
+        save_setting(user_id, "stock_cash", cash)
+
         st.sidebar.success("Holdings saved")
 
+    # -------------------------------------
     # LIVE PRICES
+    # -------------------------------------
     try:
         prices = stock_live_prices(list(STOCK_MAP.keys())) or {}
     except Exception:
         prices = {}
 
     rows = []
-    total_value = 0.0
+    total_value = cash
 
     for sym, qty in holdings.items():
 
@@ -239,28 +229,24 @@ def stock_app():
 
         rows.append([sym, qty, usd_price, value_ghs])
 
+    if cash > 0:
+        rows.append(["CASH", "-", "-", cash])
+
     df = pd.DataFrame(rows, columns=["Asset", "Qty", "Price (USD)", "Value (GHS)"])
 
     st.subheader("📘 Stock Assets")
     st.dataframe(df, use_container_width=True)
 
-    # VALUE PROTECTION
-    if "last_valid_stock_total" not in st.session_state:
-        st.session_state.last_valid_stock_total = total_value
-
-    if total_value <= 0:
-        total_value = st.session_state.last_valid_stock_total
-    else:
-        st.session_state.last_valid_stock_total = total_value
-
-    # SAVE SNAPSHOT
+    # -------------------------------------
+    # SNAPSHOT SAVE
+    # -------------------------------------
     if total_value > 0:
         autosave_portfolio_value(user_id, total_value, "stock")
 
     history = load_portfolio_history(user_id)
 
     # -------------------------------------
-    # PORTFOLIO SUMMARY (RESTORED)
+    # SUMMARY
     # -------------------------------------
     pnl = total_value - invested
     pnl_pct = (pnl / invested * 100) if invested > 0 else 0.0
@@ -275,7 +261,7 @@ def stock_app():
     c3.metric("All-Time PnL", fmt(pnl), pct(pnl_pct))
 
     # -------------------------------------
-    # PORTFOLIO VALUE CHART (UPGRADED)
+    # VALUE CHART
     # -------------------------------------
     st.subheader("📈 Portfolio Value Over Time")
 
@@ -283,7 +269,9 @@ def stock_app():
 
         h = pd.DataFrame(history)
 
-        h["timestamp"] = pd.to_datetime(h["timestamp"])
+        h["timestamp"] = pd.to_datetime(h["timestamp"], errors="coerce")
+
+        h = h.dropna()
 
         h = h[h["value_ghs"] > 0]
 
@@ -299,14 +287,7 @@ def stock_app():
             )
         )
 
-        fig.update_layout(
-            dragmode="zoom",
-            hovermode="x unified",
-            height=350,
-            xaxis_title="Date",
-            yaxis_title="Value (GHS)",
-            plot_bgcolor="rgba(0,0,0,0)",
-        )
+        fig.update_layout(height=350, hovermode="x unified")
 
         st.plotly_chart(fig, use_container_width=True)
 
@@ -314,85 +295,9 @@ def stock_app():
         st.info("Waiting for data...")
 
     # -------------------------------------
-    # ALL TIME PnL CHART (UPGRADED)
-    # -------------------------------------
-    st.subheader("📊 All-Time PnL")
-
-    pnl_df = build_pnl_history(history, invested)
-
-    if len(pnl_df) >= 2:
-
-        fig = go.Figure()
-
-        fig.add_trace(
-            go.Scatter(
-                x=pnl_df["timestamp"],
-                y=pnl_df["pnl"],
-                mode="lines",
-                line=dict(shape="spline", smoothing=1.2, width=3),
-            )
-        )
-
-        fig.update_layout(
-            dragmode="zoom",
-            hovermode="x unified",
-            height=350,
-            xaxis_title="Date",
-            yaxis_title="PnL (GHS)",
-            plot_bgcolor="rgba(0,0,0,0)",
-        )
-
-        st.plotly_chart(fig, use_container_width=True)
-
-    else:
-        st.info("PnL chart will appear soon.")
-
-    # -------------------------------------
-    # MTD / YTD
-    # -------------------------------------
-    st.markdown("---")
-
-    st.subheader("📆 MTD & YTD Performance")
-
-    if history:
-
-        h = pd.DataFrame(history)
-
-        h["timestamp"] = pd.to_datetime(h["timestamp"])
-
-        h = h[h["value_ghs"] > 0]
-
-        h = h.sort_values("timestamp")
-
-        now = datetime.utcnow()
-
-        mtd = h[h["timestamp"].dt.month == now.month]
-
-        ytd = h[h["timestamp"].dt.year == now.year]
-
-        mtd_start = mtd.iloc[0]["value_ghs"] if not mtd.empty else total_value
-        ytd_start = ytd.iloc[0]["value_ghs"] if not ytd.empty else total_value
-
-        mtd_pnl = total_value - mtd_start
-        ytd_pnl = total_value - ytd_start
-
-        mtd_pct = (mtd_pnl / mtd_start * 100) if mtd_start > 0 else 0.0
-        ytd_pct = (ytd_pnl / ytd_start * 100) if ytd_start > 0 else 0.0
-
-    else:
-
-        mtd_pnl = ytd_pnl = mtd_pct = ytd_pct = 0.0
-
-    c1, c2 = st.columns(2)
-
-    c1.metric("MTD", fmt(mtd_pnl), pct(mtd_pct))
-    c2.metric("YTD", fmt(ytd_pnl), pct(ytd_pct))
-
-    # -------------------------------------
     # ALLOCATION
     # -------------------------------------
     st.markdown("---")
-
     st.subheader("🍕 Allocation")
 
     pie_df = df[df["Value (GHS)"] > 0]
@@ -409,5 +314,3 @@ def stock_app():
 
     else:
         st.info("Allocation will appear once assets have value.")
-
-    
