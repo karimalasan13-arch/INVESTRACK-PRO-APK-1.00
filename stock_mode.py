@@ -294,6 +294,39 @@ def stock_app():
     else:
         st.info("Waiting for data...")
 
+    # ALL TIME PnL CHART (UPGRADED)
+    # -------------------------------------
+    st.subheader("📊 All-Time PnL")
+
+    pnl_df = build_pnl_history(history, invested)
+
+    if len(pnl_df) >= 2:
+
+        fig = go.Figure()
+
+        fig.add_trace(
+            go.Scatter(
+                x=pnl_df["timestamp"],
+                y=pnl_df["pnl"],
+                mode="lines",
+                line=dict(shape="spline", smoothing=1.2, width=3),
+            )
+        )
+
+        fig.update_layout(
+            dragmode="zoom",
+            hovermode="x unified",
+            height=350,
+            xaxis_title="Date",
+            yaxis_title="PnL (GHS)",
+            plot_bgcolor="rgba(0,0,0,0)",
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+
+    else:
+        st.info("PnL chart will appear soon.")
+
     # -------------------------------------
     # ALLOCATION
     # -------------------------------------
