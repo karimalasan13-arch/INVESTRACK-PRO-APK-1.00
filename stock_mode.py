@@ -60,6 +60,30 @@ def safe_price(symbol, price):
 
 
 # -----------------------------------------
+# BUILD PNL HISTORY
+# -----------------------------------------
+def build_pnl_history(history, invested):
+
+    if not history:
+        return pd.DataFrame()
+
+    h = pd.DataFrame(history)
+
+    if h.empty:
+        return pd.DataFrame()
+
+    h["timestamp"] = pd.to_datetime(h["timestamp"], errors="coerce")
+
+    h = h.dropna()
+
+    h = h[h["value_ghs"] > 0]
+
+    h["pnl"] = h["value_ghs"] - invested
+
+    return h.sort_values("timestamp")
+
+
+# -----------------------------------------
 # SETTINGS
 # -----------------------------------------
 def load_setting(user_id, key, default):
@@ -193,7 +217,6 @@ def stock_app():
         st.sidebar.success("Settings saved")
 
     st.sidebar.markdown("---")
-
     st.sidebar.subheader("📦 Stock Holdings")
 
     for sym in STOCK_MAP:
@@ -202,10 +225,8 @@ def stock_app():
     cash = st.sidebar.number_input("💵 Cash (GHS)", value=float(cash), step=10.0)
 
     if st.sidebar.button("💾 Save Holdings"):
-
         save_stock_holdings(user_id, holdings)
         save_setting(user_id, "stock_cash", cash)
-
         st.sidebar.success("Holdings saved")
 
     # -------------------------------------
@@ -246,7 +267,7 @@ def stock_app():
     history = load_portfolio_history(user_id)
 
     # -------------------------------------
-    # SUMMARY
+    # PORTFOLIO SUMMARY
     # -------------------------------------
     pnl = total_value - invested
     pnl_pct = (pnl / invested * 100) if invested > 0 else 0.0
@@ -261,7 +282,7 @@ def stock_app():
     c3.metric("All-Time PnL", fmt(pnl), pct(pnl_pct))
 
     # -------------------------------------
-    # VALUE CHART
+    # PORTFOLIO VALUE CHART
     # -------------------------------------
     st.subheader("📈 Portfolio Value Over Time")
 
@@ -294,7 +315,8 @@ def stock_app():
     else:
         st.info("Waiting for data...")
 
-    # ALL TIME PnL CHART (UPGRADED)
+    # -------------------------------------
+    # ALL TIME PNL CHART
     # -------------------------------------
     st.subheader("📊 All-Time PnL")
 
@@ -313,14 +335,7 @@ def stock_app():
             )
         )
 
-        fig.update_layout(
-            dragmode="zoom",
-            hovermode="x unified",
-            height=350,
-            xaxis_title="Date",
-            yaxis_title="PnL (GHS)",
-            plot_bgcolor="rgba(0,0,0,0)",
-        )
+        fig.update_layout(height=350, hovermode="x unified")
 
         st.plotly_chart(fig, use_container_width=True)
 
