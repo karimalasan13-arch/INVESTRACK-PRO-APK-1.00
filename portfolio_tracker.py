@@ -7,7 +7,7 @@ import streamlit as st
 # -----------------------------------------
 # CONFIG
 # -----------------------------------------
-SNAPSHOT_INTERVAL_HOURS = 2   # ← UPDATED FROM 8 → 2 HOURS
+SNAPSHOT_INTERVAL_HOURS = 2
 
 MIN_CHANGE_THRESHOLD = 0.5
 MAX_DROP_RATIO = 0.5
@@ -15,7 +15,7 @@ MAX_SPIKE_RATIO = 2.5
 
 
 # -----------------------------------------
-# 🔐 SESSION-BOUND CLIENT (CRITICAL FIX)
+# SESSION-BOUND CLIENT
 # -----------------------------------------
 def db():
     supabase = get_supabase()
@@ -72,7 +72,8 @@ def autosave_portfolio_value(user_id: str, value_ghs: float, mode: str):
     try:
 
         res = (
-            db().table("portfolio_history")
+            db()
+            .table("portfolio_history")
             .select("timestamp,value_ghs")
             .eq("user_id", user_id)
             .eq("mode", mode)
@@ -95,12 +96,6 @@ def autosave_portfolio_value(user_id: str, value_ghs: float, mode: str):
         last_date = last_ts.date()
 
         # -------------------------------------
-        # FILTER NOISE
-        # -------------------------------------
-        if abs(last_value - value_ghs) < MIN_CHANGE_THRESHOLD:
-            return
-
-        # -------------------------------------
         # DROP PROTECTION
         # -------------------------------------
         if value_ghs < last_value * MAX_DROP_RATIO:
@@ -120,11 +115,23 @@ def autosave_portfolio_value(user_id: str, value_ghs: float, mode: str):
             return
 
         # -------------------------------------
-        # INTERVAL SNAPSHOT
+        # INTERVAL SNAPSHOT (PRIMARY DRIVER)
         # -------------------------------------
         if now - last_ts >= timedelta(hours=SNAPSHOT_INTERVAL_HOURS):
             _insert_snapshot(user_id, now, value_ghs, mode)
             return
+
+        # -------------------------------------
+        # SMALL MOVEMENT FILTER
+        # Only applies BEFORE interval
+        # -------------------------------------
+        if abs(last_value - value_ghs) < MIN_CHANGE_THRESHOLD:
+            return
+
+        # -------------------------------------
+        # SIGNIFICANT MOVE SNAPSHOT
+        # -------------------------------------
+        _insert_snapshot(user_id, now, value_ghs, mode)
 
     except Exception as e:
         print("Autosave skipped:", e)
