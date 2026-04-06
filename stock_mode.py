@@ -73,14 +73,15 @@ def build_pnl_history(history, invested):
         return pd.DataFrame()
 
     h["timestamp"] = pd.to_datetime(h["timestamp"], errors="coerce")
-
     h = h.dropna()
 
     h = h[h["value_ghs"] > 0]
 
     h["pnl"] = h["value_ghs"] - invested
 
-    return h.sort_values("timestamp")
+    h = h.sort_values("timestamp")
+
+    return h
 
 
 # -----------------------------------------
@@ -152,11 +153,12 @@ def save_stock_holdings(user_id, holdings):
 
 
 # -----------------------------------------
-# HISTORY
+# HISTORY (FORCE FRESH FETCH)
 # -----------------------------------------
 def load_portfolio_history(user_id):
 
     try:
+
         res = (
             db()
             .table("portfolio_history")
@@ -167,7 +169,9 @@ def load_portfolio_history(user_id):
             .execute()
         )
 
-        return res.data or []
+        history = res.data or []
+
+        return history
 
     except Exception:
         return []
@@ -264,6 +268,9 @@ def stock_app():
     if total_value > 0:
         autosave_portfolio_value(user_id, total_value, "stock")
 
+    # -------------------------------------
+    # FORCE HISTORY REFRESH
+    # -------------------------------------
     history = load_portfolio_history(user_id)
 
     # -------------------------------------
@@ -293,8 +300,8 @@ def stock_app():
         h["timestamp"] = pd.to_datetime(h["timestamp"], errors="coerce")
 
         h = h.dropna()
-
         h = h[h["value_ghs"] > 0]
+        h = h.sort_values("timestamp")
 
         fig = go.Figure()
 
@@ -308,7 +315,10 @@ def stock_app():
             )
         )
 
-        fig.update_layout(height=350, hovermode="x unified")
+        fig.update_layout(
+            height=350,
+            hovermode="x unified"
+        )
 
         st.plotly_chart(fig, use_container_width=True)
 
@@ -335,7 +345,10 @@ def stock_app():
             )
         )
 
-        fig.update_layout(height=350, hovermode="x unified")
+        fig.update_layout(
+            height=350,
+            hovermode="x unified"
+        )
 
         st.plotly_chart(fig, use_container_width=True)
 
