@@ -1,8 +1,7 @@
-# portfolio_tracker.py
-
 from datetime import datetime, timedelta
 from db import get_supabase
 import streamlit as st
+
 
 # -----------------------------------------
 # CONFIG
@@ -15,7 +14,7 @@ MAX_SPIKE_RATIO = 2.5
 
 
 # -----------------------------------------
-# 🔐 SESSION-BOUND CLIENT (CRITICAL FIX)
+# SESSION-BOUND CLIENT
 # -----------------------------------------
 def db():
     supabase = get_supabase()
@@ -33,7 +32,29 @@ def db():
 
 
 # -----------------------------------------
-# MAIN AUTOSAVE FUNCTION
+# 🔥 MANUAL SNAPSHOT (NEW)
+# -----------------------------------------
+def force_snapshot(user_id: str, value_ghs: float, mode: str):
+
+    try:
+        db().table("portfolio_history").insert(
+            {
+                "user_id": user_id,
+                "timestamp": datetime.utcnow().isoformat(),
+                "value_ghs": round(float(value_ghs), 2),
+                "mode": mode,
+            }
+        ).execute()
+
+        return True
+
+    except Exception as e:
+        print("Manual snapshot failed:", e)
+        return False
+
+
+# -----------------------------------------
+# MAIN AUTOSAVE FUNCTION (STABLE)
 # -----------------------------------------
 def autosave_portfolio_value(user_id: str, value_ghs: float, mode: str):
 
@@ -45,9 +66,7 @@ def autosave_portfolio_value(user_id: str, value_ghs: float, mode: str):
     if key not in st.session_state:
         st.session_state[key] = value_ghs
 
-    # -------------------------------------
     # ZERO PROTECTION
-    # -------------------------------------
     if value_ghs <= 0:
         value_ghs = st.session_state[key]
     else:
@@ -67,46 +86,52 @@ def autosave_portfolio_value(user_id: str, value_ghs: float, mode: str):
             .execute()
         )
 
-        # -------------------------------------
         # FIRST SNAPSHOT
-        # -------------------------------------
         if not res.data:
             _insert_snapshot(user_id, now, value_ghs, mode)
             return
 
         last_row = res.data[0]
-        last_ts = datetime.fromisoformat(last_row["timestamp"])
+
+        # ✅ SAFE TIMESTAMP PARSE (CRITICAL FIX)
+        try:
+            last_ts = datetime.fromisoformat(
+                last_row["timestamp"].replace("Z", "")
+            )
+        except Exception:
+            last_ts = now - timedelta(hours=SNAPSHOT_INTERVAL_HOURS + 1)
+
         last_value = float(last_row["value_ghs"])
         last_date = last_ts.date()
 
         # -------------------------------------
-        # FILTER NOISE
+        # SAVE RULES (REORDERED FOR RELIABILITY)
         # -------------------------------------
-        if abs(last_value - value_ghs) < MIN_CHANGE_THRESHOLD:
+
+        # INTERVAL SNAPSHOT (PRIMARY DRIVER)
+        if now - last_ts >= timedelta(hours=SNAPSHOT_INTERVAL_HOURS):
+            _insert_snapshot(user_id, now, value_ghs, mode)
             return
 
-        # -------------------------------------
-        # DROP PROTECTION
-        # -------------------------------------
-        if value_ghs < last_value * MAX_DROP_RATIO:
-            return
-
-        # -------------------------------------
-        # SPIKE PROTECTION
-        # -------------------------------------
-        if value_ghs > last_value * MAX_SPIKE_RATIO:
-            return
-
-        # -------------------------------------
-        # SAVE RULES
-        # -------------------------------------
+        # NEW DAY SNAPSHOT
         if today != last_date:
             _insert_snapshot(user_id, now, value_ghs, mode)
             return
 
-        if now - last_ts >= timedelta(hours=SNAPSHOT_INTERVAL_HOURS):
-            _insert_snapshot(user_id, now, value_ghs, mode)
+        # DROP PROTECTION
+        if value_ghs < last_value * MAX_DROP_RATIO:
             return
+
+        # SPIKE PROTECTION
+        if value_ghs > last_value * MAX_SPIKE_RATIO:
+            return
+
+        # NOISE FILTER
+        if abs(last_value - value_ghs) < MIN_CHANGE_THRESHOLD:
+            return
+
+        # SIGNIFICANT MOVE SNAPSHOT
+        _insert_snapshot(user_id, now, value_ghs, mode)
 
     except Exception as e:
         print("Autosave skipped:", e)
