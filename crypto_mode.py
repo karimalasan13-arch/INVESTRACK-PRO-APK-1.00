@@ -253,15 +253,25 @@ def crypto_app():
     c2.metric("Invested", f"GHS {invested:,.2f}")
     c3.metric("PnL", f"GHS {pnl:,.2f}", f"{pnl_pct:.2f}%")
 
-    # CHART
+    # VALUE CHART
+    st.subheader("📈 Portfolio Value Over Time")
+
     if len(history) >= 2:
-        h = pd.DataFrame(history)
-        h["timestamp"] = pd.to_datetime(h["timestamp"])
-        h = h[h["value_ghs"] > 0]
 
         fig = go.Figure()
-        fig.add_trace(go.Scatter(x=h["timestamp"], y=h["value_ghs"], mode="lines"))
+
+        fig.add_trace(go.Scatter(
+            x=history["timestamp"],
+            y=history["value_ghs"],
+            mode="lines",
+            line=dict(shape="spline", smoothing=1.2, width=3),
+            fill="tozeroy"
+        ))
+
         st.plotly_chart(fig, use_container_width=True)
+
+    else:
+        st.warning(f"Not enough clean data for chart ({len(history)} rows)")
 
     # PIE
     pie_df = df[df["Value (GHS)"] > 0]
