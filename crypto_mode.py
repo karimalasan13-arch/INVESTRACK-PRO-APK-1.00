@@ -27,7 +27,7 @@ API_MAP = {
 
 
 # -----------------------------------------
-# 🔐 SESSION-BOUND CLIENT
+# SESSION DB CLIENT
 # -----------------------------------------
 def db():
     supabase = get_supabase()
@@ -45,7 +45,7 @@ def db():
 
 
 # -----------------------------------------
-# 🚨 NEW: FORCE SNAPSHOT (BYPASS FILTERS)
+# SNAPSHOT
 # -----------------------------------------
 def force_snapshot(user_id, value_ghs, mode="crypto"):
     try:
@@ -62,22 +62,29 @@ def force_snapshot(user_id, value_ghs, mode="crypto"):
 
 
 # -----------------------------------------
-# PRICE MEMORY (ANTI ZERO PROTECTION)
+# SAFE PRICE SYSTEM (FIXED)
 # -----------------------------------------
 def safe_price(symbol, price):
 
     if "crypto_price_memory" not in st.session_state:
         st.session_state.crypto_price_memory = {}
 
-    if price and price > 0:
-        st.session_state.crypto_price_memory[symbol] = price
-        return price
+    memory = st.session_state.crypto_price_memory
 
-    return st.session_state.crypto_price_memory.get(symbol, 0)
+    # valid price
+    if price is not None and price > 0:
+        memory[symbol] = price
+        return price, True
+
+    # fallback to last known
+    if symbol in memory:
+        return memory[symbol], False
+
+    return None, False
 
 
 # -----------------------------------------
-# BUILD PnL HISTORY
+# PNL HISTORY (FIXED - NO DATA DELETION)
 # -----------------------------------------
 def build_pnl_history(history, invested):
 
@@ -90,11 +97,11 @@ def build_pnl_history(history, invested):
         return pd.DataFrame()
 
     h["timestamp"] = pd.to_datetime(h["timestamp"])
-    h = h[h["value_ghs"] > 0]
+    h = h.sort_values("timestamp")
 
     h["pnl"] = h["value_ghs"] - invested
 
-    return h.sort_values("timestamp")
+    return h
 
 
 # -----------------------------------------
@@ -231,7 +238,11 @@ def crypto_app():
     st.sidebar.subheader("📦 Crypto Holdings")
 
     for sym in API_MAP:
-        holdings[sym] = st.sidebar.number_input(sym, value=float(holdings.get(sym, 0.0)), step=0.0001)
+        holdings[sym] = st.sidebar.number_input(
+            sym,
+            value=float(holdings.get(sym, 0.0)),
+            step=0.0001
+        )
 
     if st.sidebar.button("💾 Save Holdings"):
         save_crypto_holdings(user_id, holdings)
@@ -247,19 +258,41 @@ def crypto_app():
 
     rows = []
     total_value = 0.0
+    price_failures = []
+    data_degraded = False
 
     for sym, qty in holdings.items():
+
         raw_price = prices.get(sym, 1.0 if sym == "USDT" else 0.0)
-        usd_price = safe_price(sym, raw_price)
+        usd_price, ok = safe_price(sym, raw_price)
+
+        if usd_price is None:
+            price_failures.append(sym)
+            data_degraded = True
+            continue
+
         value_ghs = qty * usd_price * rate
         total_value += value_ghs
+
         rows.append([sym, qty, usd_price, value_ghs])
 
     df = pd.DataFrame(rows, columns=["Asset", "Qty", "Price (USD)", "Value (GHS)"])
     st.dataframe(df, use_container_width=True)
 
     # -------------------------------------
-    # 🔥 NEW: MANUAL SNAPSHOT BUTTON
+    # DATA HEALTH WARNINGS
+    # -------------------------------------
+    if prices == {}:
+        st.error("🚨 Price feed unavailable — using cached values where possible.")
+
+    if price_failures:
+        st.warning(
+            f"⚠️ Missing prices for: {', '.join(price_failures)}. "
+            "Using last known values."
+        )
+
+    # -------------------------------------
+    # SNAPSHOT
     # -------------------------------------
     col1, col2 = st.columns([1, 3])
 
@@ -267,15 +300,15 @@ def crypto_app():
         if st.button("📸 Save Snapshot Now"):
             if total_value > 0:
                 if force_snapshot(user_id, total_value):
-                    st.success("Snapshot saved instantly!")
+                    st.success("Snapshot saved!")
                 else:
                     st.error("Snapshot failed.")
 
     with col2:
-        st.caption("Manually save your portfolio at any time")
+        st.caption("Manual portfolio snapshot")
 
     # -------------------------------------
-    # AUTOSAVE (UNCHANGED)
+    # AUTOSAVE
     # -------------------------------------
     if total_value > 0:
         autosave_portfolio_value(user_id, total_value, "crypto")
@@ -296,28 +329,30 @@ def crypto_app():
     c3.metric("All-Time PnL", fmt(pnl), pct(pnl_pct))
 
     # -------------------------------------
-    # CHARTS (UNCHANGED)
+    # VALUE CHART
     # -------------------------------------
     st.subheader("📈 Portfolio Value Over Time")
 
     if len(history) >= 2:
         h = pd.DataFrame(history)
         h["timestamp"] = pd.to_datetime(h["timestamp"])
-        h = h[h["value_ghs"] > 0]
+        h = h.sort_values("timestamp")
 
         fig = go.Figure()
         fig.add_trace(go.Scatter(
             x=h["timestamp"],
             y=h["value_ghs"],
             mode="lines",
-            line=dict(shape="spline", smoothing=1.2, width=3),
-            fill="tozeroy",
+            fill="tozeroy"
         ))
 
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("Waiting for data...")
 
+    # -------------------------------------
+    # PNL CHART
+    # -------------------------------------
     st.subheader("📊 All-Time PnL")
 
     pnl_df = build_pnl_history(history, invested)
@@ -327,8 +362,9 @@ def crypto_app():
         fig.add_trace(go.Scatter(
             x=pnl_df["timestamp"],
             y=pnl_df["pnl"],
-            mode="lines",
+            mode="lines"
         ))
+
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("PnL chart will appear soon.")
@@ -338,10 +374,8 @@ def crypto_app():
     # -------------------------------------
     st.subheader("🍕 Allocation")
 
-    pie_df = df[df["Value (GHS)"] > 0]
-
-    if not pie_df.empty:
-        pie = alt.Chart(pie_df).mark_arc().encode(
+    if not df.empty:
+        pie = alt.Chart(df[df["Value (GHS)"] > 0]).mark_arc().encode(
             theta="Value (GHS):Q",
             color="Asset:N",
         )
