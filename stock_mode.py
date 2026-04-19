@@ -38,8 +38,25 @@ def db():
     return supabase
 
 
+# -----------------------------------------
+# 🚨 NEW: FORCE SNAPSHOT (BYPASS FILTERS)
+# -----------------------------------------
+def force_snapshot(user_id, value_ghs, mode="stock"):
+    try:
+        db().table("portfolio_history").insert({
+            "user_id": user_id,
+            "timestamp": datetime.utcnow().isoformat(),
+            "value_ghs": round(float(value_ghs), 2),
+            "mode": mode,
+        }).execute()
+        return True
+    except Exception as e:
+        print("Force snapshot failed:", e)
+        return False
+
+
 # -------------------------------
-# SAFE PRICE (2DP FIX INCLUDED)
+# SAFE PRICE
 # -------------------------------
 def safe_price(symbol, price):
 
@@ -54,7 +71,7 @@ def safe_price(symbol, price):
 
 
 # -------------------------------
-# CLEAN HISTORY (KEY FIX)
+# CLEAN HISTORY
 # -------------------------------
 def clean_history(history):
 
@@ -227,12 +244,9 @@ def stock_app():
     total_value = cash
 
     for sym, qty in holdings.items():
-
         price = safe_price(sym, prices.get(sym, 0.0))
-
         value = price * qty * rate
         total_value += value
-
         rows.append([sym, qty, price, value])
 
     if cash > 0:
@@ -242,11 +256,29 @@ def stock_app():
 
     st.dataframe(df, use_container_width=True)
 
-    # SAVE SNAPSHOT
+    # -------------------------------------
+    # 🔥 NEW: MANUAL SNAPSHOT BUTTON
+    # -------------------------------------
+    col1, col2 = st.columns([1, 3])
+
+    with col1:
+        if st.button("📸 Save Snapshot Now"):
+            if total_value > 0:
+                if force_snapshot(user_id, total_value):
+                    st.success("Snapshot saved instantly!")
+                else:
+                    st.error("Snapshot failed.")
+
+    with col2:
+        st.caption("Manually save your portfolio at any time")
+
+    # -------------------------------------
+    # AUTOSAVE (UNCHANGED)
+    # -------------------------------------
     if total_value > 0:
         autosave_portfolio_value(user_id, total_value, "stock")
 
-    # CLEAN HISTORY FIRST
+    # HISTORY
     raw_history = load_portfolio_history(user_id)
     history = clean_history(raw_history)
 
