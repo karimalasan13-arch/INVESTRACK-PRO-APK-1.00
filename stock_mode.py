@@ -62,7 +62,7 @@ def force_snapshot(user_id, value_ghs, mode="stock"):
 
 
 # -----------------------------------------
-# SAFE PRICE SYSTEM (FIXED)
+# SAFE PRICE SYSTEM
 # -----------------------------------------
 def safe_price(symbol, price):
 
@@ -82,7 +82,7 @@ def safe_price(symbol, price):
 
 
 # -----------------------------------------
-# CLEAN HISTORY (FIXED - NO DATA LOSS)
+# CLEAN HISTORY
 # -----------------------------------------
 def clean_history(history):
 
@@ -320,7 +320,6 @@ def stock_app():
     if total_value > 0:
         autosave_portfolio_value(user_id, total_value, "stock")
 
-    # HISTORY
     history = clean_history(load_portfolio_history(user_id))
 
     # -----------------------------------------
@@ -342,7 +341,6 @@ def stock_app():
     st.subheader("📈 Portfolio Value Over Time")
 
     if len(history) >= 2:
-
         fig = go.Figure()
         fig.add_trace(go.Scatter(
             x=history["timestamp"],
@@ -350,9 +348,7 @@ def stock_app():
             mode="lines",
             fill="tozeroy"
         ))
-
         st.plotly_chart(fig, use_container_width=True)
-
     else:
         st.warning(f"Not enough data ({len(history)} rows)")
 
@@ -364,46 +360,46 @@ def stock_app():
     pnl_df = build_pnl(history, invested)
 
     if len(pnl_df) >= 2:
-
         fig = go.Figure()
         fig.add_trace(go.Scatter(
             x=pnl_df["timestamp"],
             y=pnl_df["pnl"],
             mode="lines"
         ))
-
         st.plotly_chart(fig, use_container_width=True)
-
     else:
         st.warning("Not enough PnL data")
 
-    # -------------------------------------
-    # MTD / YTD
-    # -------------------------------------
+    # -----------------------------------------
+    # MTD / YTD (MATCHES CRYPTO LOGIC)
+    # -----------------------------------------
     st.markdown("---")
     st.subheader("📆 MTD & YTD Performance")
 
-    if history:
-        h = pd.DataFrame(history)
+    mtd_pnl = ytd_pnl = mtd_pct = ytd_pct = 0.0
+
+    if not history.empty:
+
+        h = history.copy()
         h["timestamp"] = pd.to_datetime(h["timestamp"])
-        h = h[h["value_ghs"] > 0]
         h = h.sort_values("timestamp")
 
         now = datetime.utcnow()
 
-        mtd = h[h["timestamp"].dt.month == now.month]
+        mtd = h[(h["timestamp"].dt.month == now.month) &
+                (h["timestamp"].dt.year == now.year)]
+
         ytd = h[h["timestamp"].dt.year == now.year]
 
-        mtd_start = mtd.iloc[0]["value_ghs"] if not mtd.empty else total_value
-        ytd_start = ytd.iloc[0]["value_ghs"] if not ytd.empty else total_value
+        if not mtd.empty:
+            mtd_start = mtd.iloc[0]["value_ghs"]
+            mtd_pnl = total_value - mtd_start
+            mtd_pct = (mtd_pnl / mtd_start * 100) if mtd_start > 0 else 0.0
 
-        mtd_pnl = total_value - mtd_start
-        ytd_pnl = total_value - ytd_start
-
-        mtd_pct = (mtd_pnl / mtd_start * 100) if mtd_start > 0 else 0.0
-        ytd_pct = (ytd_pnl / ytd_start * 100) if ytd_start > 0 else 0.0
-    else:
-        mtd_pnl = ytd_pnl = mtd_pct = ytd_pct = 0.0
+        if not ytd.empty:
+            ytd_start = ytd.iloc[0]["value_ghs"]
+            ytd_pnl = total_value - ytd_start
+            ytd_pct = (ytd_pnl / ytd_start * 100) if ytd_start > 0 else 0.0
 
     c1, c2 = st.columns(2)
     c1.metric("MTD", fmt(mtd_pnl), pct(mtd_pct))
