@@ -377,38 +377,6 @@ def stock_app():
     else:
         st.warning("Not enough PnL data")
 
-    # -------------------------------------
-    # MTD / YTD
-    # -------------------------------------
-    st.markdown("---")
-    st.subheader("📆 MTD & YTD Performance")
-
-    if history:
-        h = pd.DataFrame(history)
-        h["timestamp"] = pd.to_datetime(h["timestamp"])
-        h = h[h["value_ghs"] > 0]
-        h = h.sort_values("timestamp")
-
-        now = datetime.utcnow()
-
-        mtd = h[h["timestamp"].dt.month == now.month]
-        ytd = h[h["timestamp"].dt.year == now.year]
-
-        mtd_start = mtd.iloc[0]["value_ghs"] if not mtd.empty else total_value
-        ytd_start = ytd.iloc[0]["value_ghs"] if not ytd.empty else total_value
-
-        mtd_pnl = total_value - mtd_start
-        ytd_pnl = total_value - ytd_start
-
-        mtd_pct = (mtd_pnl / mtd_start * 100) if mtd_start > 0 else 0.0
-        ytd_pct = (ytd_pnl / ytd_start * 100) if ytd_start > 0 else 0.0
-    else:
-        mtd_pnl = ytd_pnl = mtd_pct = ytd_pct = 0.0
-
-    c1, c2 = st.columns(2)
-    c1.metric("MTD", fmt(mtd_pnl), pct(mtd_pct))
-    c2.metric("YTD", fmt(ytd_pnl), pct(ytd_pct))
-
     # -----------------------------------------
     # PIE
     # -----------------------------------------
