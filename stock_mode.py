@@ -4,25 +4,31 @@ import altair as alt
 from datetime import datetime
 import plotly.graph_objects as go
 
-from price_history import stock_live_prices
+from price_history import crypto_live_prices
 from portfolio_tracker import autosave_portfolio_value
 from db import get_supabase
 
 
-STOCK_MAP = {
-    "AAPL": "AAPL",
-    "MSFT": "MSFT",
-    "GOOGL": "GOOGL",
-    "AMZN": "AMZN",
-    "TSLA": "TSLA",
-    "META": "META",
-    "NVDA": "NVDA",
-    "JPM": "JPM",
-    "V": "V",
-    "BRK-B": "BRK.B",
+# -----------------------------------------
+# CONFIG
+# -----------------------------------------
+API_MAP = {
+    "BTC": "bitcoin",
+    "ETH": "ethereum",
+    "SOL": "solana",
+    "BNB": "binancecoin",
+    "XRP": "ripple",
+    "ADA": "cardano",
+    "DOGE": "dogecoin",
+    "DOT": "polkadot",
+    "LTC": "litecoin",
+    "USDT": "tether",
 }
 
 
+# -----------------------------------------
+# SESSION DB CLIENT
+# -----------------------------------------
 def db():
     supabase = get_supabase()
 
@@ -39,9 +45,9 @@ def db():
 
 
 # -----------------------------------------
-# 🚨 NEW: FORCE SNAPSHOT (BYPASS FILTERS)
+# SNAPSHOT
 # -----------------------------------------
-def force_snapshot(user_id, value_ghs, mode="stock"):
+def force_snapshot(user_id, value_ghs, mode="crypto"):
     try:
         db().table("portfolio_history").insert({
             "user_id": user_id,
@@ -55,60 +61,52 @@ def force_snapshot(user_id, value_ghs, mode="stock"):
         return False
 
 
-# -------------------------------
-# SAFE PRICE
-# -------------------------------
+# -----------------------------------------
+# SAFE PRICE SYSTEM (FIXED)
+# -----------------------------------------
 def safe_price(symbol, price):
 
-    if "stock_price_memory" not in st.session_state:
-        st.session_state.stock_price_memory = {}
+    if "crypto_price_memory" not in st.session_state:
+        st.session_state.crypto_price_memory = {}
 
-    if price and price > 0:
-        st.session_state.stock_price_memory[symbol] = price
-        return round(price, 2)
+    memory = st.session_state.crypto_price_memory
 
-    return round(st.session_state.stock_price_memory.get(symbol, 0), 2)
+    # valid price
+    if price is not None and price > 0:
+        memory[symbol] = price
+        return price, True
+
+    # fallback to last known
+    if symbol in memory:
+        return memory[symbol], False
+
+    return None, False
 
 
-# -------------------------------
-# CLEAN HISTORY
-# -------------------------------
-def clean_history(history):
+# -----------------------------------------
+# PNL HISTORY (FIXED - NO DATA DELETION)
+# -----------------------------------------
+def build_pnl_history(history, invested):
 
     if not history:
         return pd.DataFrame()
 
-    df = pd.DataFrame(history)
+    h = pd.DataFrame(history)
 
-    if df.empty:
-        return df
+    if h.empty:
+        return pd.DataFrame()
 
-    df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
-    df["value_ghs"] = pd.to_numeric(df["value_ghs"], errors="coerce")
+    h["timestamp"] = pd.to_datetime(h["timestamp"])
+    h = h.sort_values("timestamp")
 
-    df = df.dropna()
-    df = df[df["value_ghs"] > 0]
-    df = df.sort_values("timestamp")
+    h["pnl"] = h["value_ghs"] - invested
 
-    return df
+    return h
 
 
-# -------------------------------
-# BUILD PNL
-# -------------------------------
-def build_pnl(df, invested):
-
-    if df.empty:
-        return df
-
-    df = df.copy()
-    df["pnl"] = df["value_ghs"] - invested
-    return df
-
-
-# -------------------------------
+# -----------------------------------------
 # SETTINGS
-# -------------------------------
+# -----------------------------------------
 def load_setting(user_id, key, default):
     try:
         res = (
@@ -132,17 +130,17 @@ def save_setting(user_id, key, value):
     ).execute()
 
 
-# -------------------------------
+# -----------------------------------------
 # HOLDINGS
-# -------------------------------
-def load_stock_holdings(user_id):
+# -----------------------------------------
+def load_crypto_holdings(user_id):
 
-    holdings = {k: 0.0 for k in STOCK_MAP}
+    holdings = {k: 0.0 for k in API_MAP}
 
     try:
         res = (
             db()
-            .table("stock_holdings")
+            .table("crypto_holdings")
             .select("symbol,quantity")
             .eq("user_id", user_id)
             .execute()
@@ -157,41 +155,44 @@ def load_stock_holdings(user_id):
     return holdings
 
 
-def save_stock_holdings(user_id, holdings):
+def save_crypto_holdings(user_id, holdings):
 
     rows = [
         {"user_id": user_id, "symbol": k, "quantity": float(v)}
         for k, v in holdings.items()
     ]
 
-    db().table("stock_holdings").upsert(
+    db().table("crypto_holdings").upsert(
         rows,
         on_conflict="user_id,symbol",
     ).execute()
 
 
-# -------------------------------
+# -----------------------------------------
 # HISTORY
-# -------------------------------
+# -----------------------------------------
 def load_portfolio_history(user_id):
+
     try:
         res = (
             db()
             .table("portfolio_history")
             .select("timestamp,value_ghs")
             .eq("user_id", user_id)
-            .eq("mode", "stock")
+            .eq("mode", "crypto")
             .order("timestamp")
             .execute()
         )
+
         return res.data or []
+
     except Exception:
         return []
 
 
-# -------------------------------
+# -----------------------------------------
 # FORMATTERS
-# -------------------------------
+# -----------------------------------------
 def fmt(v):
     return f"GHS {v:,.2f}"
 
@@ -200,64 +201,98 @@ def pct(v):
     return f"{v:.2f}%"
 
 
-# -------------------------------
-# MAIN
-# -------------------------------
-def stock_app():
+# -----------------------------------------
+# MAIN APP
+# -----------------------------------------
+def crypto_app():
 
-    st.title("📊 Stock Portfolio Tracker")
+    st.title("💰 Crypto Portfolio Tracker")
+
+    if "user_id" not in st.session_state:
+        st.error("User not logged in.")
+        return
 
     user_id = st.session_state.user_id
 
-    rate = load_setting(user_id, "stock_rate", 14.5)
-    invested = load_setting(user_id, "stock_investment", 0.0)
-    cash = load_setting(user_id, "stock_cash", 0.0)
+    # -------------------------------------
+    # LOAD DATA
+    # -------------------------------------
+    rate = load_setting(user_id, "crypto_rate", 14.5)
+    invested = load_setting(user_id, "crypto_investment", 0.0)
+    holdings = load_crypto_holdings(user_id)
 
-    holdings = load_stock_holdings(user_id)
-
+    # -------------------------------------
     # SIDEBAR
-    st.sidebar.header("📊 Stock Settings")
+    # -------------------------------------
+    st.sidebar.header("💰 Crypto Settings")
 
     rate = st.sidebar.number_input("USD → GHS", value=float(rate), step=0.1)
     invested = st.sidebar.number_input("Total Invested (GHS)", value=float(invested), step=10.0)
 
     if st.sidebar.button("💾 Save Settings"):
-        save_setting(user_id, "stock_rate", rate)
-        save_setting(user_id, "stock_investment", invested)
+        save_setting(user_id, "crypto_rate", rate)
+        save_setting(user_id, "crypto_investment", invested)
+        st.sidebar.success("Settings saved")
 
     st.sidebar.markdown("---")
-    st.sidebar.subheader("📦 Stock Holdings")
+    st.sidebar.subheader("📦 Crypto Holdings")
 
-    for sym in STOCK_MAP:
-        holdings[sym] = st.sidebar.number_input(sym, value=float(holdings.get(sym, 0.0)), step=1.0)
-
-    cash = st.sidebar.number_input("💵 Cash (GHS)", value=float(cash), step=10.0)
+    for sym in API_MAP:
+        holdings[sym] = st.sidebar.number_input(
+            sym,
+            value=float(holdings.get(sym, 0.0)),
+            step=0.0001
+        )
 
     if st.sidebar.button("💾 Save Holdings"):
-        save_stock_holdings(user_id, holdings)
-        save_setting(user_id, "stock_cash", cash)
+        save_crypto_holdings(user_id, holdings)
+        st.sidebar.success("Holdings saved")
 
+    # -------------------------------------
     # LIVE PRICES
-    prices = stock_live_prices(list(STOCK_MAP.keys())) or {}
+    # -------------------------------------
+    try:
+        prices = crypto_live_prices() or {}
+    except Exception:
+        prices = {}
 
     rows = []
-    total_value = cash
+    total_value = 0.0
+    price_failures = []
+    data_degraded = False
 
     for sym, qty in holdings.items():
-        price = safe_price(sym, prices.get(sym, 0.0))
-        value = price * qty * rate
-        total_value += value
-        rows.append([sym, qty, price, value])
 
-    if cash > 0:
-        rows.append(["CASH", "-", "-", cash])
+        raw_price = prices.get(sym, 1.0 if sym == "USDT" else 0.0)
+        usd_price, ok = safe_price(sym, raw_price)
+
+        if usd_price is None:
+            price_failures.append(sym)
+            data_degraded = True
+            continue
+
+        value_ghs = qty * usd_price * rate
+        total_value += value_ghs
+
+        rows.append([sym, qty, usd_price, value_ghs])
 
     df = pd.DataFrame(rows, columns=["Asset", "Qty", "Price (USD)", "Value (GHS)"])
-
     st.dataframe(df, use_container_width=True)
 
     # -------------------------------------
-    # 🔥 NEW: MANUAL SNAPSHOT BUTTON
+    # DATA HEALTH WARNINGS
+    # -------------------------------------
+    if prices == {}:
+        st.error("🚨 Price feed unavailable — using cached values where possible.")
+
+    if price_failures:
+        st.warning(
+            f"⚠️ Missing prices for: {', '.join(price_failures)}. "
+            "Using last known values."
+        )
+
+    # -------------------------------------
+    # SNAPSHOT
     # -------------------------------------
     col1, col2 = st.columns([1, 3])
 
@@ -265,81 +300,82 @@ def stock_app():
         if st.button("📸 Save Snapshot Now"):
             if total_value > 0:
                 if force_snapshot(user_id, total_value):
-                    st.success("Snapshot saved instantly!")
+                    st.success("Snapshot saved!")
                 else:
                     st.error("Snapshot failed.")
 
     with col2:
-        st.caption("Manually save your portfolio at any time")
+        st.caption("Manual portfolio snapshot")
 
     # -------------------------------------
-    # AUTOSAVE (UNCHANGED)
+    # AUTOSAVE
     # -------------------------------------
     if total_value > 0:
-        autosave_portfolio_value(user_id, total_value, "stock")
+        autosave_portfolio_value(user_id, total_value, "crypto")
 
-    # HISTORY
-    raw_history = load_portfolio_history(user_id)
-    history = clean_history(raw_history)
+    history = load_portfolio_history(user_id)
 
+    # -------------------------------------
     # SUMMARY
+    # -------------------------------------
     pnl = total_value - invested
-    pnl_pct = (pnl / invested * 100) if invested > 0 else 0
+    pnl_pct = (pnl / invested * 100) if invested > 0 else 0.0
 
     st.subheader("📈 Portfolio Summary")
+
     c1, c2, c3 = st.columns(3)
     c1.metric("Total Value", fmt(total_value))
     c2.metric("Invested", fmt(invested))
     c3.metric("All-Time PnL", fmt(pnl), pct(pnl_pct))
 
+    # -------------------------------------
     # VALUE CHART
+    # -------------------------------------
     st.subheader("📈 Portfolio Value Over Time")
 
     if len(history) >= 2:
+        h = pd.DataFrame(history)
+        h["timestamp"] = pd.to_datetime(h["timestamp"])
+        h = h.sort_values("timestamp")
 
         fig = go.Figure()
-
         fig.add_trace(go.Scatter(
-            x=history["timestamp"],
-            y=history["value_ghs"],
+            x=h["timestamp"],
+            y=h["value_ghs"],
             mode="lines",
-            line=dict(shape="spline", smoothing=1.2, width=3),
             fill="tozeroy"
         ))
 
         st.plotly_chart(fig, use_container_width=True)
-
     else:
-        st.warning(f"Not enough clean data for chart ({len(history)} rows)")
+        st.info("Waiting for data...")
 
+    # -------------------------------------
     # PNL CHART
+    # -------------------------------------
     st.subheader("📊 All-Time PnL")
 
-    pnl_df = build_pnl(history, invested)
+    pnl_df = build_pnl_history(history, invested)
 
     if len(pnl_df) >= 2:
-
         fig = go.Figure()
-
         fig.add_trace(go.Scatter(
             x=pnl_df["timestamp"],
             y=pnl_df["pnl"],
-            mode="lines",
-            line=dict(shape="spline", smoothing=1.2, width=3),
+            mode="lines"
         ))
 
         st.plotly_chart(fig, use_container_width=True)
-
     else:
-        st.warning(f"Not enough clean PnL data ({len(pnl_df)} rows)")
+        st.info("PnL chart will appear soon.")
 
+    # -------------------------------------
     # PIE
+    # -------------------------------------
     st.subheader("🍕 Allocation")
 
-    pie_df = df[df["Value (GHS)"] > 0]
-
-    if not pie_df.empty:
-        pie = alt.Chart(pie_df).mark_arc().encode(
+    if not df.empty:
+        pie = alt.Chart(df[df["Value (GHS)"] > 0]).mark_arc().encode(
             theta="Value (GHS):Q",
             color="Asset:N",
         )
