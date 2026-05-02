@@ -237,7 +237,9 @@ def stock_app():
 
     holdings = load_stock_holdings(user_id)
 
+    # -----------------------------------------
     # SIDEBAR
+    # -----------------------------------------
     st.sidebar.header("⚙️ Settings")
 
     rate = st.sidebar.number_input("USD → GHS", value=float(rate), step=0.1)
@@ -263,7 +265,9 @@ def stock_app():
         save_stock_holdings(user_id, holdings)
         save_setting(user_id, "stock_cash", cash)
 
+    # -----------------------------------------
     # LIVE PRICES
+    # -----------------------------------------
     try:
         prices = stock_live_prices(list(STOCK_MAP.keys())) or {}
     except Exception:
@@ -370,11 +374,15 @@ def stock_app():
         )
         st.altair_chart(pie, use_container_width=True)
 
+    # -----------------------------------------
     # AUTOSAVE
+    # -----------------------------------------
     if total_value > 0 and not data_degraded:
         autosave_portfolio_value(user_id, total_value, "stock")
 
+    # -----------------------------------------
     # SNAPSHOT
+    # -----------------------------------------
     if st.button("📸 Save Snapshot"):
         if total_value > 0 and not data_degraded:
             force_snapshot(user_id, total_value)
