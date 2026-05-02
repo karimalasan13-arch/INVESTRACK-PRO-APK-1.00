@@ -346,7 +346,7 @@ def stock_app():
     # -----------------------------------------
     # PNL CHART
     # -----------------------------------------
-    st.markdown("### 📊 PnL Curve")
+    st.markdown("### 📊 All-Time PnL Curve")
 
     pnl_df = build_pnl(history, invested)
 
