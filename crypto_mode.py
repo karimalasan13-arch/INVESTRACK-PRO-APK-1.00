@@ -310,7 +310,7 @@ def crypto_app():
     # -------------------------------------
     # PNL CHART
     # -------------------------------------
-    st.subheader("📊 Profit Curve")
+    st.subheader("📊 PnL Curve")
 
     pnl_df = build_pnl_history(history, invested)
 
