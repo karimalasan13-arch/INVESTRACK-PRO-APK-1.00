@@ -82,6 +82,17 @@ def safe_price(symbol, price):
 
 
 # -----------------------------------------
+# LAST GOOD VALUE (NEW)
+# -----------------------------------------
+def get_last_good_value():
+    return st.session_state.get("stock_last_good_value", None)
+
+
+def set_last_good_value(value):
+    st.session_state.stock_last_good_value = value
+
+
+# -----------------------------------------
 # CLEAN HISTORY
 # -----------------------------------------
 def clean_history(history):
@@ -259,7 +270,6 @@ def stock_app():
     # -----------------------------------------
     # LIVE PRICES
     # -----------------------------------------
-    prices = {}
     try:
         prices = stock_live_prices(list(STOCK_MAP.keys())) or {}
     except Exception:
@@ -268,6 +278,7 @@ def stock_app():
     rows = []
     total_value = cash
     price_failures = []
+    data_degraded = False
 
     for sym, qty in holdings.items():
 
@@ -276,12 +287,26 @@ def stock_app():
 
         if price is None:
             price_failures.append(sym)
+            data_degraded = True
             continue
+
+        if not ok:
+            data_degraded = True
 
         value = price * qty * rate
         total_value += value
 
         rows.append([sym, qty, price, value])
+
+    # -----------------------------------------
+    # PREVENT ZERO COLLAPSE
+    # -----------------------------------------
+    last_good = get_last_good_value()
+
+    if total_value > 0 and not data_degraded:
+        set_last_good_value(total_value)
+    elif last_good is not None:
+        total_value = last_good
 
     if cash > 0:
         rows.append(["CASH", "-", "-", cash])
@@ -290,7 +315,7 @@ def stock_app():
     st.dataframe(df, use_container_width=True)
 
     # -----------------------------------------
-    # DATA HEALTH
+    # WARNINGS
     # -----------------------------------------
     if prices == {}:
         st.error("🚨 Stock price feed unavailable — using cached values.")
@@ -305,19 +330,13 @@ def stock_app():
 
     with col1:
         if st.button("📸 Save Snapshot Now"):
-            if total_value > 0:
-                if force_snapshot(user_id, total_value):
-                    st.success("Snapshot saved!")
-                else:
-                    st.error("Snapshot failed.")
-
-    with col2:
-        st.caption("Manual snapshot")
+            if total_value > 0 and not data_degraded:
+                force_snapshot(user_id, total_value)
 
     # -----------------------------------------
-    # AUTOSAVE
+    # AUTOSAVE (PROTECTED)
     # -----------------------------------------
-    if total_value > 0:
+    if total_value > 0 and not data_degraded:
         autosave_portfolio_value(user_id, total_value, "stock")
 
     history = clean_history(load_portfolio_history(user_id))
@@ -336,7 +355,7 @@ def stock_app():
     c3.metric("All-Time PnL", fmt(pnl), pct(pnl_pct))
 
     # -----------------------------------------
-    # VALUE CHART
+    # CHARTS (NOW SAFE)
     # -----------------------------------------
     st.subheader("📈 Portfolio Value Over Time")
 
@@ -349,12 +368,7 @@ def stock_app():
             fill="tozeroy"
         ))
         st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.warning(f"Not enough data ({len(history)} rows)")
 
-    # -----------------------------------------
-    # PNL CHART
-    # -----------------------------------------
     st.subheader("📊 All-Time PnL")
 
     pnl_df = build_pnl(history, invested)
@@ -367,11 +381,9 @@ def stock_app():
             mode="lines"
         ))
         st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.warning("Not enough PnL data")
 
     # -----------------------------------------
-    # MTD / YTD (MATCHES CRYPTO LOGIC)
+    # MTD / YTD
     # -----------------------------------------
     st.markdown("---")
     st.subheader("📆 MTD & YTD Performance")
