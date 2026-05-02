@@ -320,6 +320,12 @@ def stock_app():
     st.markdown("---")
 
     # -----------------------------------------
+    # TABLE
+    # -----------------------------------------
+    st.markdown("### 📋 Holdings Breakdown")
+    st.dataframe(df, use_container_width=True)
+
+    # -----------------------------------------
     # VALUE CHART
     # -----------------------------------------
     st.markdown("### 📈 Portfolio Value")
@@ -355,12 +361,6 @@ def stock_app():
         st.plotly_chart(fig, use_container_width=True)
 
     st.markdown("---")
-
-    # -----------------------------------------
-    # TABLE
-    # -----------------------------------------
-    st.markdown("### 📋 Holdings Breakdown")
-    st.dataframe(df, use_container_width=True)
 
     # -----------------------------------------
     # PIE
