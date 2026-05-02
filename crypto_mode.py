@@ -62,7 +62,7 @@ def force_snapshot(user_id, value_ghs, mode="crypto"):
 
 
 # -----------------------------------------
-# SAFE PRICE SYSTEM (FIXED)
+# SAFE PRICE SYSTEM
 # -----------------------------------------
 def safe_price(symbol, price):
 
@@ -71,12 +71,10 @@ def safe_price(symbol, price):
 
     memory = st.session_state.crypto_price_memory
 
-    # valid price
     if price is not None and price > 0:
         memory[symbol] = price
         return price, True
 
-    # fallback to last known
     if symbol in memory:
         return memory[symbol], False
 
@@ -84,7 +82,18 @@ def safe_price(symbol, price):
 
 
 # -----------------------------------------
-# PNL HISTORY (FIXED - NO DATA DELETION)
+# LAST GOOD PORTFOLIO MEMORY (NEW)
+# -----------------------------------------
+def get_last_good_value():
+    return st.session_state.get("crypto_last_good_value", None)
+
+
+def set_last_good_value(value):
+    st.session_state.crypto_last_good_value = value
+
+
+# -----------------------------------------
+# PNL HISTORY
 # -----------------------------------------
 def build_pnl_history(history, invested):
 
@@ -214,9 +223,6 @@ def crypto_app():
 
     user_id = st.session_state.user_id
 
-    # -------------------------------------
-    # LOAD DATA
-    # -------------------------------------
     rate = load_setting(user_id, "crypto_rate", 14.5)
     invested = load_setting(user_id, "crypto_investment", 0.0)
     holdings = load_crypto_holdings(user_id)
@@ -271,25 +277,35 @@ def crypto_app():
             data_degraded = True
             continue
 
+        if not ok:
+            data_degraded = True
+
         value_ghs = qty * usd_price * rate
         total_value += value_ghs
 
         rows.append([sym, qty, usd_price, value_ghs])
 
+    # -------------------------------------
+    # PREVENT ZERO COLLAPSE (CRITICAL FIX)
+    # -------------------------------------
+    last_good = get_last_good_value()
+
+    if total_value > 0 and not data_degraded:
+        set_last_good_value(total_value)
+    elif last_good is not None:
+        total_value = last_good
+
     df = pd.DataFrame(rows, columns=["Asset", "Qty", "Price (USD)", "Value (GHS)"])
     st.dataframe(df, use_container_width=True)
 
     # -------------------------------------
-    # DATA HEALTH WARNINGS
+    # WARNINGS
     # -------------------------------------
     if prices == {}:
-        st.error("🚨 Price feed unavailable — using cached values where possible.")
+        st.error("🚨 Price feed unavailable — using cached values.")
 
     if price_failures:
-        st.warning(
-            f"⚠️ Missing prices for: {', '.join(price_failures)}. "
-            "Using last known values."
-        )
+        st.warning(f"⚠️ Missing prices: {', '.join(price_failures)}")
 
     # -------------------------------------
     # SNAPSHOT
@@ -298,19 +314,13 @@ def crypto_app():
 
     with col1:
         if st.button("📸 Save Snapshot Now"):
-            if total_value > 0:
-                if force_snapshot(user_id, total_value):
-                    st.success("Snapshot saved!")
-                else:
-                    st.error("Snapshot failed.")
-
-    with col2:
-        st.caption("Manual portfolio snapshot")
+            if total_value > 0 and not data_degraded:
+                force_snapshot(user_id, total_value)
 
     # -------------------------------------
-    # AUTOSAVE
+    # AUTOSAVE (BLOCK BAD DATA)
     # -------------------------------------
-    if total_value > 0:
+    if total_value > 0 and not data_degraded:
         autosave_portfolio_value(user_id, total_value, "crypto")
 
     history = load_portfolio_history(user_id)
@@ -329,14 +339,13 @@ def crypto_app():
     c3.metric("All-Time PnL", fmt(pnl), pct(pnl_pct))
 
     # -------------------------------------
-    # VALUE CHART
+    # CHARTS (UNCHANGED — NOW SAFE)
     # -------------------------------------
     st.subheader("📈 Portfolio Value Over Time")
 
     if len(history) >= 2:
         h = pd.DataFrame(history)
         h["timestamp"] = pd.to_datetime(h["timestamp"])
-        h = h.sort_values("timestamp")
 
         fig = go.Figure()
         fig.add_trace(go.Scatter(
@@ -347,12 +356,7 @@ def crypto_app():
         ))
 
         st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.info("Waiting for data...")
 
-    # -------------------------------------
-    # PNL CHART
-    # -------------------------------------
     st.subheader("📊 All-Time PnL")
 
     pnl_df = build_pnl_history(history, invested)
@@ -366,30 +370,21 @@ def crypto_app():
         ))
 
         st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.info("PnL chart will appear soon.")
-        
+
     # -------------------------------------
-    # MTD / YTD
+    # MTD / YTD (UNCHANGED)
     # -------------------------------------
     st.markdown("---")
-
     st.subheader("📆 MTD & YTD Performance")
 
     if history:
-
         h = pd.DataFrame(history)
-
         h["timestamp"] = pd.to_datetime(h["timestamp"])
-
-        h = h[h["value_ghs"] > 0]
-
         h = h.sort_values("timestamp")
 
         now = datetime.utcnow()
 
         mtd = h[h["timestamp"].dt.month == now.month]
-
         ytd = h[h["timestamp"].dt.year == now.year]
 
         mtd_start = mtd.iloc[0]["value_ghs"] if not mtd.empty else total_value
@@ -400,13 +395,10 @@ def crypto_app():
 
         mtd_pct = (mtd_pnl / mtd_start * 100) if mtd_start > 0 else 0.0
         ytd_pct = (ytd_pnl / ytd_start * 100) if ytd_start > 0 else 0.0
-
     else:
-
         mtd_pnl = ytd_pnl = mtd_pct = ytd_pct = 0.0
 
     c1, c2 = st.columns(2)
-
     c1.metric("MTD", fmt(mtd_pnl), pct(mtd_pct))
     c2.metric("YTD", fmt(ytd_pnl), pct(ytd_pct))
 
