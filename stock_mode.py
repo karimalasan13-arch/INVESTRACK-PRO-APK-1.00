@@ -237,9 +237,7 @@ def stock_app():
 
     holdings = load_stock_holdings(user_id)
 
-    # -----------------------------------------
     # SIDEBAR
-    # -----------------------------------------
     st.sidebar.header("⚙️ Settings")
 
     rate = st.sidebar.number_input("USD → GHS", value=float(rate), step=0.1)
@@ -265,9 +263,7 @@ def stock_app():
         save_stock_holdings(user_id, holdings)
         save_setting(user_id, "stock_cash", cash)
 
-    # -----------------------------------------
     # LIVE PRICES
-    # -----------------------------------------
     try:
         prices = stock_live_prices(list(STOCK_MAP.keys())) or {}
     except Exception:
@@ -278,7 +274,6 @@ def stock_app():
     data_degraded = False
 
     for sym, qty in holdings.items():
-
         raw = prices.get(sym, 0.0)
         price, ok = safe_price(sym, raw)
 
@@ -294,7 +289,6 @@ def stock_app():
 
         rows.append([sym, qty, price, value])
 
-    # prevent collapse
     last_good = get_last_good_value()
 
     if total_value > 0 and not data_degraded:
@@ -308,13 +302,12 @@ def stock_app():
     df = pd.DataFrame(rows, columns=["Asset", "Qty", "Price (USD)", "Value (GHS)"])
 
     # -----------------------------------------
-    # PREMIUM METRICS (TOP CARDS)
+    # METRICS
     # -----------------------------------------
     pnl = total_value - invested
     pnl_pct = (pnl / invested * 100) if invested > 0 else 0.0
 
     st.markdown("### 📊 Overview")
-
     c1, c2, c3 = st.columns(3)
     c1.metric("💰 Total Value", fmt(total_value))
     c2.metric("📥 Invested", fmt(invested))
@@ -323,67 +316,65 @@ def stock_app():
     st.markdown("---")
 
     # -----------------------------------------
-    # CHARTS (SIDE BY SIDE)
+    # VALUE CHART
     # -----------------------------------------
-    col1, col2 = st.columns(2)
+    st.markdown("### 📈 Portfolio Value")
 
     history = clean_history(load_portfolio_history(user_id))
 
-    with col1:
-        st.markdown("#### 📈 Portfolio Value")
-        if len(history) >= 2:
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(
-                x=history["timestamp"],
-                y=history["value_ghs"],
-                mode="lines",
-                fill="tozeroy",
-                line=dict(shape="spline", smoothing=1.2, width=3)
-            ))
-            st.plotly_chart(fig, use_container_width=True)
+    if len(history) >= 2:
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=history["timestamp"],
+            y=history["value_ghs"],
+            mode="lines",
+            fill="tozeroy",
+            line=dict(shape="spline", smoothing=1.2, width=3)
+        ))
+        st.plotly_chart(fig, use_container_width=True)
 
-    with col2:
-        st.markdown("#### 📊 PnL Trend")
-        pnl_df = build_pnl(history, invested)
-        if len(pnl_df) >= 2:
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(
-                x=pnl_df["timestamp"],
-                y=pnl_df["pnl"],
-                mode="lines",
-                line=dict(shape="spline", smoothing=1.2, width=3)
-            ))
-            st.plotly_chart(fig, use_container_width=True)
+    # -----------------------------------------
+    # PNL CHART
+    # -----------------------------------------
+    st.markdown("### 📊 PnL Trend")
+
+    pnl_df = build_pnl(history, invested)
+
+    if len(pnl_df) >= 2:
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=pnl_df["timestamp"],
+            y=pnl_df["pnl"],
+            mode="lines",
+            line=dict(shape="spline", smoothing=1.2, width=3)
+        ))
+        st.plotly_chart(fig, use_container_width=True)
 
     st.markdown("---")
 
     # -----------------------------------------
-    # TABLE + PIE
+    # TABLE
     # -----------------------------------------
-    col1, col2 = st.columns([1.5, 1])
-
-    with col1:
-        st.markdown("#### 📋 Holdings Breakdown")
-        st.dataframe(df, use_container_width=True)
-
-    with col2:
-        st.markdown("#### 🍕 Allocation")
-        if not df.empty:
-            pie = alt.Chart(df[df["Value (GHS)"] > 0]).mark_arc().encode(
-                theta="Value (GHS):Q",
-                color="Asset:N",
-            )
-            st.altair_chart(pie, use_container_width=True)
+    st.markdown("### 📋 Holdings Breakdown")
+    st.dataframe(df, use_container_width=True)
 
     # -----------------------------------------
+    # PIE
+    # -----------------------------------------
+    st.markdown("### 🍕 Allocation")
+
+    if not df.empty:
+        pie = alt.Chart(df[df["Value (GHS)"] > 0]).mark_arc().encode(
+            theta="Value (GHS):Q",
+            color="Asset:N",
+        )
+        st.altair_chart(pie, use_container_width=True)
+
     # AUTOSAVE
-    # -----------------------------------------
     if total_value > 0 and not data_degraded:
         autosave_portfolio_value(user_id, total_value, "stock")
 
-    # -----------------------------------------
-    # SNAPSHOT BUTTON
-    # -----------------------------------------
+    # SNAPSHOT
     if st.button("📸 Save Snapshot"):
         if total_value > 0 and not data_degraded:
             force_snapshot(user_id, total_value)
