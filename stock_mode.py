@@ -328,7 +328,7 @@ def stock_app():
     # -----------------------------------------
     # VALUE CHART
     # -----------------------------------------
-    st.markdown("### 📈 Portfolio Value")
+    st.markdown("### 📈 Portfolio Trend")
 
     history = clean_history(load_portfolio_history(user_id))
 
@@ -346,7 +346,7 @@ def stock_app():
     # -----------------------------------------
     # PNL CHART
     # -----------------------------------------
-    st.markdown("### 📊 PnL Trend")
+    st.markdown("### 📊 PnL Curve")
 
     pnl_df = build_pnl(history, invested)
 
