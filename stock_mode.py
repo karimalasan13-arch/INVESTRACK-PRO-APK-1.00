@@ -250,7 +250,7 @@ def stock_app():
         save_setting(user_id, "stock_investment", invested)
 
     st.sidebar.markdown("---")
-    st.sidebar.subheader("📦 Holdings")
+    st.sidebar.subheader("Holdings")
 
     for sym in STOCK_MAP:
         holdings[sym] = st.sidebar.number_input(
@@ -259,7 +259,7 @@ def stock_app():
             step=1.0
         )
 
-    cash = st.sidebar.number_input("💵 Cash", value=float(cash), step=10.0)
+    cash = st.sidebar.number_input("Cash", value=float(cash), step=10.0)
 
     if st.sidebar.button("💾 Save Holdings"):
         save_stock_holdings(user_id, holdings)
@@ -313,9 +313,9 @@ def stock_app():
 
     st.markdown("### 📊 Overview")
     c1, c2, c3 = st.columns(3)
-    c1.metric("💰 Total Value", fmt(total_value))
-    c2.metric("📥 Invested", fmt(invested))
-    c3.metric("📈 PnL", fmt(pnl), pct(pnl_pct))
+    c1.metric("Total Value", fmt(total_value))
+    c2.metric("Invested", fmt(invested))
+    c3.metric("PnL", fmt(pnl), pct(pnl_pct))
 
     st.markdown("---")
 
@@ -346,7 +346,7 @@ def stock_app():
     # -----------------------------------------
     # PNL CHART
     # -----------------------------------------
-    st.markdown("### 📊 All-Time PnL Curve")
+    st.markdown("All-Time PnL Curve")
 
     pnl_df = build_pnl(history, invested)
 
@@ -365,7 +365,7 @@ def stock_app():
     # -----------------------------------------
     # PIE
     # -----------------------------------------
-    st.markdown("### 🍕 Allocation")
+    st.markdown("Allocation")
 
     if not df.empty:
         pie = alt.Chart(df[df["Value (GHS)"] > 0]).mark_arc().encode(
@@ -383,6 +383,6 @@ def stock_app():
     # -----------------------------------------
     # SNAPSHOT
     # -----------------------------------------
-    if st.button("📸 Save Snapshot"):
+    if st.button("Save Snapshot"):
         if total_value > 0 and not data_degraded:
             force_snapshot(user_id, total_value)
