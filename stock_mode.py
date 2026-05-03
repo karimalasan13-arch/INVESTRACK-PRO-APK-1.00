@@ -223,7 +223,7 @@ def pct(v): return f"{v:.2f}%"
 # -----------------------------------------
 def stock_app():
 
-    st.title("📊 Stock Portfolio Dashboard")
+    st.title("Stock Portfolio Dashboard")
 
     if "user_id" not in st.session_state:
         st.error("User not logged in.")
@@ -322,13 +322,13 @@ def stock_app():
     # -----------------------------------------
     # TABLE
     # -----------------------------------------
-    st.markdown("### 📋 Holdings Breakdown")
+    st.markdown("Holdings Breakdown")
     st.dataframe(df, use_container_width=True)
 
     # -----------------------------------------
     # VALUE CHART
     # -----------------------------------------
-    st.markdown("### 📈 Portfolio Trend")
+    st.markdown("Portfolio Trend")
 
     history = clean_history(load_portfolio_history(user_id))
 
