@@ -180,7 +180,7 @@ def pct(v): return f"{v:.2f}%"
 # -----------------------------------------
 def crypto_app():
 
-    st.title("💎 Crypto Dashboard")
+    st.title("Crypto Dashboard")
 
     if "user_id" not in st.session_state:
         st.error("User not logged in.")
@@ -205,7 +205,7 @@ def crypto_app():
         save_setting(user_id, "crypto_investment", invested)
 
     st.sidebar.markdown("---")
-    st.sidebar.subheader("📦 Holdings")
+    st.sidebar.subheader("Holdings")
 
     for sym in API_MAP:
         holdings[sym] = st.sidebar.number_input(sym, value=float(holdings.get(sym, 0.0)), step=0.0001)
@@ -261,9 +261,9 @@ def crypto_app():
     st.subheader("📊 Overview")
 
     c1, c2, c3 = st.columns(3)
-    c1.metric("💰 Portfolio Value", fmt(total_value))
-    c2.metric("📥 Invested", fmt(invested))
-    c3.metric("📈 PnL", fmt(pnl), pct(pnl_pct))
+    c1.metric("Portfolio Value", fmt(total_value))
+    c2.metric("Invested", fmt(invested))
+    c3.metric("PnL", fmt(pnl), pct(pnl_pct))
 
     st.markdown("---")
 
@@ -284,7 +284,7 @@ def crypto_app():
     # -------------------------------------
     # VALUE CHART (SMOOTH + POLISHED)
     # -------------------------------------
-    st.subheader("📈 Portfolio Trend")
+    st.subheader("Portfolio Trend")
 
     if len(history) >= 2:
         h = pd.DataFrame(history)
@@ -310,7 +310,7 @@ def crypto_app():
     # -------------------------------------
     # PNL CHART
     # -------------------------------------
-    st.subheader("📊 All-Time PnL Curve")
+    st.subheader("All-Time PnL Curve")
 
     pnl_df = build_pnl_history(history, invested)
 
@@ -334,7 +334,7 @@ def crypto_app():
     # -------------------------------------
     # PIE
     # -------------------------------------
-    st.subheader("🍕 Allocation")
+    st.subheader("Allocation")
 
     if not df.empty:
         pie = alt.Chart(df[df["Value (GHS)"] > 0]).mark_arc().encode(
