@@ -270,7 +270,7 @@ def crypto_app():
     # -------------------------------------
     # TABLE
     # -------------------------------------
-    st.subheader("📋 Holdings Breakdown")
+    st.subheader("Holdings Breakdown")
     st.dataframe(df, use_container_width=True)
 
     # -------------------------------------
