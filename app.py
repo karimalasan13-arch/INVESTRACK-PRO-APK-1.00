@@ -50,7 +50,7 @@ elif now - st.session_state.last_refresh > REFRESH_INTERVAL:
 # ------------------------------------
 st.sidebar.success(f"Logged in as\n{user.email}")
 
-if st.sidebar.button("🚪 Logout"):
+if st.sidebar.button("Logout"):
     logout()
     st.stop()
 
