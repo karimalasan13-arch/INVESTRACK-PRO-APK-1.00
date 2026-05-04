@@ -27,4 +27,4 @@ Users may request deletion of their account and associated data at any time by c
 ## Contact Information
 If you have any questions about this Privacy Policy, please contact:
 
-**Email:** support@investrackpro.app
+**Email:** hassbuildllc@gmail.com
