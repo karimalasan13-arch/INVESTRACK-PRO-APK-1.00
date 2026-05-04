@@ -27,7 +27,7 @@ Users may request deletion of their account and all associated data at any time.
 
 To request account deletion, please email:
 
-**delete@investrackpro.app**
+**hassbuildllc@gmail.com**
 
 Include the email address associated with your InvesTrack Pro account.  
 Account deletion requests are processed within 7 business days.
@@ -35,4 +35,4 @@ Account deletion requests are processed within 7 business days.
 ## Contact Information
 If you have any questions about this Privacy Policy, please contact:
 
-**Email:** support@investrackpro.app
+**Email:** hassbuildllc@gmail.com
