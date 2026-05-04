@@ -326,41 +326,6 @@ def stock_app():
     st.dataframe(df, use_container_width=True)
 
     # -----------------------------------------
-    # MTD / YTD
-    # -----------------------------------------
-    st.markdown("---")
-    st.subheader("📆 MTD & YTD Performance")
-
-    mtd_pnl = ytd_pnl = mtd_pct = ytd_pct = 0.0
-
-    if not history.empty:
-
-        h = history.copy()
-        h["timestamp"] = pd.to_datetime(h["timestamp"])
-        h = h.sort_values("timestamp")
-
-        now = datetime.utcnow()
-
-        mtd = h[(h["timestamp"].dt.month == now.month) &
-                (h["timestamp"].dt.year == now.year)]
-
-        ytd = h[h["timestamp"].dt.year == now.year]
-
-        if not mtd.empty:
-            mtd_start = mtd.iloc[0]["value_ghs"]
-            mtd_pnl = total_value - mtd_start
-            mtd_pct = (mtd_pnl / mtd_start * 100) if mtd_start > 0 else 0.0
-
-        if not ytd.empty:
-            ytd_start = ytd.iloc[0]["value_ghs"]
-            ytd_pnl = total_value - ytd_start
-            ytd_pct = (ytd_pnl / ytd_start * 100) if ytd_start > 0 else 0.0
-
-    c1, c2 = st.columns(2)
-    c1.metric("MTD", fmt(mtd_pnl), pct(mtd_pct))
-    c2.metric("YTD", fmt(ytd_pnl), pct(ytd_pct))
-
-    # -----------------------------------------
     # VALUE CHART
     # -----------------------------------------
     st.markdown("Portfolio Trend")
