@@ -10,6 +10,57 @@ from db import get_supabase
 
 
 # -----------------------------------------
+# FINTECH UI STYLING
+# -----------------------------------------
+def apply_fintech_style():
+    st.markdown("""
+    <style>
+    .block-container {
+        padding-top: 1.5rem;
+        padding-bottom: 2rem;
+        max-width: 1100px;
+    }
+
+    .card {
+        background: linear-gradient(145deg, #0f172a, #111827);
+        border-radius: 16px;
+        padding: 20px;
+        margin-bottom: 18px;
+        box-shadow: 0 6px 20px rgba(0,0,0,0.35);
+        border: 1px solid rgba(255,255,255,0.04);
+    }
+
+    .metric-title {
+        font-size: 13px;
+        color: #94a3b8;
+        margin-bottom: 6px;
+    }
+
+    .metric-value {
+        font-size: 26px;
+        font-weight: 600;
+        color: white;
+    }
+
+    .section-title {
+        font-size: 16px;
+        font-weight: 600;
+        margin-bottom: 10px;
+        color: #cbd5f5;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+
+def card(title):
+    st.markdown(f'<div class="card"><div class="section-title">{title}</div>', unsafe_allow_html=True)
+
+
+def end_card():
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+# -----------------------------------------
 # STOCK MAP
 # -----------------------------------------
 STOCK_MAP = {
@@ -62,7 +113,7 @@ def force_snapshot(user_id, value_ghs, mode="stock"):
 
 
 # -----------------------------------------
-# SAFE PRICE SYSTEM
+# SAFE PRICE
 # -----------------------------------------
 def safe_price(symbol, price):
 
@@ -212,7 +263,7 @@ def load_portfolio_history(user_id):
 
 
 # -----------------------------------------
-# FORMATTERS
+# FORMAT
 # -----------------------------------------
 def fmt(v): return f"GHS {v:,.2f}"
 def pct(v): return f"{v:.2f}%"
@@ -223,7 +274,9 @@ def pct(v): return f"{v:.2f}%"
 # -----------------------------------------
 def stock_app():
 
-    st.title("Stock Portfolio Dashboard")
+    apply_fintech_style()
+
+    st.title("📊 Stock Portfolio Dashboard")
 
     if "user_id" not in st.session_state:
         st.error("User not logged in.")
@@ -237,9 +290,7 @@ def stock_app():
 
     holdings = load_stock_holdings(user_id)
 
-    # -----------------------------------------
     # SIDEBAR
-    # -----------------------------------------
     st.sidebar.header("⚙️ Settings")
 
     rate = st.sidebar.number_input("USD → GHS", value=float(rate), step=0.1)
@@ -265,9 +316,7 @@ def stock_app():
         save_stock_holdings(user_id, holdings)
         save_setting(user_id, "stock_cash", cash)
 
-    # -----------------------------------------
-    # LIVE PRICES
-    # -----------------------------------------
+    # PRICES
     try:
         prices = stock_live_prices(list(STOCK_MAP.keys())) or {}
     except Exception:
@@ -305,31 +354,30 @@ def stock_app():
 
     df = pd.DataFrame(rows, columns=["Asset", "Qty", "Price (USD)", "Value (GHS)"])
 
-    # -----------------------------------------
-    # METRICS
-    # -----------------------------------------
+    # KPI CARD
     pnl = total_value - invested
     pnl_pct = (pnl / invested * 100) if invested > 0 else 0.0
 
-    st.markdown("### 📊 Overview")
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Total Value", fmt(total_value))
-    c2.metric("Invested", fmt(invested))
-    c3.metric("PnL", fmt(pnl), pct(pnl_pct))
+    card("📊 Overview")
+    st.markdown(f"""
+    <div class="metric-title">Total Value</div>
+    <div class="metric-value">{fmt(total_value)}</div>
+    <br>
+    <div class="metric-title">Invested</div>
+    <div class="metric-value">{fmt(invested)}</div>
+    <br>
+    <div class="metric-title">PnL</div>
+    <div class="metric-value">{fmt(pnl)} ({pct(pnl_pct)})</div>
+    """, unsafe_allow_html=True)
+    end_card()
 
-    st.markdown("---")
-
-    # -----------------------------------------
     # TABLE
-    # -----------------------------------------
-    st.markdown("Holdings Breakdown")
+    card("📋 Holdings Breakdown")
     st.dataframe(df, use_container_width=True)
+    end_card()
 
-    # -----------------------------------------
     # VALUE CHART
-    # -----------------------------------------
-    st.markdown("Portfolio Trend")
-
+    card("📈 Portfolio Trend")
     history = clean_history(load_portfolio_history(user_id))
 
     if len(history) >= 2:
@@ -339,15 +387,15 @@ def stock_app():
             y=history["value_ghs"],
             mode="lines",
             fill="tozeroy",
-            line=dict(shape="spline", smoothing=1.2, width=3)
+            line=dict(shape="spline", smoothing=1.2, width=3),
+            hovertemplate="GHS %{y:,.2f}<extra></extra>"
         ))
+        fig.update_layout(margin=dict(l=10, r=10, t=10, b=10))
         st.plotly_chart(fig, use_container_width=True)
+    end_card()
 
-    # -----------------------------------------
-    # PNL CHART
-    # -----------------------------------------
-    st.markdown("All-Time PnL Curve")
-
+    # PNL
+    card("📊 PnL Curve")
     pnl_df = build_pnl(history, invested)
 
     if len(pnl_df) >= 2:
@@ -356,33 +404,28 @@ def stock_app():
             x=pnl_df["timestamp"],
             y=pnl_df["pnl"],
             mode="lines",
-            line=dict(shape="spline", smoothing=1.2, width=3)
+            line=dict(shape="spline", smoothing=1.2, width=3),
+            hovertemplate="GHS %{y:,.2f}<extra></extra>"
         ))
+        fig.update_layout(margin=dict(l=10, r=10, t=10, b=10))
         st.plotly_chart(fig, use_container_width=True)
+    end_card()
 
-    st.markdown("---")
-
-    # -----------------------------------------
     # PIE
-    # -----------------------------------------
-    st.markdown("Allocation")
-
+    card("🍕 Allocation")
     if not df.empty:
         pie = alt.Chart(df[df["Value (GHS)"] > 0]).mark_arc().encode(
             theta="Value (GHS):Q",
             color="Asset:N",
         )
         st.altair_chart(pie, use_container_width=True)
+    end_card()
 
-    # -----------------------------------------
     # AUTOSAVE
-    # -----------------------------------------
     if total_value > 0 and not data_degraded:
         autosave_portfolio_value(user_id, total_value, "stock")
 
-    # -----------------------------------------
     # SNAPSHOT
-    # -----------------------------------------
-    if st.button("Save Snapshot"):
+    if st.button("📸 Save Snapshot"):
         if total_value > 0 and not data_degraded:
             force_snapshot(user_id, total_value)
