@@ -64,7 +64,7 @@ st.sidebar.markdown(
     ---
     🗑 **Delete Account**
 
-    Email **delete@investrackpro.app**
+    Email **hassbuildllc@gmail.com**
     """
 )
 
