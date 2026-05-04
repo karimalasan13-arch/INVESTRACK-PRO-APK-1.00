@@ -10,45 +10,6 @@ from db import get_supabase
 
 
 # -----------------------------------------
-# 🎨 FINTECH UI STYLE
-# -----------------------------------------
-st.markdown("""
-<style>
-[data-testid="stAppViewContainer"] {
-    background-color: #0e1117;
-}
-
-.fin-card {
-    background: linear-gradient(145deg, #111827, #0b1220);
-    border: 1px solid rgba(255,255,255,0.05);
-    border-radius: 14px;
-    padding: 18px;
-    margin-bottom: 16px;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.35);
-}
-
-.fin-title {
-    font-size: 16px;
-    font-weight: 600;
-    margin-bottom: 10px;
-    color: #e5e7eb;
-}
-</style>
-""", unsafe_allow_html=True)
-
-
-def card(title=None):
-    if title:
-        st.markdown(f'<div class="fin-card"><div class="fin-title">{title}</div>', unsafe_allow_html=True)
-    else:
-        st.markdown('<div class="fin-card">', unsafe_allow_html=True)
-
-
-def end_card():
-    st.markdown('</div>', unsafe_allow_html=True)
-
-
-# -----------------------------------------
 # CONFIG
 # -----------------------------------------
 API_MAP = {
@@ -219,7 +180,7 @@ def pct(v): return f"{v:.2f}%"
 # -----------------------------------------
 def crypto_app():
 
-    st.title("💰 Crypto Dashboard")
+    st.title("Crypto Dashboard")
 
     if "user_id" not in st.session_state:
         st.error("User not logged in.")
@@ -231,7 +192,9 @@ def crypto_app():
     invested = load_setting(user_id, "crypto_investment", 0.0)
     holdings = load_crypto_holdings(user_id)
 
+    # -------------------------------------
     # SIDEBAR
+    # -------------------------------------
     st.sidebar.header("⚙️ Settings")
 
     rate = st.sidebar.number_input("USD → GHS", value=float(rate), step=0.1)
@@ -250,7 +213,9 @@ def crypto_app():
     if st.sidebar.button("💾 Save Holdings"):
         save_crypto_holdings(user_id, holdings)
 
+    # -------------------------------------
     # PRICES
+    # -------------------------------------
     try:
         prices = crypto_live_prices() or {}
     except Exception:
@@ -275,6 +240,9 @@ def crypto_app():
         total_value += val
         rows.append([sym, qty, price, val])
 
+    # -------------------------------------
+    # PROTECTION
+    # -------------------------------------
     last_good = get_last_good_value()
 
     if total_value > 0 and not data_degraded:
@@ -285,34 +253,38 @@ def crypto_app():
     df = pd.DataFrame(rows, columns=["Asset", "Qty", "Price (USD)", "Value (GHS)"])
 
     # -------------------------------------
-    # OVERVIEW CARD
+    # KPI CARDS (UPGRADED)
     # -------------------------------------
     pnl = total_value - invested
     pnl_pct = (pnl / invested * 100) if invested > 0 else 0.0
 
-    card("📊 Overview")
-    st.metric("Portfolio Value", fmt(total_value))
-    st.metric("Invested", fmt(invested))
-    st.metric("PnL", fmt(pnl), pct(pnl_pct))
-    end_card()
+    st.subheader("📊 Overview")
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Portfolio Value", fmt(total_value))
+    c2.metric("Invested", fmt(invested))
+    c3.metric("PnL", fmt(pnl), pct(pnl_pct))
+
+    st.markdown("---")
 
     # -------------------------------------
     # TABLE
     # -------------------------------------
-    card("📋 Holdings Breakdown")
+    st.subheader("Holdings Breakdown")
     st.dataframe(df, use_container_width=True)
-    end_card()
 
+    # -------------------------------------
     # AUTOSAVE
+    # -------------------------------------
     if total_value > 0 and not data_degraded:
         autosave_portfolio_value(user_id, total_value, "crypto")
 
     history = load_portfolio_history(user_id)
 
     # -------------------------------------
-    # VALUE CHART
+    # VALUE CHART (SMOOTH + POLISHED)
     # -------------------------------------
-    card("📈 Portfolio Trend")
+    st.subheader("Portfolio Trend")
 
     if len(history) >= 2:
         h = pd.DataFrame(history)
@@ -328,15 +300,17 @@ def crypto_app():
             hovertemplate="GHS %{y:,.2f}<extra></extra>"
         ))
 
-        fig.update_layout(margin=dict(l=10, r=10, t=10, b=10))
-        st.plotly_chart(fig, use_container_width=True)
+        fig.update_layout(
+            margin=dict(l=10, r=10, t=10, b=10),
+            hovermode="x unified"
+        )
 
-    end_card()
+        st.plotly_chart(fig, use_container_width=True)
 
     # -------------------------------------
     # PNL CHART
     # -------------------------------------
-    card("📊 PnL Curve")
+    st.subheader("All-Time PnL Curve")
 
     pnl_df = build_pnl_history(history, invested)
 
@@ -350,15 +324,17 @@ def crypto_app():
             hovertemplate="GHS %{y:,.2f}<extra></extra>"
         ))
 
-        fig.update_layout(margin=dict(l=10, r=10, t=10, b=10))
-        st.plotly_chart(fig, use_container_width=True)
+        fig.update_layout(
+            margin=dict(l=10, r=10, t=10, b=10),
+            hovermode="x unified"
+        )
 
-    end_card()
+        st.plotly_chart(fig, use_container_width=True)
 
     # -------------------------------------
     # PIE
     # -------------------------------------
-    card("🍕 Allocation")
+    st.subheader("Allocation")
 
     if not df.empty:
         pie = alt.Chart(df[df["Value (GHS)"] > 0]).mark_arc().encode(
@@ -366,16 +342,3 @@ def crypto_app():
             color="Asset:N",
         )
         st.altair_chart(pie, use_container_width=True)
-
-    end_card()
-
-    # -------------------------------------
-    # SNAPSHOT BUTTON
-    # -------------------------------------
-    card()
-
-    if st.button("📸 Save Snapshot"):
-        if total_value > 0 and not data_degraded:
-            force_snapshot(user_id, total_value)
-
-    end_card()
