@@ -309,48 +309,106 @@ def stock_app():
 
     df = pd.DataFrame(rows, columns=["Asset", "Qty", "Price (USD)", "Value (GHS)"])
 
-    # -----------------------------------------
-    # METRICS
-    # -----------------------------------------
+    # -------------------------------------
+    # KPI
+    # -------------------------------------
     pnl = total_value - invested
     pnl_pct = (pnl / invested * 100) if invested > 0 else 0.0
 
-    st.markdown("### 📊 Overview")
-    st.metric("Total Value", fmt(total_value))
-    st.metric("Invested", fmt(invested))
-    st.metric("All-Time PnL", fmt(pnl), pct(pnl_pct))
+    st.subheader("📊 Overview")
 
-    # -----------------------------------------
-    # MTD / YTD
-    # -----------------------------------------
-    history = clean_history(load_portfolio_history(user_id))
+    # TOP ROW
+    top1, top2, top3 = st.columns(3)
+
+    top1.metric(
+        "Portfolio Value",
+        fmt(total_value)
+    )
+
+    top2.metric(
+        "Invested",
+        fmt(invested)
+    )
+
+    top3.metric(
+        "PnL",
+        fmt(pnl),
+        pct(pnl_pct)
+    )
+
+    # -------------------------------------
+    # SAFE MTD / YTD
+    # -------------------------------------
+    history = load_portfolio_history(user_id)
 
     mtd_pnl = ytd_pnl = mtd_pct = ytd_pct = 0.0
 
-    if not history.empty:
-        now = datetime.utcnow()
+    if history and len(history) >= 2:
+        try:
+            h = pd.DataFrame(history)
 
-        mtd = history[
-            (history["timestamp"].dt.month == now.month) &
-            (history["timestamp"].dt.year == now.year)
-        ]
+            h["timestamp"] = pd.to_datetime(
+                h["timestamp"],
+                errors="coerce"
+            )
 
-        ytd = history[history["timestamp"].dt.year == now.year]
+            h["value_ghs"] = pd.to_numeric(
+                h["value_ghs"],
+                errors="coerce"
+            )
 
-        if not mtd.empty:
-            start = mtd.iloc[0]["value_ghs"]
-            mtd_pnl = total_value - start
-            mtd_pct = (mtd_pnl / start * 100) if start > 0 else 0.0
+            h = h.dropna().sort_values("timestamp")
 
-        if not ytd.empty:
-            start = ytd.iloc[0]["value_ghs"]
-            ytd_pnl = total_value - start
-            ytd_pct = (ytd_pnl / start * 100) if start > 0 else 0.0
+            if not h.empty:
 
-    st.markdown(
-        f"**MTD:** {fmt(mtd_pnl)} ({color_pct(mtd_pct)})  \n"
-        f"**YTD:** {fmt(ytd_pnl)} ({color_pct(ytd_pct)})",
-        unsafe_allow_html=True
+                now = datetime.utcnow()
+
+                mtd = h[
+                    (h["timestamp"].dt.month == now.month) &
+                    (h["timestamp"].dt.year == now.year)
+                ]
+
+                ytd = h[
+                    h["timestamp"].dt.year == now.year
+                ]
+
+                if not mtd.empty:
+                    start = mtd.iloc[0]["value_ghs"]
+
+                    if start > 0:
+                        mtd_pnl = total_value - start
+                        mtd_pct = (mtd_pnl / start) * 100
+
+                if not ytd.empty:
+                    start = ytd.iloc[0]["value_ghs"]
+
+                    if start > 0:
+                        ytd_pnl = total_value - start
+                        ytd_pct = (ytd_pnl / start) * 100
+
+        except Exception as e:
+            print("MTD/YTD error:", e)
+
+    def color_pct(v):
+        if v > 0:
+            return f"🟢 {pct(v)}"
+        elif v < 0:
+            return f"🔴 {pct(v)}"
+        return pct(v)
+
+    # SECOND ROW
+    bottom1, bottom2 = st.columns(2)
+
+    bottom1.metric(
+        "MTD",
+        fmt(mtd_pnl),
+        color_pct(mtd_pct)
+    )
+
+    bottom2.metric(
+        "YTD",
+        fmt(ytd_pnl),
+        color_pct(ytd_pct)
     )
 
     st.markdown("---")
