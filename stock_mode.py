@@ -315,90 +315,45 @@ def stock_app():
     pnl = total_value - invested
     pnl_pct = (pnl / invested * 100) if invested > 0 else 0.0
 
-    st.subheader("📊 Overview")
+    st.markdown("### 📊 Overview")
+    st.metric("Total Value", fmt(total_value))
+    st.metric("Invested", fmt(invested))
+    st.metric("All-Time PnL", fmt(pnl), pct(pnl_pct))
 
-    # TOP ROW
-    top1, top2, top3 = st.columns(3)
-
-    top1.metric(
-        "Portfolio Value",
-        fmt(total_value)
-    )
-
-    top2.metric(
-        "Invested",
-        fmt(invested)
-    )
-
-    top3.metric(
-        "PnL",
-        fmt(pnl),
-        pct(pnl_pct)
-    )
     # -----------------------------------------
-# MTD / YTD
-# -----------------------------------------
-history = clean_history(load_portfolio_history(user_id))
+    # MTD / YTD
+    # -----------------------------------------
+    history = clean_history(load_portfolio_history(user_id))
 
-mtd_pnl = 0.0
-ytd_pnl = 0.0
-mtd_pct = 0.0
-ytd_pct = 0.0
+    mtd_pnl = ytd_pnl = mtd_pct = ytd_pct = 0.0
 
-if not history.empty:
+    if not history.empty:
+        now = datetime.utcnow()
 
-    now = datetime.utcnow()
+        mtd = history[
+            (history["timestamp"].dt.month == now.month) &
+            (history["timestamp"].dt.year == now.year)
+        ]
 
-    # MONTH TO DATE
-    mtd = history[
-        (history["timestamp"].dt.month == now.month) &
-        (history["timestamp"].dt.year == now.year)
-    ]
+        ytd = history[history["timestamp"].dt.year == now.year]
 
-    # YEAR TO DATE
-    ytd = history[
-        history["timestamp"].dt.year == now.year
-    ]
+        if not mtd.empty:
+            start = mtd.iloc[0]["value_ghs"]
+            mtd_pnl = total_value - start
+            mtd_pct = (mtd_pnl / start * 100) if start > 0 else 0.0
 
-    # MTD
-    if not mtd.empty:
+        if not ytd.empty:
+            start = ytd.iloc[0]["value_ghs"]
+            ytd_pnl = total_value - start
+            ytd_pct = (ytd_pnl / start * 100) if start > 0 else 0.0
 
-        start_mtd = float(mtd.iloc[0]["value_ghs"])
+    st.markdown(
+        f"**MTD:** {fmt(mtd_pnl)} ({color_pct(mtd_pct)})  \n"
+        f"**YTD:** {fmt(ytd_pnl)} ({color_pct(ytd_pct)})",
+        unsafe_allow_html=True
+    )
 
-        if start_mtd > 0:
-            mtd_pnl = total_value - start_mtd
-            mtd_pct = (mtd_pnl / start_mtd) * 100
-
-    # YTD
-    if not ytd.empty:
-
-        start_ytd = float(ytd.iloc[0]["value_ghs"])
-
-        if start_ytd > 0:
-            ytd_pnl = total_value - start_ytd
-            ytd_pct = (ytd_pnl / start_ytd) * 100
-
-
-# -----------------------------------------
-# SECOND ROW
-# -----------------------------------------
-bottom1, bottom2 = st.columns(2)
-
-# MTD
-bottom1.metric(
-    label="MTD",
-    value=fmt(mtd_pnl),
-    delta=pct(mtd_pct),
-    delta_color="normal"
-)
-
-# YTD
-bottom2.metric(
-    label="YTD",
-    value=fmt(ytd_pnl),
-    delta=pct(ytd_pct),
-    delta_color="normal"
-)
+    st.markdown("---")
 
     # TABLE
     st.markdown("Holdings Breakdown")
