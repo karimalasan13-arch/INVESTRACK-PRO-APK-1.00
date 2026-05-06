@@ -103,9 +103,7 @@ def build_pnl_history(history, invested):
     h["timestamp"] = pd.to_datetime(h["timestamp"], errors="coerce")
     h["value_ghs"] = pd.to_numeric(h["value_ghs"], errors="coerce")
 
-    h = h.dropna()
-    h = h.sort_values("timestamp")
-
+    h = h.dropna().sort_values("timestamp")
     h["pnl"] = h["value_ghs"] - invested
     return h
 
@@ -250,53 +248,49 @@ def crypto_app():
 
     df = pd.DataFrame(rows, columns=["Asset", "Qty", "Price (USD)", "Value (GHS)"])
 
-    # KPI
+    # =========================
+    # 📊 OVERVIEW (FINTECH FLOW)
+    # =========================
+    st.subheader("📊 Overview")
+
     pnl = total_value - invested
     pnl_pct = (pnl / invested * 100) if invested > 0 else 0.0
 
-    st.subheader("📊 Overview")
-    st.metric("Portfolio Value", fmt(total_value))
-    st.metric("Invested", fmt(invested))
-    st.metric("PnL", fmt(pnl), pct(pnl_pct))
+    st.metric("💰 Portfolio Value", fmt(total_value))
+    st.metric("📥 Invested", fmt(invested))
+    st.metric("📈 All-Time PnL", fmt(pnl), pct(pnl_pct))
 
-    # -------------------------------------
-    # ✅ SAFE MTD / YTD (FIXED CRASH)
-    # -------------------------------------
+    # =========================
+    # 📆 MTD / YTD
+    # =========================
     history = load_portfolio_history(user_id)
 
     mtd_pnl = ytd_pnl = mtd_pct = ytd_pct = 0.0
 
     if history and len(history) >= 2:
-        try:
-            h = pd.DataFrame(history)
+        h = pd.DataFrame(history)
+        h["timestamp"] = pd.to_datetime(h["timestamp"], errors="coerce")
+        h["value_ghs"] = pd.to_numeric(h["value_ghs"], errors="coerce")
+        h = h.dropna().sort_values("timestamp")
 
-            h["timestamp"] = pd.to_datetime(h["timestamp"], errors="coerce")
-            h["value_ghs"] = pd.to_numeric(h["value_ghs"], errors="coerce")
+        now = datetime.utcnow()
 
-            h = h.dropna().sort_values("timestamp")
+        mtd = h[(h["timestamp"].dt.month == now.month) &
+                (h["timestamp"].dt.year == now.year)]
 
-            if not h.empty:
-                now = datetime.utcnow()
+        ytd = h[h["timestamp"].dt.year == now.year]
 
-                mtd = h[(h["timestamp"].dt.month == now.month) &
-                        (h["timestamp"].dt.year == now.year)]
+        if not mtd.empty:
+            start = mtd.iloc[0]["value_ghs"]
+            if start > 0:
+                mtd_pnl = total_value - start
+                mtd_pct = (mtd_pnl / start * 100)
 
-                ytd = h[h["timestamp"].dt.year == now.year]
-
-                if not mtd.empty:
-                    start = mtd.iloc[0]["value_ghs"]
-                    if start > 0:
-                        mtd_pnl = total_value - start
-                        mtd_pct = (mtd_pnl / start * 100)
-
-                if not ytd.empty:
-                    start = ytd.iloc[0]["value_ghs"]
-                    if start > 0:
-                        ytd_pnl = total_value - start
-                        ytd_pct = (ytd_pnl / start * 100)
-
-        except Exception as e:
-            print("MTD/YTD error:", e)
+        if not ytd.empty:
+            start = ytd.iloc[0]["value_ghs"]
+            if start > 0:
+                ytd_pnl = total_value - start
+                ytd_pct = (ytd_pnl / start * 100)
 
     def color_pct(v):
         if v > 0:
@@ -305,13 +299,13 @@ def crypto_app():
             return f"🔴 {pct(v)}"
         return pct(v)
 
-    st.metric("MTD", fmt(mtd_pnl), color_pct(mtd_pct))
-    st.metric("YTD", fmt(ytd_pnl), color_pct(ytd_pct))
+    st.metric("📆 MTD", fmt(mtd_pnl), color_pct(mtd_pct))
+    st.metric("📆 YTD", fmt(ytd_pnl), color_pct(ytd_pct))
 
     st.markdown("---")
 
     # TABLE
-    st.subheader("Holdings Breakdown")
+    st.subheader("📋 Holdings Breakdown")
     st.dataframe(df, use_container_width=True)
 
     # AUTOSAVE
@@ -319,7 +313,7 @@ def crypto_app():
         autosave_portfolio_value(user_id, total_value, "crypto")
 
     # CHARTS
-    st.subheader("Portfolio Trend")
+    st.subheader("📈 Portfolio Trend")
 
     if len(history) >= 2:
         h = pd.DataFrame(history)
@@ -327,18 +321,17 @@ def crypto_app():
         h["value_ghs"] = pd.to_numeric(h["value_ghs"], errors="coerce")
         h = h.dropna()
 
-        if not h.empty:
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(
-                x=h["timestamp"],
-                y=h["value_ghs"],
-                mode="lines",
-                line=dict(shape="spline", smoothing=1.1, width=3),
-                fill="tozeroy"
-            ))
-            st.plotly_chart(fig, use_container_width=True)
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=h["timestamp"],
+            y=h["value_ghs"],
+            mode="lines",
+            line=dict(shape="spline", smoothing=1.1, width=3),
+            fill="tozeroy"
+        ))
+        st.plotly_chart(fig, use_container_width=True)
 
-    st.subheader("All-Time PnL Curve")
+    st.subheader("📊 All-Time PnL Curve")
 
     pnl_df = build_pnl_history(history, invested)
 
@@ -353,7 +346,7 @@ def crypto_app():
         st.plotly_chart(fig, use_container_width=True)
 
     # PIE
-    st.subheader("Allocation")
+    st.subheader("🍕 Allocation")
 
     if not df.empty:
         pie = alt.Chart(df[df["Value (GHS)"] > 0]).mark_arc().encode(
