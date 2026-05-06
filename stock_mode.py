@@ -362,6 +362,16 @@ def stock_app():
             ytd_pnl = total_value - start
             ytd_pct = (ytd_pnl / start * 100) if start > 0 else 0.0
 
+    except Exception as e:
+            print("MTD/YTD error:", e)
+
+    def color_pct(v):
+        if v > 0:
+            return f"🟢 {pct(v)}"
+        elif v < 0:
+            return f"🔴 {pct(v)}"
+        return pct(v)
+
     # SECOND ROW
     bottom1, bottom2 = st.columns(2)
 
