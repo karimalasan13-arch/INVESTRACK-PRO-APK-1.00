@@ -362,10 +362,19 @@ def stock_app():
             ytd_pnl = total_value - start
             ytd_pct = (ytd_pnl / start * 100) if start > 0 else 0.0
 
-    st.markdown(
-        f"**MTD:** {fmt(mtd_pnl)} ({color_pct(mtd_pct)})  \n"
-        f"**YTD:** {fmt(ytd_pnl)} ({color_pct(ytd_pct)})",
-        unsafe_allow_html=True
+    # SECOND ROW
+    bottom1, bottom2 = st.columns(2)
+
+    bottom1.metric(
+        "MTD",
+        fmt(mtd_pnl),
+        color_pct(mtd_pct)
+    )
+
+    bottom2.metric(
+        "YTD",
+        fmt(ytd_pnl),
+        color_pct(ytd_pct)
     )
 
     st.markdown("---")
