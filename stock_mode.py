@@ -219,6 +219,14 @@ def pct(v): return f"{v:.2f}%"
 
 
 # -----------------------------------------
+# COLOR HELPER
+# -----------------------------------------
+def color_pct(value):
+    color = "#16c784" if value >= 0 else "#ea3943"
+    return f"<span style='color:{color}'>{pct(value)}</span>"
+
+
+# -----------------------------------------
 # MAIN APP
 # -----------------------------------------
 def stock_app():
@@ -237,9 +245,7 @@ def stock_app():
 
     holdings = load_stock_holdings(user_id)
 
-    # -----------------------------------------
     # SIDEBAR
-    # -----------------------------------------
     st.sidebar.header("⚙️ Settings")
 
     rate = st.sidebar.number_input("USD → GHS", value=float(rate), step=0.1)
@@ -265,9 +271,7 @@ def stock_app():
         save_stock_holdings(user_id, holdings)
         save_setting(user_id, "stock_cash", cash)
 
-    # -----------------------------------------
     # LIVE PRICES
-    # -----------------------------------------
     try:
         prices = stock_live_prices(list(STOCK_MAP.keys())) or {}
     except Exception:
@@ -312,25 +316,51 @@ def stock_app():
     pnl_pct = (pnl / invested * 100) if invested > 0 else 0.0
 
     st.markdown("### 📊 Overview")
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Total Value", fmt(total_value))
-    c2.metric("Invested", fmt(invested))
-    c3.metric("PnL", fmt(pnl), pct(pnl_pct))
+    st.metric("Total Value", fmt(total_value))
+    st.metric("Invested", fmt(invested))
+    st.metric("All-Time PnL", fmt(pnl), pct(pnl_pct))
+
+    # -----------------------------------------
+    # MTD / YTD
+    # -----------------------------------------
+    history = clean_history(load_portfolio_history(user_id))
+
+    mtd_pnl = ytd_pnl = mtd_pct = ytd_pct = 0.0
+
+    if not history.empty:
+        now = datetime.utcnow()
+
+        mtd = history[
+            (history["timestamp"].dt.month == now.month) &
+            (history["timestamp"].dt.year == now.year)
+        ]
+
+        ytd = history[history["timestamp"].dt.year == now.year]
+
+        if not mtd.empty:
+            start = mtd.iloc[0]["value_ghs"]
+            mtd_pnl = total_value - start
+            mtd_pct = (mtd_pnl / start * 100) if start > 0 else 0.0
+
+        if not ytd.empty:
+            start = ytd.iloc[0]["value_ghs"]
+            ytd_pnl = total_value - start
+            ytd_pct = (ytd_pnl / start * 100) if start > 0 else 0.0
+
+    st.markdown(
+        f"**MTD:** {fmt(mtd_pnl)} ({color_pct(mtd_pct)})  \n"
+        f"**YTD:** {fmt(ytd_pnl)} ({color_pct(ytd_pct)})",
+        unsafe_allow_html=True
+    )
 
     st.markdown("---")
 
-    # -----------------------------------------
     # TABLE
-    # -----------------------------------------
     st.markdown("Holdings Breakdown")
     st.dataframe(df, use_container_width=True)
 
-    # -----------------------------------------
     # VALUE CHART
-    # -----------------------------------------
     st.markdown("Portfolio Trend")
-
-    history = clean_history(load_portfolio_history(user_id))
 
     if len(history) >= 2:
         fig = go.Figure()
@@ -343,9 +373,7 @@ def stock_app():
         ))
         st.plotly_chart(fig, use_container_width=True)
 
-    # -----------------------------------------
     # PNL CHART
-    # -----------------------------------------
     st.markdown("All-Time PnL Curve")
 
     pnl_df = build_pnl(history, invested)
@@ -362,9 +390,7 @@ def stock_app():
 
     st.markdown("---")
 
-    # -----------------------------------------
     # PIE
-    # -----------------------------------------
     st.markdown("Allocation")
 
     if not df.empty:
@@ -374,15 +400,11 @@ def stock_app():
         )
         st.altair_chart(pie, use_container_width=True)
 
-    # -----------------------------------------
     # AUTOSAVE
-    # -----------------------------------------
     if total_value > 0 and not data_degraded:
         autosave_portfolio_value(user_id, total_value, "stock")
 
-    # -----------------------------------------
     # SNAPSHOT
-    # -----------------------------------------
     if st.button("Save Snapshot"):
         if total_value > 0 and not data_degraded:
             force_snapshot(user_id, total_value)
