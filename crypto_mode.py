@@ -394,7 +394,7 @@ def crypto_app():
         st.plotly_chart(fig, use_container_width=True)
 
     # PIE
-    st.subheader("🍕 Allocation")
+    st.subheader("Allocation")
 
     if not df.empty:
         pie = alt.Chart(df[df["Value (GHS)"] > 0]).mark_arc().encode(
