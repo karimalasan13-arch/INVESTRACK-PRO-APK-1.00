@@ -55,9 +55,7 @@ def force_snapshot(user_id, value_ghs, mode="stock"):
             "value_ghs": round(float(value_ghs), 2),
             "mode": mode,
         }).execute()
-
         return True
-
     except Exception as e:
         print("Force snapshot failed:", e)
         return False
@@ -100,12 +98,12 @@ def set_last_good_value(value):
 def clean_history(history):
 
     if not history:
-        return pd.DataFrame(columns=["timestamp", "value_ghs"])
+        return pd.DataFrame()
 
     df = pd.DataFrame(history)
 
     if df.empty:
-        return pd.DataFrame(columns=["timestamp", "value_ghs"])
+        return df
 
     df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
     df["value_ghs"] = pd.to_numeric(df["value_ghs"], errors="coerce")
@@ -124,10 +122,10 @@ def build_pnl(df, invested):
     if df.empty:
         return df
 
-    pnl_df = df.copy()
-    pnl_df["pnl"] = pnl_df["value_ghs"] - invested
+    df = df.copy()
+    df["pnl"] = df["value_ghs"] - invested
 
-    return pnl_df
+    return df
 
 
 # -----------------------------------------
@@ -144,21 +142,14 @@ def load_setting(user_id, key, default):
             .single()
             .execute()
         )
-
         return float(res.data["value"])
-
     except Exception:
         return default
 
 
 def save_setting(user_id, key, value):
-
     db().table("user_settings").upsert(
-        {
-            "user_id": user_id,
-            "key": key,
-            "value": float(value),
-        },
+        {"user_id": user_id, "key": key, "value": float(value)},
         on_conflict="user_id,key",
     ).execute()
 
@@ -191,11 +182,7 @@ def load_stock_holdings(user_id):
 def save_stock_holdings(user_id, holdings):
 
     rows = [
-        {
-            "user_id": user_id,
-            "symbol": k,
-            "quantity": float(v),
-        }
+        {"user_id": user_id, "symbol": k, "quantity": float(v)}
         for k, v in holdings.items()
     ]
 
@@ -209,7 +196,6 @@ def save_stock_holdings(user_id, holdings):
 # HISTORY
 # -----------------------------------------
 def load_portfolio_history(user_id):
-
     try:
         res = (
             db()
@@ -220,9 +206,7 @@ def load_portfolio_history(user_id):
             .order("timestamp")
             .execute()
         )
-
         return res.data or []
-
     except Exception:
         return []
 
@@ -230,23 +214,16 @@ def load_portfolio_history(user_id):
 # -----------------------------------------
 # FORMATTERS
 # -----------------------------------------
-def fmt(v):
-    return f"GHS {v:,.2f}"
+def fmt(v): return f"GHS {v:,.2f}"
+def pct(v): return f"{v:.2f}%"
 
 
-def pct(v):
-    return f"{v:.2f}%"
-
-
-def color_pct(v):
-
-    if v > 0:
-        return f"🟢 {pct(v)}"
-
-    if v < 0:
-        return f"🔴 {pct(v)}"
-
-    return pct(v)
+# -----------------------------------------
+# COLOR HELPER
+# -----------------------------------------
+def color_pct(value):
+    color = "#16c784" if value >= 0 else "#ea3943"
+    return f"<span style='color:{color}'>{pct(value)}</span>"
 
 
 # -----------------------------------------
@@ -262,79 +239,50 @@ def stock_app():
 
     user_id = st.session_state.user_id
 
-    # SETTINGS
     rate = load_setting(user_id, "stock_rate", 14.5)
     invested = load_setting(user_id, "stock_investment", 0.0)
     cash = load_setting(user_id, "stock_cash", 0.0)
 
     holdings = load_stock_holdings(user_id)
 
-    # -------------------------------------
     # SIDEBAR
-    # -------------------------------------
     st.sidebar.header("⚙️ Settings")
 
-    rate = st.sidebar.number_input(
-        "USD → GHS",
-        value=float(rate),
-        step=0.1
-    )
-
-    invested = st.sidebar.number_input(
-        "Total Invested",
-        value=float(invested),
-        step=10.0
-    )
+    rate = st.sidebar.number_input("USD → GHS", value=float(rate), step=0.1)
+    invested = st.sidebar.number_input("Total Invested", value=float(invested), step=10.0)
 
     if st.sidebar.button("💾 Save Settings"):
-
         save_setting(user_id, "stock_rate", rate)
         save_setting(user_id, "stock_investment", invested)
-
-        st.sidebar.success("Settings saved")
 
     st.sidebar.markdown("---")
     st.sidebar.subheader("Holdings")
 
     for sym in STOCK_MAP:
-
         holdings[sym] = st.sidebar.number_input(
             sym,
             value=float(holdings.get(sym, 0.0)),
             step=1.0
         )
 
-    cash = st.sidebar.number_input(
-        "Cash",
-        value=float(cash),
-        step=10.0
-    )
+    cash = st.sidebar.number_input("Cash", value=float(cash), step=10.0)
 
     if st.sidebar.button("💾 Save Holdings"):
-
         save_stock_holdings(user_id, holdings)
         save_setting(user_id, "stock_cash", cash)
 
-        st.sidebar.success("Holdings saved")
-
-    # -------------------------------------
     # LIVE PRICES
-    # -------------------------------------
     try:
         prices = stock_live_prices(list(STOCK_MAP.keys())) or {}
-
-    except Exception as e:
-        print("Price fetch error:", e)
+    except Exception:
         prices = {}
 
     rows = []
-    total_value = float(cash)
+    total_value = cash
     data_degraded = False
 
     for sym, qty in holdings.items():
-
         raw = prices.get(sym, 0.0)
-
         price, ok = safe_price(sym, raw)
 
         if price is None:
@@ -344,257 +292,119 @@ def stock_app():
         if not ok:
             data_degraded = True
 
-        value = float(price) * float(qty) * float(rate)
-
+        value = price * qty * rate
         total_value += value
 
-        rows.append([
-            sym,
-            qty,
-            price,
-            value
-        ])
+        rows.append([sym, qty, price, value])
 
     last_good = get_last_good_value()
 
     if total_value > 0 and not data_degraded:
         set_last_good_value(total_value)
-
     elif last_good is not None:
         total_value = last_good
 
     if cash > 0:
         rows.append(["CASH", "-", "-", cash])
 
-    df = pd.DataFrame(
-        rows,
-        columns=["Asset", "Qty", "Price (USD)", "Value (GHS)"]
-    )
+    df = pd.DataFrame(rows, columns=["Asset", "Qty", "Price (USD)", "Value (GHS)"])
 
-    # -------------------------------------
-    # KPI
-    # -------------------------------------
+    # -----------------------------------------
+    # METRICS
+    # -----------------------------------------
     pnl = total_value - invested
+    pnl_pct = (pnl / invested * 100) if invested > 0 else 0.0
 
-    pnl_pct = (
-        (pnl / invested) * 100
-        if invested > 0 else 0.0
-    )
+    st.markdown("### 📊 Overview")
+    st.metric("Total Value", fmt(total_value))
+    st.metric("Invested", fmt(invested))
+    st.metric("All-Time PnL", fmt(pnl), pct(pnl_pct))
 
-    st.subheader("📊 Overview")
-
-    top1, top2, top3 = st.columns(3)
-
-    top1.metric(
-        "Portfolio Value",
-        fmt(total_value)
-    )
-
-    top2.metric(
-        "Invested",
-        fmt(invested)
-    )
-
-    top3.metric(
-        "PnL",
-        fmt(pnl),
-        pct(pnl_pct)
-    )
-
-    # -------------------------------------
-    # HISTORY
-    # -------------------------------------
-    raw_history = load_portfolio_history(user_id)
-    history_df = clean_history(raw_history)
-
-    # -------------------------------------
+    # -----------------------------------------
     # MTD / YTD
-    # -------------------------------------
-    mtd_pnl = 0.0
-    ytd_pnl = 0.0
-    mtd_pct = 0.0
-    ytd_pct = 0.0
+    # -----------------------------------------
+    history = clean_history(load_portfolio_history(user_id))
 
-    if not history_df.empty:
+    mtd_pnl = ytd_pnl = mtd_pct = ytd_pct = 0.0
 
-        try:
-            now = datetime.utcnow()
+    if not history.empty:
+        now = datetime.utcnow()
 
-            mtd = history_df[
-                (history_df["timestamp"].dt.month == now.month)
-                &
-                (history_df["timestamp"].dt.year == now.year)
-            ]
-
-            ytd = history_df[
-                history_df["timestamp"].dt.year == now.year
-            ]
-
-            if not mtd.empty:
-
-                start = float(mtd.iloc[0]["value_ghs"])
-
-                if start > 0:
-                    mtd_pnl = total_value - start
-                    mtd_pct = (mtd_pnl / start) * 100
-
-            if not ytd.empty:
-
-                start = float(ytd.iloc[0]["value_ghs"])
-
-                if start > 0:
-                    ytd_pnl = total_value - start
-                    ytd_pct = (ytd_pnl / start) * 100
-
-        except Exception as e:
-            print("MTD/YTD error:", e)
-
-    # -------------------------------------
-    # SECOND ROW
-    # -------------------------------------
-    bottom1, bottom2 = st.columns(2)
-
-    bottom1.metric(
-        "MTD",
-        fmt(mtd_pnl),
-        color_pct(mtd_pct)
-    )
-
-    bottom2.metric(
-        "YTD",
-        fmt(ytd_pnl),
-        color_pct(ytd_pct)
-    )
-
-    st.markdown("---")
-
-    # -------------------------------------
-    # TABLE
-    # -------------------------------------
-    st.markdown("### Holdings Breakdown")
-
-    st.dataframe(
-        df,
-        use_container_width=True
-    )
-
-    # -------------------------------------
-    # VALUE CHART
-    # -------------------------------------
-    st.markdown("### Portfolio Trend")
-
-    if len(history_df) >= 2:
-
-        fig = go.Figure()
-
-        fig.add_trace(
-            go.Scatter(
-                x=history_df["timestamp"],
-                y=history_df["value_ghs"],
-                mode="lines",
-                fill="tozeroy",
-                line=dict(
-                    shape="spline",
-                    smoothing=1.2,
-                    width=3
-                )
-            )
-        )
-
-        st.plotly_chart(
-            fig,
-            use_container_width=True
-        )
-
-    # -------------------------------------
-    # PNL CHART
-    # -------------------------------------
-    st.markdown("### All-Time PnL Curve")
-
-    pnl_df = build_pnl(history_df, invested)
-
-    if len(pnl_df) >= 2:
-
-        fig = go.Figure()
-
-        fig.add_trace(
-            go.Scatter(
-                x=pnl_df["timestamp"],
-                y=pnl_df["pnl"],
-                mode="lines",
-                line=dict(
-                    shape="spline",
-                    smoothing=1.2,
-                    width=3
-                )
-            )
-        )
-
-        st.plotly_chart(
-            fig,
-            use_container_width=True
-        )
-
-    st.markdown("---")
-
-    # -------------------------------------
-    # PIE CHART
-    # -------------------------------------
-    st.markdown("### Allocation")
-
-    if not df.empty:
-
-        pie_df = df[
-            pd.to_numeric(
-                df["Value (GHS)"],
-                errors="coerce"
-            ) > 0
+        mtd = history[
+            (history["timestamp"].dt.month == now.month) &
+            (history["timestamp"].dt.year == now.year)
         ]
 
-        if not pie_df.empty:
+        ytd = history[history["timestamp"].dt.year == now.year]
 
-            pie = (
-                alt.Chart(pie_df)
-                .mark_arc()
-                .encode(
-                    theta="Value (GHS):Q",
-                    color="Asset:N",
-                )
-            )
+        if not mtd.empty:
+            start = mtd.iloc[0]["value_ghs"]
+            mtd_pnl = total_value - start
+            mtd_pct = (mtd_pnl / start * 100) if start > 0 else 0.0
 
-            st.altair_chart(
-                pie,
-                use_container_width=True
-            )
+        if not ytd.empty:
+            start = ytd.iloc[0]["value_ghs"]
+            ytd_pnl = total_value - start
+            ytd_pct = (ytd_pnl / start * 100) if start > 0 else 0.0
 
-    # -------------------------------------
-    # AUTOSAVE
-    # -------------------------------------
-    if total_value > 0 and not data_degraded:
+    st.markdown(
+        f"**MTD:** {fmt(mtd_pnl)} ({color_pct(mtd_pct)})  \n"
+        f"**YTD:** {fmt(ytd_pnl)} ({color_pct(ytd_pct)})",
+        unsafe_allow_html=True
+    )
 
-        autosave_portfolio_value(
-            user_id,
-            total_value,
-            "stock"
+    st.markdown("---")
+
+    # TABLE
+    st.markdown("Holdings Breakdown")
+    st.dataframe(df, use_container_width=True)
+
+    # VALUE CHART
+    st.markdown("Portfolio Trend")
+
+    if len(history) >= 2:
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=history["timestamp"],
+            y=history["value_ghs"],
+            mode="lines",
+            fill="tozeroy",
+            line=dict(shape="spline", smoothing=1.2, width=3)
+        ))
+        st.plotly_chart(fig, use_container_width=True)
+
+    # PNL CHART
+    st.markdown("All-Time PnL Curve")
+
+    pnl_df = build_pnl(history, invested)
+
+    if len(pnl_df) >= 2:
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=pnl_df["timestamp"],
+            y=pnl_df["pnl"],
+            mode="lines",
+            line=dict(shape="spline", smoothing=1.2, width=3)
+        ))
+        st.plotly_chart(fig, use_container_width=True)
+
+    st.markdown("---")
+
+    # PIE
+    st.markdown("Allocation")
+
+    if not df.empty:
+        pie = alt.Chart(df[df["Value (GHS)"] > 0]).mark_arc().encode(
+            theta="Value (GHS):Q",
+            color="Asset:N",
         )
+        st.altair_chart(pie, use_container_width=True)
 
-    # -------------------------------------
+    # AUTOSAVE
+    if total_value > 0 and not data_degraded:
+        autosave_portfolio_value(user_id, total_value, "stock")
+
     # SNAPSHOT
-    # -------------------------------------
     if st.button("Save Snapshot"):
-
         if total_value > 0 and not data_degraded:
-
-            ok = force_snapshot(
-                user_id,
-                total_value
-            )
-
-            if ok:
-                st.success("Snapshot saved")
-
-            else:
-                st.error("Failed to save snapshot")
-
-        else:
-            st.warning("Cannot snapshot degraded data")
+            force_snapshot(user_id, total_value)
