@@ -1,5 +1,187 @@
-# (everything ABOVE remains EXACTLY the same)
+import streamlit as st
+import pandas as pd
+import altair as alt
+from datetime import datetime
+import plotly.graph_objects as go
 
+from price_history import crypto_live_prices
+from portfolio_tracker import autosave_portfolio_value
+from db import get_supabase
+
+
+# -----------------------------------------
+# CONFIG
+# -----------------------------------------
+API_MAP = {
+    "BTC": "bitcoin",
+    "ETH": "ethereum",
+    "SOL": "solana",
+    "BNB": "binancecoin",
+    "XRP": "ripple",
+    "ADA": "cardano",
+    "DOGE": "dogecoin",
+    "DOT": "polkadot",
+    "LTC": "litecoin",
+    "USDT": "tether",
+}
+
+
+# -----------------------------------------
+# DB
+# -----------------------------------------
+def db():
+    supabase = get_supabase()
+    if "access_token" in st.session_state:
+        try:
+            supabase.auth.set_session(
+                access_token=st.session_state.access_token,
+                refresh_token=st.session_state.refresh_token,
+            )
+        except Exception:
+            pass
+    return supabase
+
+
+# -----------------------------------------
+# SNAPSHOT
+# -----------------------------------------
+def force_snapshot(user_id, value_ghs, mode="crypto"):
+    try:
+        db().table("portfolio_history").insert({
+            "user_id": user_id,
+            "timestamp": datetime.utcnow().isoformat(),
+            "value_ghs": round(float(value_ghs), 2),
+            "mode": mode,
+        }).execute()
+        return True
+    except Exception as e:
+        print("Force snapshot failed:", e)
+        return False
+
+
+# -----------------------------------------
+# SAFE PRICE
+# -----------------------------------------
+def safe_price(symbol, price):
+    if "crypto_price_memory" not in st.session_state:
+        st.session_state.crypto_price_memory = {}
+
+    memory = st.session_state.crypto_price_memory
+
+    if price is not None and price > 0:
+        memory[symbol] = price
+        return price, True
+
+    if symbol in memory:
+        return memory[symbol], False
+
+    return None, False
+
+
+# -----------------------------------------
+# LAST GOOD VALUE
+# -----------------------------------------
+def get_last_good_value():
+    return st.session_state.get("crypto_last_good_value", None)
+
+
+def set_last_good_value(value):
+    st.session_state.crypto_last_good_value = value
+
+
+# -----------------------------------------
+# PNL HISTORY
+# -----------------------------------------
+def build_pnl_history(history, invested):
+    if not history:
+        return pd.DataFrame()
+
+    h = pd.DataFrame(history)
+    if h.empty:
+        return pd.DataFrame()
+
+    h["timestamp"] = pd.to_datetime(h["timestamp"], errors="coerce")
+    h["value_ghs"] = pd.to_numeric(h["value_ghs"], errors="coerce")
+
+    h = h.dropna()
+    h = h.sort_values("timestamp")
+
+    h["pnl"] = h["value_ghs"] - invested
+    return h
+
+
+# -----------------------------------------
+# SETTINGS
+# -----------------------------------------
+def load_setting(user_id, key, default):
+    try:
+        res = (
+            db().table("user_settings")
+            .select("value")
+            .eq("user_id", user_id)
+            .eq("key", key)
+            .single()
+            .execute()
+        )
+        return float(res.data["value"])
+    except Exception:
+        return default
+
+
+def save_setting(user_id, key, value):
+    db().table("user_settings").upsert(
+        {"user_id": user_id, "key": key, "value": float(value)},
+        on_conflict="user_id,key",
+    ).execute()
+
+
+# -----------------------------------------
+# HOLDINGS
+# -----------------------------------------
+def load_crypto_holdings(user_id):
+    holdings = {k: 0.0 for k in API_MAP}
+    try:
+        res = db().table("crypto_holdings").select("symbol,quantity").eq("user_id", user_id).execute()
+        for r in res.data or []:
+            holdings[r["symbol"]] = float(r["quantity"])
+    except Exception:
+        pass
+    return holdings
+
+
+def save_crypto_holdings(user_id, holdings):
+    rows = [{"user_id": user_id, "symbol": k, "quantity": float(v)} for k, v in holdings.items()]
+    db().table("crypto_holdings").upsert(rows, on_conflict="user_id,symbol").execute()
+
+
+# -----------------------------------------
+# HISTORY
+# -----------------------------------------
+def load_portfolio_history(user_id):
+    try:
+        res = (
+            db().table("portfolio_history")
+            .select("timestamp,value_ghs")
+            .eq("user_id", user_id)
+            .eq("mode", "crypto")
+            .order("timestamp")
+            .execute()
+        )
+        return res.data or []
+    except Exception:
+        return []
+
+
+# -----------------------------------------
+# FORMAT
+# -----------------------------------------
+def fmt(v): return f"GHS {v:,.2f}"
+def pct(v): return f"{v:.2f}%"
+
+
+# -----------------------------------------
+# MAIN
+# -----------------------------------------
 def crypto_app():
 
     st.title("Crypto Dashboard")
@@ -14,9 +196,7 @@ def crypto_app():
     invested = load_setting(user_id, "crypto_investment", 0.0)
     holdings = load_crypto_holdings(user_id)
 
-    # -------------------------------------
     # SIDEBAR
-    # -------------------------------------
     st.sidebar.header("⚙️ Settings")
 
     rate = st.sidebar.number_input("USD → GHS", value=float(rate), step=0.1)
@@ -35,9 +215,7 @@ def crypto_app():
     if st.sidebar.button("💾 Save Holdings"):
         save_crypto_holdings(user_id, holdings)
 
-    # -------------------------------------
     # PRICES
-    # -------------------------------------
     try:
         prices = crypto_live_prices() or {}
     except Exception:
@@ -62,9 +240,7 @@ def crypto_app():
         total_value += val
         rows.append([sym, qty, price, val])
 
-    # -------------------------------------
     # PROTECTION
-    # -------------------------------------
     last_good = get_last_good_value()
 
     if total_value > 0 and not data_degraded:
@@ -74,47 +250,53 @@ def crypto_app():
 
     df = pd.DataFrame(rows, columns=["Asset", "Qty", "Price (USD)", "Value (GHS)"])
 
-    # -------------------------------------
-    # KPI CARDS
-    # -------------------------------------
+    # KPI
     pnl = total_value - invested
     pnl_pct = (pnl / invested * 100) if invested > 0 else 0.0
 
     st.subheader("📊 Overview")
-
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Portfolio Value", fmt(total_value))
-    c2.metric("Invested", fmt(invested))
-    c3.metric("PnL", fmt(pnl), pct(pnl_pct))
+    st.metric("Portfolio Value", fmt(total_value))
+    st.metric("Invested", fmt(invested))
+    st.metric("PnL", fmt(pnl), pct(pnl_pct))
 
     # -------------------------------------
-    # ✅ MTD / YTD (RESTORED CLEANLY)
+    # ✅ SAFE MTD / YTD (FIXED CRASH)
     # -------------------------------------
     history = load_portfolio_history(user_id)
 
     mtd_pnl = ytd_pnl = mtd_pct = ytd_pct = 0.0
 
-    if history:
-        h = pd.DataFrame(history)
-        h["timestamp"] = pd.to_datetime(h["timestamp"])
-        h = h.sort_values("timestamp")
+    if history and len(history) >= 2:
+        try:
+            h = pd.DataFrame(history)
 
-        now = datetime.utcnow()
+            h["timestamp"] = pd.to_datetime(h["timestamp"], errors="coerce")
+            h["value_ghs"] = pd.to_numeric(h["value_ghs"], errors="coerce")
 
-        mtd = h[(h["timestamp"].dt.month == now.month) &
-                (h["timestamp"].dt.year == now.year)]
+            h = h.dropna().sort_values("timestamp")
 
-        ytd = h[h["timestamp"].dt.year == now.year]
+            if not h.empty:
+                now = datetime.utcnow()
 
-        if not mtd.empty:
-            start = mtd.iloc[0]["value_ghs"]
-            mtd_pnl = total_value - start
-            mtd_pct = (mtd_pnl / start * 100) if start > 0 else 0.0
+                mtd = h[(h["timestamp"].dt.month == now.month) &
+                        (h["timestamp"].dt.year == now.year)]
 
-        if not ytd.empty:
-            start = ytd.iloc[0]["value_ghs"]
-            ytd_pnl = total_value - start
-            ytd_pct = (ytd_pnl / start * 100) if start > 0 else 0.0
+                ytd = h[h["timestamp"].dt.year == now.year]
+
+                if not mtd.empty:
+                    start = mtd.iloc[0]["value_ghs"]
+                    if start > 0:
+                        mtd_pnl = total_value - start
+                        mtd_pct = (mtd_pnl / start * 100)
+
+                if not ytd.empty:
+                    start = ytd.iloc[0]["value_ghs"]
+                    if start > 0:
+                        ytd_pnl = total_value - start
+                        ytd_pct = (ytd_pnl / start * 100)
+
+        except Exception as e:
+            print("MTD/YTD error:", e)
 
     def color_pct(v):
         if v > 0:
@@ -123,49 +305,38 @@ def crypto_app():
             return f"🔴 {pct(v)}"
         return pct(v)
 
-    m1, m2 = st.columns(2)
-    m1.metric("MTD", fmt(mtd_pnl), color_pct(mtd_pct))
-    m2.metric("YTD", fmt(ytd_pnl), color_pct(ytd_pct))
+    st.metric("MTD", fmt(mtd_pnl), color_pct(mtd_pct))
+    st.metric("YTD", fmt(ytd_pnl), color_pct(ytd_pct))
 
     st.markdown("---")
 
-    # -------------------------------------
     # TABLE
-    # -------------------------------------
     st.subheader("Holdings Breakdown")
     st.dataframe(df, use_container_width=True)
 
-    # -------------------------------------
     # AUTOSAVE
-    # -------------------------------------
     if total_value > 0 and not data_degraded:
         autosave_portfolio_value(user_id, total_value, "crypto")
 
-    # -------------------------------------
     # CHARTS
-    # -------------------------------------
     st.subheader("Portfolio Trend")
 
     if len(history) >= 2:
         h = pd.DataFrame(history)
-        h["timestamp"] = pd.to_datetime(h["timestamp"])
+        h["timestamp"] = pd.to_datetime(h["timestamp"], errors="coerce")
+        h["value_ghs"] = pd.to_numeric(h["value_ghs"], errors="coerce")
+        h = h.dropna()
 
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(
-            x=h["timestamp"],
-            y=h["value_ghs"],
-            mode="lines",
-            line=dict(shape="spline", smoothing=1.1, width=3),
-            fill="tozeroy",
-            hovertemplate="GHS %{y:,.2f}<extra></extra>"
-        ))
-
-        fig.update_layout(
-            margin=dict(l=10, r=10, t=10, b=10),
-            hovermode="x unified"
-        )
-
-        st.plotly_chart(fig, use_container_width=True)
+        if not h.empty:
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(
+                x=h["timestamp"],
+                y=h["value_ghs"],
+                mode="lines",
+                line=dict(shape="spline", smoothing=1.1, width=3),
+                fill="tozeroy"
+            ))
+            st.plotly_chart(fig, use_container_width=True)
 
     st.subheader("All-Time PnL Curve")
 
@@ -178,19 +349,10 @@ def crypto_app():
             y=pnl_df["pnl"],
             mode="lines",
             line=dict(shape="spline", smoothing=1.1, width=3),
-            hovertemplate="GHS %{y:,.2f}<extra></extra>"
         ))
-
-        fig.update_layout(
-            margin=dict(l=10, r=10, t=10, b=10),
-            hovermode="x unified"
-        )
-
         st.plotly_chart(fig, use_container_width=True)
 
-    # -------------------------------------
     # PIE
-    # -------------------------------------
     st.subheader("Allocation")
 
     if not df.empty:
