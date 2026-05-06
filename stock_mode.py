@@ -315,10 +315,26 @@ def stock_app():
     pnl = total_value - invested
     pnl_pct = (pnl / invested * 100) if invested > 0 else 0.0
 
-    st.markdown("### 📊 Overview")
-    st.metric("Total Value", fmt(total_value))
-    st.metric("Invested", fmt(invested))
-    st.metric("All-Time PnL", fmt(pnl), pct(pnl_pct))
+    st.subheader("📊 Overview")
+
+    # TOP ROW
+    top1, top2, top3 = st.columns(3)
+
+    top1.metric(
+        "Portfolio Value",
+        fmt(total_value)
+    )
+
+    top2.metric(
+        "Invested",
+        fmt(invested)
+    )
+
+    top3.metric(
+        "PnL",
+        fmt(pnl),
+        pct(pnl_pct)
+    )
 
     # -----------------------------------------
     # MTD / YTD
