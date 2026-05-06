@@ -248,49 +248,85 @@ def crypto_app():
 
     df = pd.DataFrame(rows, columns=["Asset", "Qty", "Price (USD)", "Value (GHS)"])
 
-    # =========================
-    # 📊 OVERVIEW (FINTECH FLOW)
-    # =========================
-    st.subheader("📊 Overview")
-
+     # -------------------------------------
+    # KPI
+    # -------------------------------------
     pnl = total_value - invested
     pnl_pct = (pnl / invested * 100) if invested > 0 else 0.0
 
-    st.metric("💰 Portfolio Value", fmt(total_value))
-    st.metric("📥 Invested", fmt(invested))
-    st.metric("📈 All-Time PnL", fmt(pnl), pct(pnl_pct))
+    st.subheader("📊 Overview")
 
-    # =========================
-    # 📆 MTD / YTD
-    # =========================
+    # TOP ROW
+    top1, top2, top3 = st.columns(3)
+
+    top1.metric(
+        "Portfolio Value",
+        fmt(total_value)
+    )
+
+    top2.metric(
+        "Invested",
+        fmt(invested)
+    )
+
+    top3.metric(
+        "PnL",
+        fmt(pnl),
+        pct(pnl_pct)
+    )
+
+    # -------------------------------------
+    # SAFE MTD / YTD
+    # -------------------------------------
     history = load_portfolio_history(user_id)
 
     mtd_pnl = ytd_pnl = mtd_pct = ytd_pct = 0.0
 
     if history and len(history) >= 2:
-        h = pd.DataFrame(history)
-        h["timestamp"] = pd.to_datetime(h["timestamp"], errors="coerce")
-        h["value_ghs"] = pd.to_numeric(h["value_ghs"], errors="coerce")
-        h = h.dropna().sort_values("timestamp")
+        try:
+            h = pd.DataFrame(history)
 
-        now = datetime.utcnow()
+            h["timestamp"] = pd.to_datetime(
+                h["timestamp"],
+                errors="coerce"
+            )
 
-        mtd = h[(h["timestamp"].dt.month == now.month) &
-                (h["timestamp"].dt.year == now.year)]
+            h["value_ghs"] = pd.to_numeric(
+                h["value_ghs"],
+                errors="coerce"
+            )
 
-        ytd = h[h["timestamp"].dt.year == now.year]
+            h = h.dropna().sort_values("timestamp")
 
-        if not mtd.empty:
-            start = mtd.iloc[0]["value_ghs"]
-            if start > 0:
-                mtd_pnl = total_value - start
-                mtd_pct = (mtd_pnl / start * 100)
+            if not h.empty:
 
-        if not ytd.empty:
-            start = ytd.iloc[0]["value_ghs"]
-            if start > 0:
-                ytd_pnl = total_value - start
-                ytd_pct = (ytd_pnl / start * 100)
+                now = datetime.utcnow()
+
+                mtd = h[
+                    (h["timestamp"].dt.month == now.month) &
+                    (h["timestamp"].dt.year == now.year)
+                ]
+
+                ytd = h[
+                    h["timestamp"].dt.year == now.year
+                ]
+
+                if not mtd.empty:
+                    start = mtd.iloc[0]["value_ghs"]
+
+                    if start > 0:
+                        mtd_pnl = total_value - start
+                        mtd_pct = (mtd_pnl / start) * 100
+
+                if not ytd.empty:
+                    start = ytd.iloc[0]["value_ghs"]
+
+                    if start > 0:
+                        ytd_pnl = total_value - start
+                        ytd_pct = (ytd_pnl / start) * 100
+
+        except Exception as e:
+            print("MTD/YTD error:", e)
 
     def color_pct(v):
         if v > 0:
@@ -299,8 +335,20 @@ def crypto_app():
             return f"🔴 {pct(v)}"
         return pct(v)
 
-    st.metric("📆 MTD", fmt(mtd_pnl), color_pct(mtd_pct))
-    st.metric("📆 YTD", fmt(ytd_pnl), color_pct(ytd_pct))
+    # SECOND ROW
+    bottom1, bottom2 = st.columns(2)
+
+    bottom1.metric(
+        "MTD",
+        fmt(mtd_pnl),
+        color_pct(mtd_pct)
+    )
+
+    bottom2.metric(
+        "YTD",
+        fmt(ytd_pnl),
+        color_pct(ytd_pct)
+    )
 
     st.markdown("---")
 
