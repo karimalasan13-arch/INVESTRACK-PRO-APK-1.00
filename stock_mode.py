@@ -214,16 +214,23 @@ def load_portfolio_history(user_id):
 # -----------------------------------------
 # FORMATTERS
 # -----------------------------------------
-def fmt(v): return f"GHS {v:,.2f}"
-def pct(v): return f"{v:.2f}%"
+def fmt(v):
+    return f"GHS {v:,.2f}"
+
+
+def pct(v):
+    return f"{v:.2f}%"
 
 
 # -----------------------------------------
-# COLOR HELPER
+# COLOR PERCENT
 # -----------------------------------------
-def color_pct(value):
-    color = "#16c784" if value >= 0 else "#ea3943"
-    return f"<span style='color:{color}'>{pct(value)}</span>"
+def color_pct(v):
+    if v > 0:
+        return f"🟢 {pct(v)}"
+    elif v < 0:
+        return f"🔴 {pct(v)}"
+    return pct(v)
 
 
 # -----------------------------------------
@@ -245,11 +252,22 @@ def stock_app():
 
     holdings = load_stock_holdings(user_id)
 
+    # -----------------------------------------
     # SIDEBAR
+    # -----------------------------------------
     st.sidebar.header("⚙️ Settings")
 
-    rate = st.sidebar.number_input("USD → GHS", value=float(rate), step=0.1)
-    invested = st.sidebar.number_input("Total Invested", value=float(invested), step=10.0)
+    rate = st.sidebar.number_input(
+        "USD → GHS",
+        value=float(rate),
+        step=0.1
+    )
+
+    invested = st.sidebar.number_input(
+        "Total Invested",
+        value=float(invested),
+        step=10.0
+    )
 
     if st.sidebar.button("💾 Save Settings"):
         save_setting(user_id, "stock_rate", rate)
@@ -265,13 +283,19 @@ def stock_app():
             step=1.0
         )
 
-    cash = st.sidebar.number_input("Cash", value=float(cash), step=10.0)
+    cash = st.sidebar.number_input(
+        "Cash",
+        value=float(cash),
+        step=10.0
+    )
 
     if st.sidebar.button("💾 Save Holdings"):
         save_stock_holdings(user_id, holdings)
         save_setting(user_id, "stock_cash", cash)
 
+    # -----------------------------------------
     # LIVE PRICES
+    # -----------------------------------------
     try:
         prices = stock_live_prices(list(STOCK_MAP.keys())) or {}
     except Exception:
@@ -282,6 +306,7 @@ def stock_app():
     data_degraded = False
 
     for sym, qty in holdings.items():
+
         raw = prices.get(sym, 0.0)
         price, ok = safe_price(sym, raw)
 
@@ -297,20 +322,30 @@ def stock_app():
 
         rows.append([sym, qty, price, value])
 
+    # -----------------------------------------
+    # FALLBACK PROTECTION
+    # -----------------------------------------
     last_good = get_last_good_value()
 
     if total_value > 0 and not data_degraded:
         set_last_good_value(total_value)
+
     elif last_good is not None:
         total_value = last_good
 
+    # -----------------------------------------
+    # CASH ROW
+    # -----------------------------------------
     if cash > 0:
         rows.append(["CASH", "-", "-", cash])
 
-    df = pd.DataFrame(rows, columns=["Asset", "Qty", "Price (USD)", "Value (GHS)"])
+    df = pd.DataFrame(
+        rows,
+        columns=["Asset", "Qty", "Price (USD)", "Value (GHS)"]
+    )
 
     # -----------------------------------------
-    # METRICS
+    # KPI
     # -----------------------------------------
     pnl = total_value - invested
     pnl_pct = (pnl / invested * 100) if invested > 0 else 0.0
@@ -337,13 +372,20 @@ def stock_app():
     )
 
     # -----------------------------------------
+    # HISTORY
+    # -----------------------------------------
+    history = clean_history(
+        load_portfolio_history(user_id)
+    )
+
+    # -----------------------------------------
     # MTD / YTD
     # -----------------------------------------
-    history = clean_history(load_portfolio_history(user_id))
-
-    mtd_pnl = ytd_pnl = mtd_pct = ytd_pct = 0.0
+    mtd_pnl = ytd_pnl = 0.0
+    mtd_pct = ytd_pct = 0.0
 
     if not history.empty:
+
         now = datetime.utcnow()
 
         mtd = history[
@@ -351,76 +393,156 @@ def stock_app():
             (history["timestamp"].dt.year == now.year)
         ]
 
-        ytd = history[history["timestamp"].dt.year == now.year]
+        ytd = history[
+            history["timestamp"].dt.year == now.year
+        ]
 
         if not mtd.empty:
+
             start = mtd.iloc[0]["value_ghs"]
-            mtd_pnl = total_value - start
-            mtd_pct = (mtd_pnl / start * 100) if start > 0 else 0.0
+
+            if start > 0:
+                mtd_pnl = total_value - start
+                mtd_pct = (mtd_pnl / start) * 100
 
         if not ytd.empty:
-            start = ytd.iloc[0]["value_ghs"]
-            ytd_pnl = total_value - start
-            ytd_pct = (ytd_pnl / start * 100) if start > 0 else 0.0
 
-    st.markdown(
-        f"**MTD:** {fmt(mtd_pnl)} ({color_pct(mtd_pct)})  \n"
-        f"**YTD:** {fmt(ytd_pnl)} ({color_pct(ytd_pct)})",
-        unsafe_allow_html=True
+            start = ytd.iloc[0]["value_ghs"]
+
+            if start > 0:
+                ytd_pnl = total_value - start
+                ytd_pct = (ytd_pnl / start) * 100
+
+    # SECOND ROW
+    bottom1, bottom2 = st.columns(2)
+
+    bottom1.metric(
+        "MTD",
+        fmt(mtd_pnl),
+        color_pct(mtd_pct)
+    )
+
+    bottom2.metric(
+        "YTD",
+        fmt(ytd_pnl),
+        color_pct(ytd_pct)
     )
 
     st.markdown("---")
 
+    # -----------------------------------------
     # TABLE
-    st.markdown("Holdings Breakdown")
-    st.dataframe(df, use_container_width=True)
+    # -----------------------------------------
+    st.subheader("Holdings Breakdown")
 
-    # VALUE CHART
-    st.markdown("Portfolio Trend")
+    st.dataframe(
+        df,
+        use_container_width=True
+    )
+
+    # -----------------------------------------
+    # PORTFOLIO CHART
+    # -----------------------------------------
+    st.subheader("Portfolio Trend")
 
     if len(history) >= 2:
+
         fig = go.Figure()
+
         fig.add_trace(go.Scatter(
             x=history["timestamp"],
             y=history["value_ghs"],
             mode="lines",
             fill="tozeroy",
-            line=dict(shape="spline", smoothing=1.2, width=3)
+            line=dict(
+                shape="spline",
+                smoothing=1.2,
+                width=3
+            ),
+            hovertemplate="GHS %{y:,.2f}<extra></extra>"
         ))
-        st.plotly_chart(fig, use_container_width=True)
 
+        fig.update_layout(
+            margin=dict(l=10, r=10, t=10, b=10),
+            hovermode="x unified"
+        )
+
+        st.plotly_chart(
+            fig,
+            use_container_width=True
+        )
+
+    # -----------------------------------------
     # PNL CHART
-    st.markdown("All-Time PnL Curve")
+    # -----------------------------------------
+    st.subheader("All-Time PnL Curve")
 
     pnl_df = build_pnl(history, invested)
 
     if len(pnl_df) >= 2:
+
         fig = go.Figure()
+
         fig.add_trace(go.Scatter(
             x=pnl_df["timestamp"],
             y=pnl_df["pnl"],
             mode="lines",
-            line=dict(shape="spline", smoothing=1.2, width=3)
+            line=dict(
+                shape="spline",
+                smoothing=1.2,
+                width=3
+            ),
+            hovertemplate="GHS %{y:,.2f}<extra></extra>"
         ))
-        st.plotly_chart(fig, use_container_width=True)
+
+        fig.update_layout(
+            margin=dict(l=10, r=10, t=10, b=10),
+            hovermode="x unified"
+        )
+
+        st.plotly_chart(
+            fig,
+            use_container_width=True
+        )
 
     st.markdown("---")
 
+    # -----------------------------------------
     # PIE
-    st.markdown("Allocation")
+    # -----------------------------------------
+    st.subheader("Allocation")
 
     if not df.empty:
-        pie = alt.Chart(df[df["Value (GHS)"] > 0]).mark_arc().encode(
+
+        pie = alt.Chart(
+            df[df["Value (GHS)"] > 0]
+        ).mark_arc().encode(
             theta="Value (GHS):Q",
             color="Asset:N",
         )
-        st.altair_chart(pie, use_container_width=True)
 
+        st.altair_chart(
+            pie,
+            use_container_width=True
+        )
+
+    # -----------------------------------------
     # AUTOSAVE
+    # -----------------------------------------
     if total_value > 0 and not data_degraded:
-        autosave_portfolio_value(user_id, total_value, "stock")
+        autosave_portfolio_value(
+            user_id,
+            total_value,
+            "stock"
+        )
 
+    # -----------------------------------------
     # SNAPSHOT
+    # -----------------------------------------
     if st.button("Save Snapshot"):
+
         if total_value > 0 and not data_degraded:
-            force_snapshot(user_id, total_value)
+            force_snapshot(
+                user_id,
+                total_value
+            )
