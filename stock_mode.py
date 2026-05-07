@@ -219,17 +219,17 @@ def fmt(v):
 
 
 def pct(v):
-    return f"{v:.2f}%"
+    return f"{abs(v):.2f}%"
 
 
 # -----------------------------------------
-# COLOR PERCENT
+# DELTA FORMATTER
 # -----------------------------------------
-def color_pct(v):
+def delta_text(v):
     if v > 0:
-        return f"🟢 {pct(v)}"
+        return f"▲ {pct(v)}"
     elif v < 0:
-        return f"🔴 {pct(v)}"
+        return f"▼ {pct(v)}"
     return pct(v)
 
 
@@ -368,7 +368,8 @@ def stock_app():
     top3.metric(
         "PnL",
         fmt(pnl),
-        pct(pnl_pct)
+        delta_text(pnl_pct),
+        delta_color="normal"
     )
 
     # -----------------------------------------
@@ -399,7 +400,7 @@ def stock_app():
 
         if not mtd.empty:
 
-            start = mtd.iloc[0]["value_ghs"]
+            start = float(mtd.iloc[0]["value_ghs"])
 
             if start > 0:
                 mtd_pnl = total_value - start
@@ -407,7 +408,7 @@ def stock_app():
 
         if not ytd.empty:
 
-            start = ytd.iloc[0]["value_ghs"]
+            start = float(ytd.iloc[0]["value_ghs"])
 
             if start > 0:
                 ytd_pnl = total_value - start
@@ -419,13 +420,15 @@ def stock_app():
     bottom1.metric(
         "MTD",
         fmt(mtd_pnl),
-        color_pct(mtd_pct)
+        delta_text(mtd_pct),
+        delta_color="normal"
     )
 
     bottom2.metric(
         "YTD",
         fmt(ytd_pnl),
-        color_pct(ytd_pct)
+        delta_text(ytd_pct),
+        delta_color="normal"
     )
 
     st.markdown("---")
