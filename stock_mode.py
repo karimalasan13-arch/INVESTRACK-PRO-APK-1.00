@@ -228,14 +228,16 @@ def pct(v):
 # -----------------------------------------
 def metric_delta(v):
 
+    # Positive → green up arrow
     if v > 0:
-        return f"▲ {pct(abs(v))}"
+        return f"+{abs(v):.2f}%"
 
+    # Negative → red down arrow
     elif v < 0:
-        return f"▼ {pct(abs(v))}"
+        return f"-{abs(v):.2f}%"
 
+    # Neutral
     return "0.00%"
-
 
 # -----------------------------------------
 # MAIN APP
