@@ -223,14 +223,18 @@ def pct(v):
 
 
 # -----------------------------------------
-# COLOR PERCENT
+# DELTA FORMATTER
+# FIXES RED/GREEN ARROWS
 # -----------------------------------------
-def color_pct(v):
+def metric_delta(v):
+
     if v > 0:
-        return f"🟢 {pct(v)}"
+        return f"▲ {pct(abs(v))}"
+
     elif v < 0:
-        return f"🔴 {pct(v)}"
-    return pct(v)
+        return f"▼ {pct(abs(v))}"
+
+    return "0.00%"
 
 
 # -----------------------------------------
@@ -368,7 +372,7 @@ def stock_app():
     top3.metric(
         "PnL",
         fmt(pnl),
-        pct(pnl_pct)
+        metric_delta(pnl_pct)
     )
 
     # -----------------------------------------
@@ -413,19 +417,21 @@ def stock_app():
                 ytd_pnl = total_value - start
                 ytd_pct = (ytd_pnl / start) * 100
 
+    # -----------------------------------------
     # SECOND ROW
+    # -----------------------------------------
     bottom1, bottom2 = st.columns(2)
 
     bottom1.metric(
         "MTD",
         fmt(mtd_pnl),
-        color_pct(mtd_pct)
+        metric_delta(mtd_pct)
     )
 
     bottom2.metric(
         "YTD",
         fmt(ytd_pnl),
-        color_pct(ytd_pct)
+        metric_delta(ytd_pct)
     )
 
     st.markdown("---")
