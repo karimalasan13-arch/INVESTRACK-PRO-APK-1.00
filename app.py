@@ -1,6 +1,9 @@
 import streamlit as st
 import time
+import streamlit.components.v1 as components
+
 from auth import login_ui, ensure_auth, logout
+
 
 # ------------------------------------
 # PAGE CONFIG
@@ -11,12 +14,102 @@ st.set_page_config(
     layout="wide",
 )
 
+
+# ------------------------------------
+# MONETIZATION CONFIG
+# ------------------------------------
+SHOW_AD_PLACEHOLDERS = True
+
+
+def get_secret(key, default=""):
+    try:
+        return st.secrets.get(key, default)
+    except Exception:
+        return default
+
+
+ADSENSE_CLIENT = get_secret("ADSENSE_CLIENT", "")
+ADSENSE_TOP_SLOT = get_secret("ADSENSE_TOP_SLOT", "")
+ADSENSE_BOTTOM_SLOT = get_secret("ADSENSE_BOTTOM_SLOT", "")
+ADSENSE_SIDEBAR_SLOT = get_secret("ADSENSE_SIDEBAR_SLOT", "")
+
+
+def render_ad_slot(label="Sponsored", slot_id="", height=120):
+    """
+    Safe web ad container.
+    If AdSense IDs are not configured yet, it shows a clean placeholder.
+    This will not break your app if ads are not ready.
+    """
+
+    if ADSENSE_CLIENT and slot_id:
+        ad_html = f"""
+        <div style="width:100%; text-align:center; margin:10px 0;">
+            <script async
+                src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client={ADSENSE_CLIENT}"
+                crossorigin="anonymous"></script>
+
+            <ins class="adsbygoogle"
+                style="display:block"
+                data-ad-client="{ADSENSE_CLIENT}"
+                data-ad-slot="{slot_id}"
+                data-ad-format="auto"
+                data-full-width-responsive="true"></ins>
+
+            <script>
+                (adsbygoogle = window.adsbygoogle || []).push({{}});
+            </script>
+        </div>
+        """
+
+        components.html(ad_html, height=height)
+
+    elif SHOW_AD_PLACEHOLDERS:
+        st.markdown(
+            f"""
+            <div style="
+                border:1px dashed #cfcfcf;
+                border-radius:12px;
+                padding:14px;
+                text-align:center;
+                color:#777;
+                background:#fafafa;
+                margin:10px 0;
+            ">
+                <strong>{label}</strong><br>
+                Ad placement ready
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+
+def render_partner_cta():
+    st.markdown(
+        """
+        <div style="
+            border-radius:14px;
+            padding:18px;
+            background:linear-gradient(135deg,#0f172a,#1e293b);
+            color:white;
+            margin:14px 0;
+        ">
+            <h4 style="margin:0 0 8px 0;">🚀 Pro Investor Tools Coming Soon</h4>
+            <p style="margin:0; color:#d1d5db;">
+                Advanced analytics, exportable reports, portfolio scoring, and market insights.
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 # ------------------------------------
 # HARD AUTH GATE
 # ------------------------------------
 if not ensure_auth():
     login_ui()
     st.stop()
+
 
 # ------------------------------------
 # SESSION VALIDATION
@@ -31,7 +124,7 @@ user_id = st.session_state.user_id
 
 
 # ------------------------------------
-# SAFE AUTO REFRESH (60s)
+# SAFE AUTO REFRESH
 # ------------------------------------
 REFRESH_INTERVAL = 60
 
@@ -59,6 +152,14 @@ mode = st.sidebar.radio(
     ["Crypto", "Stocks"],
 )
 
+st.sidebar.markdown("---")
+
+render_ad_slot(
+    label="Sidebar Sponsored Slot",
+    slot_id=ADSENSE_SIDEBAR_SLOT,
+    height=120,
+)
+
 st.sidebar.markdown(
     """
     ---
@@ -66,6 +167,16 @@ st.sidebar.markdown(
 
     Email **hassbuildllc@gmail.com**
     """
+)
+
+
+# ------------------------------------
+# TOP MONETIZATION SLOT
+# ------------------------------------
+render_ad_slot(
+    label="Top Sponsored Slot",
+    slot_id=ADSENSE_TOP_SLOT,
+    height=120,
 )
 
 
@@ -85,6 +196,18 @@ try:
 except Exception as e:
 
     st.error("Something went wrong. Please refresh the app.")
-
-    # Print full error to server logs
     print("APP ERROR:", type(e).__name__, e)
+
+
+# ------------------------------------
+# BOTTOM MONETIZATION SLOT
+# ------------------------------------
+st.markdown("---")
+
+render_partner_cta()
+
+render_ad_slot(
+    label="Bottom Sponsored Slot",
+    slot_id=ADSENSE_BOTTOM_SLOT,
+    height=120,
+)
