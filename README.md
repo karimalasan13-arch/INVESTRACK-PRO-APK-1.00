@@ -15,6 +15,14 @@ Your information is used strictly for:
 - Displaying portfolio analytics
 - Improving app functionality
 
+## Advertising ID and Ads
+
+InvesTrack Pro may use Google AdMob to display advertisements. Google AdMob may collect and use the Android Advertising ID for advertising, ad measurement, fraud prevention, and analytics purposes.
+
+We do not use the Advertising ID to personally identify users. We do not sell personal information. Users may reset or limit use of their Advertising ID through their Android device settings.
+
+Third-party advertising partners, including Google, may use cookies, device identifiers, or similar technologies to serve and measure ads in accordance with their own privacy policies.
+
 ## Data Sharing
 We do **not** sell, rent, or share your personal data with third parties.
 
