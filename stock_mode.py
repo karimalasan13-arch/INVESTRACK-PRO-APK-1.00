@@ -9,20 +9,57 @@ from portfolio_tracker import autosave_portfolio_value
 from db import get_supabase
 
 
-# -----------------------------------------
-# STOCK MAP
-# -----------------------------------------
 STOCK_MAP = {
-    "AAPL": "AAPL",
-    "MSFT": "MSFT",
-    "GOOGL": "GOOGL",
-    "AMZN": "AMZN",
-    "TSLA": "TSLA",
-    "META": "META",
     "NVDA": "NVDA",
+    "AAPL": "AAPL",
+    "GOOGL": "GOOGL",
+    "GOOG": "GOOG",
+    "MSFT": "MSFT",
+    "AMZN": "AMZN",
+    "META": "META",
+    "AVGO": "AVGO",
+    "TSLA": "TSLA",
+    "BRK-B": "BRK-B",
+    "TSM": "TSM",
+    "LLY": "LLY",
     "JPM": "JPM",
+    "WMT": "WMT",
     "V": "V",
-    "BRK-B": "BRK.B",
+    "MA": "MA",
+    "NFLX": "NFLX",
+    "ORCL": "ORCL",
+    "XOM": "XOM",
+    "COST": "COST",
+    "JNJ": "JNJ",
+    "HD": "HD",
+    "PG": "PG",
+    "BAC": "BAC",
+    "ABBV": "ABBV",
+    "KO": "KO",
+    "PLTR": "PLTR",
+    "ASML": "ASML",
+    "SAP": "SAP",
+    "UNH": "UNH",
+    "AMD": "AMD",
+    "CRM": "CRM",
+    "CSCO": "CSCO",
+    "CVX": "CVX",
+    "IBM": "IBM",
+    "GE": "GE",
+    "WFC": "WFC",
+    "TMUS": "TMUS",
+    "NOW": "NOW",
+    "MCD": "MCD",
+    "PM": "PM",
+    "ABT": "ABT",
+    "LIN": "LIN",
+    "DIS": "DIS",
+    "MRK": "MRK",
+    "ISRG": "ISRG",
+    "INTU": "INTU",
+    "GS": "GS",
+    "CAT": "CAT",
+    "TXN": "TXN",
 }
 
 
@@ -42,9 +79,6 @@ CURRENCY_OPTIONS = [
 ]
 
 
-# -----------------------------------------
-# DB CLIENT
-# -----------------------------------------
 def db():
     supabase = get_supabase()
 
@@ -60,9 +94,6 @@ def db():
     return supabase
 
 
-# -----------------------------------------
-# SNAPSHOT
-# -----------------------------------------
 def force_snapshot(user_id, value_ghs, mode="stock"):
     try:
         db().table("portfolio_history").insert({
@@ -77,9 +108,6 @@ def force_snapshot(user_id, value_ghs, mode="stock"):
         return False
 
 
-# -----------------------------------------
-# SAFE PRICE SYSTEM
-# -----------------------------------------
 def safe_price(symbol, price):
 
     if "stock_price_memory" not in st.session_state:
@@ -97,9 +125,6 @@ def safe_price(symbol, price):
     return None, False
 
 
-# -----------------------------------------
-# LAST GOOD VALUE
-# -----------------------------------------
 def get_last_good_value():
     return st.session_state.get("stock_last_good_value", None)
 
@@ -108,9 +133,6 @@ def set_last_good_value(value):
     st.session_state.stock_last_good_value = value
 
 
-# -----------------------------------------
-# CLEAN HISTORY
-# -----------------------------------------
 def clean_history(history):
 
     if not history:
@@ -130,9 +152,6 @@ def clean_history(history):
     return df
 
 
-# -----------------------------------------
-# PNL BUILDER
-# -----------------------------------------
 def build_pnl(df, invested):
 
     if df.empty:
@@ -144,9 +163,6 @@ def build_pnl(df, invested):
     return df
 
 
-# -----------------------------------------
-# SETTINGS
-# -----------------------------------------
 def load_setting(user_id, key, default):
     try:
         res = (
@@ -170,9 +186,6 @@ def save_setting(user_id, key, value):
     ).execute()
 
 
-# -----------------------------------------
-# CURRENCY HELPERS
-# -----------------------------------------
 def currency_label(currency):
     return f'{currency["code"]} - {currency["name"]}'
 
@@ -190,13 +203,6 @@ def fmt(v, currency):
     return f'{currency["symbol"]} {v:,.2f}'
 
 
-def pct(v):
-    return f"{v:.2f}%"
-
-
-# -----------------------------------------
-# HOLDINGS
-# -----------------------------------------
 def load_stock_holdings(user_id):
 
     holdings = {k: 0.0 for k in STOCK_MAP}
@@ -211,7 +217,10 @@ def load_stock_holdings(user_id):
         )
 
         for r in res.data or []:
-            holdings[r["symbol"]] = float(r["quantity"])
+            symbol = r["symbol"]
+
+            if symbol in holdings:
+                holdings[symbol] = float(r["quantity"])
 
     except Exception:
         pass
@@ -232,9 +241,6 @@ def save_stock_holdings(user_id, holdings):
     ).execute()
 
 
-# -----------------------------------------
-# HISTORY
-# -----------------------------------------
 def load_portfolio_history(user_id):
     try:
         res = (
@@ -251,9 +257,6 @@ def load_portfolio_history(user_id):
         return []
 
 
-# -----------------------------------------
-# DELTA FORMATTER
-# -----------------------------------------
 def metric_delta(v):
 
     if v > 0:
@@ -265,9 +268,6 @@ def metric_delta(v):
     return "0.00%"
 
 
-# -----------------------------------------
-# MAIN APP
-# -----------------------------------------
 def stock_app():
 
     st.title("Stock Portfolio Dashboard")
@@ -287,9 +287,6 @@ def stock_app():
 
     holdings = load_stock_holdings(user_id)
 
-    # -----------------------------------------
-    # SIDEBAR
-    # -----------------------------------------
     st.sidebar.header("⚙️ Settings")
 
     currency_labels = [
@@ -322,6 +319,7 @@ def stock_app():
         save_setting(user_id, "stock_currency_index", selected_index)
         save_setting(user_id, "stock_rate", rate)
         save_setting(user_id, "stock_investment", invested)
+        st.sidebar.success("Settings saved")
 
     st.sidebar.caption(
         f"Portfolio values will display in {currency_code}. "
@@ -329,28 +327,40 @@ def stock_app():
     )
 
     st.sidebar.markdown("---")
-    st.sidebar.subheader("Holdings")
 
-    for sym in STOCK_MAP:
-        holdings[sym] = st.sidebar.number_input(
-            sym,
-            value=float(holdings.get(sym, 0.0)),
-            step=1.0
+    with st.expander("⚙️ Manage Stock Holdings", expanded=False):
+
+        st.caption("Enter your quantities. The dashboard will show your top 10 holdings by value.")
+
+        symbols = list(STOCK_MAP.keys())
+
+        for i in range(0, len(symbols), 3):
+            cols = st.columns(3)
+
+            for j, col in enumerate(cols):
+                if i + j < len(symbols):
+                    sym = symbols[i + j]
+
+                    with col:
+                        holdings[sym] = st.number_input(
+                            sym,
+                            value=float(holdings.get(sym, 0.0)),
+                            step=1.0,
+                            key=f"stock_qty_{sym}"
+                        )
+
+        cash = st.number_input(
+            f"Cash ({currency_code})",
+            value=float(cash),
+            step=10.0,
+            key="stock_cash_input"
         )
 
-    cash = st.sidebar.number_input(
-        f"Cash ({currency_code})",
-        value=float(cash),
-        step=10.0
-    )
+        if st.button("💾 Save Stock Holdings"):
+            save_stock_holdings(user_id, holdings)
+            save_setting(user_id, "stock_cash", cash)
+            st.success("Stock holdings saved")
 
-    if st.sidebar.button("💾 Save Holdings"):
-        save_stock_holdings(user_id, holdings)
-        save_setting(user_id, "stock_cash", cash)
-
-    # -----------------------------------------
-    # LIVE PRICES
-    # -----------------------------------------
     try:
         prices = stock_live_prices(list(STOCK_MAP.keys())) or {}
     except Exception:
@@ -359,7 +369,6 @@ def stock_app():
     rows = []
     total_value = cash
     data_degraded = False
-
     failed_assets = []
 
     value_col = f"Value ({currency_code})"
@@ -388,9 +397,6 @@ def stock_app():
             round(value, 2)
         ])
 
-    # -----------------------------------------
-    # FALLBACK PROTECTION
-    # -----------------------------------------
     last_good = get_last_good_value()
 
     if total_value > 0 and not data_degraded:
@@ -399,9 +405,6 @@ def stock_app():
     elif last_good is not None:
         total_value = last_good
 
-    # -----------------------------------------
-    # WARNINGS
-    # -----------------------------------------
     if failed_assets:
         st.warning(
             "Some stock prices could not be refreshed live: "
@@ -409,9 +412,6 @@ def stock_app():
             + ". Cached prices are being used."
         )
 
-    # -----------------------------------------
-    # CASH ROW
-    # -----------------------------------------
     if cash > 0:
         rows.append(["CASH", "-", "-", round(cash, 2)])
 
@@ -420,9 +420,14 @@ def stock_app():
         columns=["Asset", "Qty", "Price (USD)", value_col]
     )
 
-    # -----------------------------------------
-    # KPI
-    # -----------------------------------------
+    df[value_col] = pd.to_numeric(df[value_col], errors="coerce").fillna(0.0)
+
+    top_df = (
+        df[df[value_col] > 0]
+        .sort_values(value_col, ascending=False)
+        .head(10)
+    )
+
     pnl = total_value - invested
     pnl_pct = (pnl / invested * 100) if invested > 0 else 0.0
 
@@ -430,32 +435,12 @@ def stock_app():
 
     top1, top2, top3 = st.columns(3)
 
-    top1.metric(
-        "Portfolio Value",
-        fmt(total_value, selected_currency)
-    )
+    top1.metric("Portfolio Value", fmt(total_value, selected_currency))
+    top2.metric("Invested", fmt(invested, selected_currency))
+    top3.metric("PnL", fmt(pnl, selected_currency), metric_delta(pnl_pct))
 
-    top2.metric(
-        "Invested",
-        fmt(invested, selected_currency)
-    )
+    history = clean_history(load_portfolio_history(user_id))
 
-    top3.metric(
-        "PnL",
-        fmt(pnl, selected_currency),
-        metric_delta(pnl_pct)
-    )
-
-    # -----------------------------------------
-    # HISTORY
-    # -----------------------------------------
-    history = clean_history(
-        load_portfolio_history(user_id)
-    )
-
-    # -----------------------------------------
-    # MTD / YTD
-    # -----------------------------------------
     mtd_pnl = ytd_pnl = 0.0
     mtd_pct = ytd_pct = 0.0
 
@@ -473,7 +458,6 @@ def stock_app():
         ]
 
         if not mtd.empty:
-
             start = mtd.iloc[0]["value_ghs"]
 
             if start > 0:
@@ -481,45 +465,32 @@ def stock_app():
                 mtd_pct = (mtd_pnl / start) * 100
 
         if not ytd.empty:
-
             start = ytd.iloc[0]["value_ghs"]
 
             if start > 0:
                 ytd_pnl = total_value - start
                 ytd_pct = (ytd_pnl / start) * 100
 
-    # -----------------------------------------
-    # SECOND ROW
-    # -----------------------------------------
     bottom1, bottom2 = st.columns(2)
 
-    bottom1.metric(
-        "MTD",
-        fmt(mtd_pnl, selected_currency),
-        metric_delta(mtd_pct)
-    )
-
-    bottom2.metric(
-        "YTD",
-        fmt(ytd_pnl, selected_currency),
-        metric_delta(ytd_pct)
-    )
+    bottom1.metric("MTD", fmt(mtd_pnl, selected_currency), metric_delta(mtd_pct))
+    bottom2.metric("YTD", fmt(ytd_pnl, selected_currency), metric_delta(ytd_pct))
 
     st.markdown("---")
 
-    # -----------------------------------------
-    # TABLE
-    # -----------------------------------------
-    st.subheader("Holdings Breakdown")
+    st.subheader("🏆 Top 10 Stock Holdings")
 
-    st.dataframe(
-        df,
-        use_container_width=True
-    )
+    if top_df.empty:
+        st.info("No stock holdings entered yet.")
+    else:
+        st.dataframe(top_df, use_container_width=True)
 
-    # -----------------------------------------
-    # PORTFOLIO CHART
-    # -----------------------------------------
+    with st.expander("📂 View All Stock Assets"):
+        st.dataframe(
+            df.sort_values(value_col, ascending=False),
+            use_container_width=True
+        )
+
     st.subheader("Portfolio Trend")
 
     if len(history) >= 2:
@@ -550,9 +521,6 @@ def stock_app():
             use_container_width=True
         )
 
-    # -----------------------------------------
-    # PNL CHART
-    # -----------------------------------------
     st.subheader("All-Time PnL Curve")
 
     pnl_df = build_pnl(history, invested)
@@ -586,16 +554,11 @@ def stock_app():
 
     st.markdown("---")
 
-    # -----------------------------------------
-    # PIE
-    # -----------------------------------------
     st.subheader("Allocation")
 
-    if not df.empty:
+    if not top_df.empty:
 
-        pie = alt.Chart(
-            df[df[value_col] > 0]
-        ).mark_arc().encode(
+        pie = alt.Chart(top_df).mark_arc().encode(
             theta=f"{value_col}:Q",
             color="Asset:N",
         )
@@ -605,9 +568,6 @@ def stock_app():
             use_container_width=True
         )
 
-    # -----------------------------------------
-    # AUTOSAVE
-    # -----------------------------------------
     if total_value > 0 and not data_degraded:
         autosave_portfolio_value(
             user_id,
@@ -615,9 +575,6 @@ def stock_app():
             "stock"
         )
 
-    # -----------------------------------------
-    # SNAPSHOT
-    # -----------------------------------------
     if st.button("Save Snapshot"):
 
         if total_value > 0 and not data_degraded:
