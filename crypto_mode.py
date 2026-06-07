@@ -26,6 +26,22 @@ API_MAP = {
 }
 
 
+CURRENCY_OPTIONS = [
+    {"code": "GHS", "name": "Ghana Cedi", "symbol": "₵"},
+    {"code": "NGN", "name": "Nigerian Naira", "symbol": "₦"},
+    {"code": "KES", "name": "Kenyan Shilling", "symbol": "KSh"},
+    {"code": "ZAR", "name": "South African Rand", "symbol": "R"},
+    {"code": "CFA", "name": "CFA Franc", "symbol": "CFA"},
+    {"code": "USD", "name": "US Dollar", "symbol": "$"},
+    {"code": "CNY", "name": "Chinese Yuan", "symbol": "¥"},
+    {"code": "JPY", "name": "Japanese Yen", "symbol": "¥"},
+    {"code": "GBP", "name": "British Pound", "symbol": "£"},
+    {"code": "CAD", "name": "Canadian Dollar", "symbol": "C$"},
+    {"code": "CHF", "name": "Swiss Franc", "symbol": "CHF"},
+    {"code": "EUR", "name": "Euro", "symbol": "€"},
+]
+
+
 # -----------------------------------------
 # DB
 # -----------------------------------------
@@ -95,36 +111,6 @@ def set_last_good_value(value):
 
 
 # -----------------------------------------
-# PNL HISTORY
-# -----------------------------------------
-def build_pnl_history(history, invested):
-
-    if not history:
-        return pd.DataFrame()
-
-    h = pd.DataFrame(history)
-
-    if h.empty:
-        return pd.DataFrame()
-
-    h["timestamp"] = pd.to_datetime(
-        h["timestamp"],
-        errors="coerce"
-    )
-
-    h["value_ghs"] = pd.to_numeric(
-        h["value_ghs"],
-        errors="coerce"
-    )
-
-    h = h.dropna().sort_values("timestamp")
-
-    h["pnl"] = h["value_ghs"] - invested
-
-    return h
-
-
-# -----------------------------------------
 # SETTINGS
 # -----------------------------------------
 def load_setting(user_id, key, default):
@@ -156,6 +142,60 @@ def save_setting(user_id, key, value):
         },
         on_conflict="user_id,key",
     ).execute()
+
+
+# -----------------------------------------
+# CURRENCY HELPERS
+# -----------------------------------------
+def currency_label(currency):
+    return f'{currency["code"]} - {currency["name"]}'
+
+
+def load_currency_index(user_id, mode):
+    idx = int(load_setting(user_id, f"{mode}_currency_index", 0))
+
+    if idx < 0 or idx >= len(CURRENCY_OPTIONS):
+        idx = 0
+
+    return idx
+
+
+def fmt(v, currency):
+    return f'{currency["symbol"]} {v:,.2f}'
+
+
+def pct(v):
+    return f"{v:.2f}%"
+
+
+# -----------------------------------------
+# PNL HISTORY
+# -----------------------------------------
+def build_pnl_history(history, invested):
+
+    if not history:
+        return pd.DataFrame()
+
+    h = pd.DataFrame(history)
+
+    if h.empty:
+        return pd.DataFrame()
+
+    h["timestamp"] = pd.to_datetime(
+        h["timestamp"],
+        errors="coerce"
+    )
+
+    h["value_ghs"] = pd.to_numeric(
+        h["value_ghs"],
+        errors="coerce"
+    )
+
+    h = h.dropna().sort_values("timestamp")
+
+    h["pnl"] = h["value_ghs"] - invested
+
+    return h
 
 
 # -----------------------------------------
@@ -223,26 +263,9 @@ def load_portfolio_history(user_id):
 
 
 # -----------------------------------------
-# FORMAT
-# -----------------------------------------
-def fmt(v):
-    return f"GHS {v:,.2f}"
-
-
-def pct(v):
-    return f"{v:.2f}%"
-
-
-# -----------------------------------------
 # STREAMLIT METRIC DELTA FIX
 # -----------------------------------------
 def metric_delta(value):
-    """
-    Positive  -> green up arrow
-    Negative  -> red down arrow
-    Zero      -> neutral
-    """
-
     if value > 0:
         return f"{value:.2f}%"
 
@@ -268,6 +291,9 @@ def crypto_app():
     # -----------------------------------------
     # LOAD SETTINGS
     # -----------------------------------------
+    currency_index = load_currency_index(user_id, "crypto")
+    selected_currency = CURRENCY_OPTIONS[currency_index]
+
     rate = load_setting(user_id, "crypto_rate", 14.5)
 
     invested = load_setting(
@@ -283,19 +309,35 @@ def crypto_app():
     # -----------------------------------------
     st.sidebar.header("⚙️ Settings")
 
+    currency_labels = [
+        currency_label(c) for c in CURRENCY_OPTIONS
+    ]
+
+    selected_label = st.sidebar.selectbox(
+        "Display Currency",
+        currency_labels,
+        index=currency_index
+    )
+
+    selected_index = currency_labels.index(selected_label)
+    selected_currency = CURRENCY_OPTIONS[selected_index]
+    currency_code = selected_currency["code"]
+
     rate = st.sidebar.number_input(
-        "USD → GHS",
+        f"USD → {currency_code}",
         value=float(rate),
         step=0.1
     )
 
     invested = st.sidebar.number_input(
-        "Total Invested (GHS)",
+        f'Total Invested ({currency_code})',
         value=float(invested),
         step=10.0
     )
 
     if st.sidebar.button("💾 Save Settings"):
+
+        save_setting(user_id, "crypto_currency_index", selected_index)
 
         save_setting(user_id, "crypto_rate", rate)
 
@@ -306,6 +348,11 @@ def crypto_app():
         )
 
         st.sidebar.success("Settings saved")
+
+    st.sidebar.caption(
+        f"Portfolio values will display in {currency_code}. "
+        "Your exchange-rate input controls the conversion."
+    )
 
     st.sidebar.markdown("---")
     st.sidebar.subheader("Holdings")
@@ -343,6 +390,8 @@ def crypto_app():
 
     failed_assets = []
 
+    value_col = f"Value ({currency_code})"
+
     for sym, qty in holdings.items():
 
         raw_price = prices.get(
@@ -361,15 +410,15 @@ def crypto_app():
             data_degraded = True
             failed_assets.append(sym)
 
-        value_ghs = qty * price * rate
+        value_display = qty * price * rate
 
-        total_value += value_ghs
+        total_value += value_display
 
         rows.append([
             sym,
             qty,
             round(price, 4),
-            round(value_ghs, 2),
+            round(value_display, 2),
         ])
 
     # -----------------------------------------
@@ -403,7 +452,7 @@ def crypto_app():
             "Asset",
             "Qty",
             "Price (USD)",
-            "Value (GHS)"
+            value_col
         ]
     )
 
@@ -423,17 +472,17 @@ def crypto_app():
 
     top1.metric(
         "Portfolio Value",
-        fmt(total_value)
+        fmt(total_value, selected_currency)
     )
 
     top2.metric(
         "Invested",
-        fmt(invested)
+        fmt(invested, selected_currency)
     )
 
     top3.metric(
         "PnL",
-        fmt(pnl),
+        fmt(pnl, selected_currency),
         metric_delta(pnl_pct)
     )
 
@@ -516,13 +565,13 @@ def crypto_app():
 
     bottom1.metric(
         "MTD",
-        fmt(mtd_pnl),
+        fmt(mtd_pnl, selected_currency),
         metric_delta(mtd_pct)
     )
 
     bottom2.metric(
         "YTD",
-        fmt(ytd_pnl),
+        fmt(ytd_pnl, selected_currency),
         metric_delta(ytd_pct)
     )
 
@@ -601,8 +650,14 @@ def crypto_app():
                 smoothing=1.1,
                 width=3
             ),
-            fill="tozeroy"
+            fill="tozeroy",
+            hovertemplate=f'{selected_currency["symbol"]} %{{y:,.2f}}<extra></extra>'
         ))
+
+        fig.update_layout(
+            yaxis_title=f"Value ({currency_code})",
+            hovermode="x unified"
+        )
 
         st.plotly_chart(
             fig,
@@ -635,7 +690,13 @@ def crypto_app():
                 smoothing=1.1,
                 width=3
             ),
+            hovertemplate=f'{selected_currency["symbol"]} %{{y:,.2f}}<extra></extra>'
         ))
+
+        fig.update_layout(
+            yaxis_title=f"PnL ({currency_code})",
+            hovermode="x unified"
+        )
 
         st.plotly_chart(
             fig,
@@ -652,12 +713,12 @@ def crypto_app():
 
     if not df.empty:
 
-        pie_df = df[df["Value (GHS)"] > 0]
+        pie_df = df[df[value_col] > 0]
 
         pie = alt.Chart(
             pie_df
         ).mark_arc().encode(
-            theta="Value (GHS):Q",
+            theta=f"{value_col}:Q",
             color="Asset:N",
         )
 
