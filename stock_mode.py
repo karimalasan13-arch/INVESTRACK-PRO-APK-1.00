@@ -26,6 +26,22 @@ STOCK_MAP = {
 }
 
 
+CURRENCY_OPTIONS = [
+    {"code": "GHS", "name": "Ghana Cedi", "symbol": "₵"},
+    {"code": "NGN", "name": "Nigerian Naira", "symbol": "₦"},
+    {"code": "KES", "name": "Kenyan Shilling", "symbol": "KSh"},
+    {"code": "ZAR", "name": "South African Rand", "symbol": "R"},
+    {"code": "CFA", "name": "CFA Franc", "symbol": "CFA"},
+    {"code": "USD", "name": "US Dollar", "symbol": "$"},
+    {"code": "CNY", "name": "Chinese Yuan", "symbol": "¥"},
+    {"code": "JPY", "name": "Japanese Yen", "symbol": "¥"},
+    {"code": "GBP", "name": "British Pound", "symbol": "£"},
+    {"code": "CAD", "name": "Canadian Dollar", "symbol": "C$"},
+    {"code": "CHF", "name": "Swiss Franc", "symbol": "CHF"},
+    {"code": "EUR", "name": "Euro", "symbol": "€"},
+]
+
+
 # -----------------------------------------
 # DB CLIENT
 # -----------------------------------------
@@ -155,6 +171,30 @@ def save_setting(user_id, key, value):
 
 
 # -----------------------------------------
+# CURRENCY HELPERS
+# -----------------------------------------
+def currency_label(currency):
+    return f'{currency["code"]} - {currency["name"]}'
+
+
+def load_currency_index(user_id, mode):
+    idx = int(load_setting(user_id, f"{mode}_currency_index", 0))
+
+    if idx < 0 or idx >= len(CURRENCY_OPTIONS):
+        idx = 0
+
+    return idx
+
+
+def fmt(v, currency):
+    return f'{currency["symbol"]} {v:,.2f}'
+
+
+def pct(v):
+    return f"{v:.2f}%"
+
+
+# -----------------------------------------
 # HOLDINGS
 # -----------------------------------------
 def load_stock_holdings(user_id):
@@ -212,32 +252,18 @@ def load_portfolio_history(user_id):
 
 
 # -----------------------------------------
-# FORMATTERS
-# -----------------------------------------
-def fmt(v):
-    return f"GHS {v:,.2f}"
-
-
-def pct(v):
-    return f"{v:.2f}%"
-
-
-# -----------------------------------------
 # DELTA FORMATTER
-# FIXES RED/GREEN ARROWS
 # -----------------------------------------
 def metric_delta(v):
 
-    # Positive → green up arrow
     if v > 0:
         return f"+{abs(v):.2f}%"
 
-    # Negative → red down arrow
     elif v < 0:
         return f"-{abs(v):.2f}%"
 
-    # Neutral
     return "0.00%"
+
 
 # -----------------------------------------
 # MAIN APP
@@ -252,6 +278,9 @@ def stock_app():
 
     user_id = st.session_state.user_id
 
+    currency_index = load_currency_index(user_id, "stock")
+    selected_currency = CURRENCY_OPTIONS[currency_index]
+
     rate = load_setting(user_id, "stock_rate", 14.5)
     invested = load_setting(user_id, "stock_investment", 0.0)
     cash = load_setting(user_id, "stock_cash", 0.0)
@@ -263,21 +292,41 @@ def stock_app():
     # -----------------------------------------
     st.sidebar.header("⚙️ Settings")
 
+    currency_labels = [
+        currency_label(c) for c in CURRENCY_OPTIONS
+    ]
+
+    selected_label = st.sidebar.selectbox(
+        "Display Currency",
+        currency_labels,
+        index=currency_index
+    )
+
+    selected_index = currency_labels.index(selected_label)
+    selected_currency = CURRENCY_OPTIONS[selected_index]
+    currency_code = selected_currency["code"]
+
     rate = st.sidebar.number_input(
-        "USD → GHS",
+        f"USD → {currency_code}",
         value=float(rate),
         step=0.1
     )
 
     invested = st.sidebar.number_input(
-        "Total Invested",
+        f"Total Invested ({currency_code})",
         value=float(invested),
         step=10.0
     )
 
     if st.sidebar.button("💾 Save Settings"):
+        save_setting(user_id, "stock_currency_index", selected_index)
         save_setting(user_id, "stock_rate", rate)
         save_setting(user_id, "stock_investment", invested)
+
+    st.sidebar.caption(
+        f"Portfolio values will display in {currency_code}. "
+        "Your exchange-rate input controls the conversion."
+    )
 
     st.sidebar.markdown("---")
     st.sidebar.subheader("Holdings")
@@ -290,7 +339,7 @@ def stock_app():
         )
 
     cash = st.sidebar.number_input(
-        "Cash",
+        f"Cash ({currency_code})",
         value=float(cash),
         step=10.0
     )
@@ -311,6 +360,10 @@ def stock_app():
     total_value = cash
     data_degraded = False
 
+    failed_assets = []
+
+    value_col = f"Value ({currency_code})"
+
     for sym, qty in holdings.items():
 
         raw = prices.get(sym, 0.0)
@@ -318,15 +371,22 @@ def stock_app():
 
         if price is None:
             data_degraded = True
+            failed_assets.append(sym)
             continue
 
         if not ok:
             data_degraded = True
+            failed_assets.append(sym)
 
         value = price * qty * rate
         total_value += value
 
-        rows.append([sym, qty, price, value])
+        rows.append([
+            sym,
+            qty,
+            price,
+            round(value, 2)
+        ])
 
     # -----------------------------------------
     # FALLBACK PROTECTION
@@ -340,14 +400,24 @@ def stock_app():
         total_value = last_good
 
     # -----------------------------------------
+    # WARNINGS
+    # -----------------------------------------
+    if failed_assets:
+        st.warning(
+            "Some stock prices could not be refreshed live: "
+            + ", ".join(failed_assets)
+            + ". Cached prices are being used."
+        )
+
+    # -----------------------------------------
     # CASH ROW
     # -----------------------------------------
     if cash > 0:
-        rows.append(["CASH", "-", "-", cash])
+        rows.append(["CASH", "-", "-", round(cash, 2)])
 
     df = pd.DataFrame(
         rows,
-        columns=["Asset", "Qty", "Price (USD)", "Value (GHS)"]
+        columns=["Asset", "Qty", "Price (USD)", value_col]
     )
 
     # -----------------------------------------
@@ -358,22 +428,21 @@ def stock_app():
 
     st.subheader("📊 Overview")
 
-    # TOP ROW
     top1, top2, top3 = st.columns(3)
 
     top1.metric(
         "Portfolio Value",
-        fmt(total_value)
+        fmt(total_value, selected_currency)
     )
 
     top2.metric(
         "Invested",
-        fmt(invested)
+        fmt(invested, selected_currency)
     )
 
     top3.metric(
         "PnL",
-        fmt(pnl),
+        fmt(pnl, selected_currency),
         metric_delta(pnl_pct)
     )
 
@@ -426,13 +495,13 @@ def stock_app():
 
     bottom1.metric(
         "MTD",
-        fmt(mtd_pnl),
+        fmt(mtd_pnl, selected_currency),
         metric_delta(mtd_pct)
     )
 
     bottom2.metric(
         "YTD",
-        fmt(ytd_pnl),
+        fmt(ytd_pnl, selected_currency),
         metric_delta(ytd_pct)
     )
 
@@ -467,12 +536,13 @@ def stock_app():
                 smoothing=1.2,
                 width=3
             ),
-            hovertemplate="GHS %{y:,.2f}<extra></extra>"
+            hovertemplate=f'{selected_currency["symbol"]} %{{y:,.2f}}<extra></extra>'
         ))
 
         fig.update_layout(
             margin=dict(l=10, r=10, t=10, b=10),
-            hovermode="x unified"
+            hovermode="x unified",
+            yaxis_title=f"Value ({currency_code})"
         )
 
         st.plotly_chart(
@@ -500,12 +570,13 @@ def stock_app():
                 smoothing=1.2,
                 width=3
             ),
-            hovertemplate="GHS %{y:,.2f}<extra></extra>"
+            hovertemplate=f'{selected_currency["symbol"]} %{{y:,.2f}}<extra></extra>'
         ))
 
         fig.update_layout(
             margin=dict(l=10, r=10, t=10, b=10),
-            hovermode="x unified"
+            hovermode="x unified",
+            yaxis_title=f"PnL ({currency_code})"
         )
 
         st.plotly_chart(
@@ -523,9 +594,9 @@ def stock_app():
     if not df.empty:
 
         pie = alt.Chart(
-            df[df["Value (GHS)"] > 0]
+            df[df[value_col] > 0]
         ).mark_arc().encode(
-            theta="Value (GHS):Q",
+            theta=f"{value_col}:Q",
             color="Asset:N",
         )
 
