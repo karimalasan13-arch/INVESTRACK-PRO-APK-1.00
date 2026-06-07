@@ -109,7 +109,6 @@ def force_snapshot(user_id, value_ghs, mode="crypto"):
 
 
 def safe_price(symbol, price):
-
     if "crypto_price_memory" not in st.session_state:
         st.session_state.crypto_price_memory = {}
 
@@ -134,7 +133,6 @@ def set_last_good_value(value):
 
 
 def load_setting(user_id, key, default):
-
     try:
         res = (
             db()
@@ -151,7 +149,6 @@ def load_setting(user_id, key, default):
 
 
 def save_setting(user_id, key, value):
-
     db().table("user_settings").upsert(
         {
             "user_id": user_id,
@@ -180,7 +177,6 @@ def fmt(v, currency):
 
 
 def build_pnl_history(history, invested):
-
     if not history:
         return pd.DataFrame()
 
@@ -189,15 +185,8 @@ def build_pnl_history(history, invested):
     if h.empty:
         return pd.DataFrame()
 
-    h["timestamp"] = pd.to_datetime(
-        h["timestamp"],
-        errors="coerce"
-    )
-
-    h["value_ghs"] = pd.to_numeric(
-        h["value_ghs"],
-        errors="coerce"
-    )
+    h["timestamp"] = pd.to_datetime(h["timestamp"], errors="coerce")
+    h["value_ghs"] = pd.to_numeric(h["value_ghs"], errors="coerce")
 
     h = h.dropna().sort_values("timestamp")
     h["pnl"] = h["value_ghs"] - invested
@@ -206,7 +195,6 @@ def build_pnl_history(history, invested):
 
 
 def load_crypto_holdings(user_id):
-
     holdings = {k: 0.0 for k in API_MAP}
 
     try:
@@ -231,7 +219,6 @@ def load_crypto_holdings(user_id):
 
 
 def save_crypto_holdings(user_id, holdings):
-
     rows = [
         {
             "user_id": user_id,
@@ -248,7 +235,6 @@ def save_crypto_holdings(user_id, holdings):
 
 
 def load_portfolio_history(user_id):
-
     try:
         res = (
             db()
@@ -260,7 +246,6 @@ def load_portfolio_history(user_id):
             .execute()
         )
         return res.data or []
-
     except Exception:
         return []
 
@@ -276,7 +261,6 @@ def metric_delta(value):
 
 
 def crypto_app():
-
     st.title("Crypto Dashboard")
 
     if "user_id" not in st.session_state:
@@ -332,7 +316,6 @@ def crypto_app():
     st.sidebar.markdown("---")
 
     with st.expander("⚙️ Manage Crypto Holdings", expanded=False):
-
         st.caption("Enter your quantities. The dashboard will show your top 10 holdings by value.")
 
         symbols = list(API_MAP.keys())
@@ -369,7 +352,6 @@ def crypto_app():
     value_col = f"Value ({currency_code})"
 
     for sym, qty in holdings.items():
-
         raw_price = prices.get(
             sym,
             1.0 if sym in ["USDT", "USDC", "DAI"] else 0.0
@@ -400,7 +382,6 @@ def crypto_app():
 
     if total_value > 0 and not data_degraded:
         set_last_good_value(total_value)
-
     elif last_good is not None:
         total_value = last_good
 
@@ -448,7 +429,6 @@ def crypto_app():
     ytd_pct = 0.0
 
     if history and len(history) >= 2:
-
         try:
             h = pd.DataFrame(history)
 
@@ -458,7 +438,6 @@ def crypto_app():
             h = h.dropna().sort_values("timestamp")
 
             if not h.empty:
-
                 now = datetime.utcnow()
 
                 mtd = h[
@@ -510,12 +489,9 @@ def crypto_app():
 
     with col1:
         if st.button("📸 Save Snapshot Now"):
-
             if total_value > 0:
-
                 if force_snapshot(user_id, total_value):
                     st.success("Snapshot saved!")
-
                 else:
                     st.error("Snapshot failed.")
 
@@ -528,7 +504,6 @@ def crypto_app():
     st.subheader("📈 Portfolio Trend")
 
     if len(history) >= 2:
-
         h = pd.DataFrame(history)
 
         h["timestamp"] = pd.to_datetime(h["timestamp"], errors="coerce")
@@ -566,7 +541,6 @@ def crypto_app():
     pnl_df = build_pnl_history(history, invested)
 
     if len(pnl_df) >= 2:
-
         fig = go.Figure()
 
         fig.add_trace(go.Scatter(
@@ -591,46 +565,42 @@ def crypto_app():
     else:
         st.info("PnL history will appear soon.")
 
-st.subheader("Allocation")
+    st.subheader("Allocation")
 
-if not top_df.empty:
+    if not top_df.empty:
+        pie_df = top_df.copy()
 
-    pie_df = top_df.copy()
+        total_allocation = pie_df[value_col].sum()
 
-    total_allocation = pie_df[value_col].sum()
+        if total_allocation > 0:
+            pie_df["Allocation %"] = (
+                pie_df[value_col] / total_allocation * 100
+            ).round(2)
 
-    if total_allocation > 0:
-        pie_df["Allocation %"] = (
-            pie_df[value_col] / total_allocation * 100
-        ).round(2)
+            pie_df["Asset Share"] = (
+                pie_df["Asset"]
+                + " — "
+                + pie_df["Allocation %"].astype(str)
+                + "%"
+            )
 
-        pie_df["Asset Share"] = (
-            pie_df["Asset"]
-            + " — "
-            + pie_df["Allocation %"].astype(str)
-            + "%"
-        )
+            pie = alt.Chart(pie_df).mark_arc().encode(
+                theta=alt.Theta(
+                    field=value_col,
+                    type="quantitative"
+                ),
+                color=alt.Color(
+                    field="Asset Share",
+                    type="nominal",
+                    title="Asset"
+                ),
+                tooltip=[
+                    alt.Tooltip("Asset:N", title="Asset"),
+                    alt.Tooltip("Qty:Q", title="Quantity"),
+                    alt.Tooltip("Price (USD):Q", title="Price USD", format=",.6f"),
+                    alt.Tooltip(f"{value_col}:Q", title=value_col, format=",.2f"),
+                    alt.Tooltip("Allocation %:Q", title="Allocation %", format=".2f"),
+                ],
+            )
 
-        pie = alt.Chart(pie_df).mark_arc().encode(
-            theta=alt.Theta(
-                field=value_col,
-                type="quantitative"
-            ),
-            color=alt.Color(
-                field="Asset Share",
-                type="nominal",
-                title="Asset"
-            ),
-            tooltip=[
-                alt.Tooltip("Asset:N", title="Asset"),
-                alt.Tooltip("Qty:Q", title="Quantity"),
-                alt.Tooltip("Price (USD):Q", title="Price USD", format=",.4f"),
-                alt.Tooltip(f"{value_col}:Q", title=value_col, format=",.2f"),
-                alt.Tooltip("Allocation %:Q", title="Allocation", format=".2f"),
-            ],
-        )
-
-        st.altair_chart(
-            pie,
-            use_container_width=True
-        )
+            st.altair_chart(pie, use_container_width=True)
