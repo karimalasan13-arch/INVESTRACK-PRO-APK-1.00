@@ -109,7 +109,6 @@ def force_snapshot(user_id, value_ghs, mode="stock"):
 
 
 def safe_price(symbol, price):
-
     if "stock_price_memory" not in st.session_state:
         st.session_state.stock_price_memory = {}
 
@@ -134,7 +133,6 @@ def set_last_good_value(value):
 
 
 def clean_history(history):
-
     if not history:
         return pd.DataFrame()
 
@@ -153,7 +151,6 @@ def clean_history(history):
 
 
 def build_pnl(df, invested):
-
     if df.empty:
         return df
 
@@ -204,7 +201,6 @@ def fmt(v, currency):
 
 
 def load_stock_holdings(user_id):
-
     holdings = {k: 0.0 for k in STOCK_MAP}
 
     try:
@@ -229,7 +225,6 @@ def load_stock_holdings(user_id):
 
 
 def save_stock_holdings(user_id, holdings):
-
     rows = [
         {"user_id": user_id, "symbol": k, "quantity": float(v)}
         for k, v in holdings.items()
@@ -258,7 +253,6 @@ def load_portfolio_history(user_id):
 
 
 def metric_delta(v):
-
     if v > 0:
         return f"+{abs(v):.2f}%"
 
@@ -269,7 +263,6 @@ def metric_delta(v):
 
 
 def stock_app():
-
     st.title("Stock Portfolio Dashboard")
 
     if "user_id" not in st.session_state:
@@ -329,7 +322,6 @@ def stock_app():
     st.sidebar.markdown("---")
 
     with st.expander("⚙️ Manage Stock Holdings", expanded=False):
-
         st.caption("Enter your quantities. The dashboard will show your top 10 holdings by value.")
 
         symbols = list(STOCK_MAP.keys())
@@ -374,7 +366,6 @@ def stock_app():
     value_col = f"Value ({currency_code})"
 
     for sym, qty in holdings.items():
-
         raw = prices.get(sym, 0.0)
         price, ok = safe_price(sym, raw)
 
@@ -445,7 +436,6 @@ def stock_app():
     mtd_pct = ytd_pct = 0.0
 
     if not history.empty:
-
         now = datetime.utcnow()
 
         mtd = history[
@@ -494,7 +484,6 @@ def stock_app():
     st.subheader("Portfolio Trend")
 
     if len(history) >= 2:
-
         fig = go.Figure()
 
         fig.add_trace(go.Scatter(
@@ -516,17 +505,13 @@ def stock_app():
             yaxis_title=f"Value ({currency_code})"
         )
 
-        st.plotly_chart(
-            fig,
-            use_container_width=True
-        )
+        st.plotly_chart(fig, use_container_width=True)
 
     st.subheader("All-Time PnL Curve")
 
     pnl_df = build_pnl(history, invested)
 
     if len(pnl_df) >= 2:
-
         fig = go.Figure()
 
         fig.add_trace(go.Scatter(
@@ -542,31 +527,54 @@ def stock_app():
         ))
 
         fig.update_layout(
-            margin=dict(l=10, r=10, t=10, b=10),
+            margin=dict(l=10, r=10, b=10, t=10),
             hovermode="x unified",
             yaxis_title=f"PnL ({currency_code})"
         )
 
-        st.plotly_chart(
-            fig,
-            use_container_width=True
-        )
+        st.plotly_chart(fig, use_container_width=True)
 
     st.markdown("---")
 
     st.subheader("Allocation")
 
     if not top_df.empty:
+        pie_df = top_df.copy()
 
-        pie = alt.Chart(top_df).mark_arc().encode(
-            theta=f"{value_col}:Q",
-            color="Asset:N",
-        )
+        total_allocation = pie_df[value_col].sum()
 
-        st.altair_chart(
-            pie,
-            use_container_width=True
-        )
+        if total_allocation > 0:
+            pie_df["Allocation %"] = (
+                pie_df[value_col] / total_allocation * 100
+            ).round(2)
+
+            pie_df["Asset Share"] = (
+                pie_df["Asset"]
+                + " — "
+                + pie_df["Allocation %"].astype(str)
+                + "%"
+            )
+
+            pie = alt.Chart(pie_df).mark_arc().encode(
+                theta=alt.Theta(
+                    field=value_col,
+                    type="quantitative"
+                ),
+                color=alt.Color(
+                    field="Asset Share",
+                    type="nominal",
+                    title="Asset"
+                ),
+                tooltip=[
+                    alt.Tooltip("Asset:N", title="Asset"),
+                    alt.Tooltip("Qty:Q", title="Quantity"),
+                    alt.Tooltip("Price (USD):Q", title="Price USD", format=",.4f"),
+                    alt.Tooltip(f"{value_col}:Q", title=value_col, format=",.2f"),
+                    alt.Tooltip("Allocation %:Q", title="Allocation %", format=".2f"),
+                ],
+            )
+
+            st.altair_chart(pie, use_container_width=True)
 
     if total_value > 0 and not data_degraded:
         autosave_portfolio_value(
@@ -576,7 +584,6 @@ def stock_app():
         )
 
     if st.button("Save Snapshot"):
-
         if total_value > 0 and not data_degraded:
             force_snapshot(
                 user_id,
