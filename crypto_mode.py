@@ -591,13 +591,46 @@ def crypto_app():
     else:
         st.info("PnL history will appear soon.")
 
-    st.subheader("Allocation")
+st.subheader("Allocation")
 
-    if not top_df.empty:
+if not top_df.empty:
 
-        pie = alt.Chart(top_df).mark_arc().encode(
-            theta=f"{value_col}:Q",
-            color="Asset:N",
+    pie_df = top_df.copy()
+
+    total_allocation = pie_df[value_col].sum()
+
+    if total_allocation > 0:
+        pie_df["Allocation %"] = (
+            pie_df[value_col] / total_allocation * 100
+        ).round(2)
+
+        pie_df["Asset Share"] = (
+            pie_df["Asset"]
+            + " — "
+            + pie_df["Allocation %"].astype(str)
+            + "%"
         )
 
-        st.altair_chart(pie, use_container_width=True)
+        pie = alt.Chart(pie_df).mark_arc().encode(
+            theta=alt.Theta(
+                field=value_col,
+                type="quantitative"
+            ),
+            color=alt.Color(
+                field="Asset Share",
+                type="nominal",
+                title="Asset"
+            ),
+            tooltip=[
+                alt.Tooltip("Asset:N", title="Asset"),
+                alt.Tooltip("Qty:Q", title="Quantity"),
+                alt.Tooltip("Price (USD):Q", title="Price USD", format=",.4f"),
+                alt.Tooltip(f"{value_col}:Q", title=value_col, format=",.2f"),
+                alt.Tooltip("Allocation %:Q", title="Allocation", format=".2f"),
+            ],
+        )
+
+        st.altair_chart(
+            pie,
+            use_container_width=True
+        )
