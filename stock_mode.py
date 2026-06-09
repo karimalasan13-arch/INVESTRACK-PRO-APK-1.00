@@ -10,55 +10,18 @@ from db import get_supabase
 
 
 STOCK_MAP = {
-    "NVDA": "NVDA",
-    "AAPL": "AAPL",
-    "GOOGL": "GOOGL",
-    "GOOG": "GOOG",
-    "MSFT": "MSFT",
-    "AMZN": "AMZN",
-    "META": "META",
-    "AVGO": "AVGO",
-    "TSLA": "TSLA",
-    "BRK-B": "BRK-B",
-    "TSM": "TSM",
-    "LLY": "LLY",
-    "JPM": "JPM",
-    "WMT": "WMT",
-    "V": "V",
-    "MA": "MA",
-    "NFLX": "NFLX",
-    "ORCL": "ORCL",
-    "XOM": "XOM",
-    "COST": "COST",
-    "JNJ": "JNJ",
-    "HD": "HD",
-    "PG": "PG",
-    "BAC": "BAC",
-    "ABBV": "ABBV",
-    "KO": "KO",
-    "PLTR": "PLTR",
-    "ASML": "ASML",
-    "SAP": "SAP",
-    "UNH": "UNH",
-    "AMD": "AMD",
-    "CRM": "CRM",
-    "CSCO": "CSCO",
-    "CVX": "CVX",
-    "IBM": "IBM",
-    "GE": "GE",
-    "WFC": "WFC",
-    "TMUS": "TMUS",
-    "NOW": "NOW",
-    "MCD": "MCD",
-    "PM": "PM",
-    "ABT": "ABT",
-    "LIN": "LIN",
-    "DIS": "DIS",
-    "MRK": "MRK",
-    "ISRG": "ISRG",
-    "INTU": "INTU",
-    "GS": "GS",
-    "CAT": "CAT",
+    "NVDA": "NVDA", "AAPL": "AAPL", "GOOGL": "GOOGL", "GOOG": "GOOG",
+    "MSFT": "MSFT", "AMZN": "AMZN", "META": "META", "AVGO": "AVGO",
+    "TSLA": "TSLA", "BRK-B": "BRK-B", "TSM": "TSM", "LLY": "LLY",
+    "JPM": "JPM", "WMT": "WMT", "V": "V", "MA": "MA", "NFLX": "NFLX",
+    "ORCL": "ORCL", "XOM": "XOM", "COST": "COST", "JNJ": "JNJ",
+    "HD": "HD", "PG": "PG", "BAC": "BAC", "ABBV": "ABBV",
+    "KO": "KO", "PLTR": "PLTR", "ASML": "ASML", "SAP": "SAP",
+    "UNH": "UNH", "AMD": "AMD", "CRM": "CRM", "CSCO": "CSCO",
+    "CVX": "CVX", "IBM": "IBM", "GE": "GE", "WFC": "WFC",
+    "TMUS": "TMUS", "NOW": "NOW", "MCD": "MCD", "PM": "PM",
+    "ABT": "ABT", "LIN": "LIN", "DIS": "DIS", "MRK": "MRK",
+    "ISRG": "ISRG", "INTU": "INTU", "GS": "GS", "CAT": "CAT",
     "TXN": "TXN",
 }
 
@@ -77,6 +40,23 @@ CURRENCY_OPTIONS = [
     {"code": "CHF", "name": "Swiss Franc", "symbol": "CHF"},
     {"code": "EUR", "name": "Euro", "symbol": "€"},
 ]
+
+
+PLOTLY_CHART_CONFIG = {
+    "scrollZoom": True,
+    "displayModeBar": True,
+    "displaylogo": False,
+    "modeBarButtonsToAdd": [
+        "pan2d",
+        "zoomIn2d",
+        "zoomOut2d",
+        "resetScale2d",
+    ],
+    "modeBarButtonsToRemove": [
+        "select2d",
+        "lasso2d",
+    ],
+}
 
 
 def db():
@@ -143,7 +123,6 @@ def clean_history(history):
 
     df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
     df["value_ghs"] = pd.to_numeric(df["value_ghs"], errors="coerce")
-
     df = df.dropna()
     df = df.sort_values("timestamp")
 
@@ -189,11 +168,7 @@ def currency_label(currency):
 
 def load_currency_index(user_id, mode):
     idx = int(load_setting(user_id, f"{mode}_currency_index", 0))
-
-    if idx < 0 or idx >= len(CURRENCY_OPTIONS):
-        idx = 0
-
-    return idx
+    return idx if 0 <= idx < len(CURRENCY_OPTIONS) else 0
 
 
 def fmt(v, currency):
@@ -214,10 +189,8 @@ def load_stock_holdings(user_id):
 
         for r in res.data or []:
             symbol = r["symbol"]
-
             if symbol in holdings:
                 holdings[symbol] = float(r["quantity"])
-
     except Exception:
         pass
 
@@ -255,10 +228,8 @@ def load_portfolio_history(user_id):
 def metric_delta(v):
     if v > 0:
         return f"+{abs(v):.2f}%"
-
-    elif v < 0:
+    if v < 0:
         return f"-{abs(v):.2f}%"
-
     return "0.00%"
 
 
@@ -282,9 +253,7 @@ def stock_app():
 
     st.sidebar.header("⚙️ Settings")
 
-    currency_labels = [
-        currency_label(c) for c in CURRENCY_OPTIONS
-    ]
+    currency_labels = [currency_label(c) for c in CURRENCY_OPTIONS]
 
     selected_label = st.sidebar.selectbox(
         "Display Currency",
@@ -381,18 +350,12 @@ def stock_app():
         value = price * qty * rate
         total_value += value
 
-        rows.append([
-            sym,
-            qty,
-            price,
-            round(value, 2)
-        ])
+        rows.append([sym, qty, price, round(value, 2)])
 
     last_good = get_last_good_value()
 
     if total_value > 0 and not data_degraded:
         set_last_good_value(total_value)
-
     elif last_good is not None:
         total_value = last_good
 
@@ -439,24 +402,20 @@ def stock_app():
         now = datetime.utcnow()
 
         mtd = history[
-            (history["timestamp"].dt.month == now.month) &
-            (history["timestamp"].dt.year == now.year)
+            (history["timestamp"].dt.month == now.month)
+            & (history["timestamp"].dt.year == now.year)
         ]
 
-        ytd = history[
-            history["timestamp"].dt.year == now.year
-        ]
+        ytd = history[history["timestamp"].dt.year == now.year]
 
         if not mtd.empty:
             start = mtd.iloc[0]["value_ghs"]
-
             if start > 0:
                 mtd_pnl = total_value - start
                 mtd_pct = (mtd_pnl / start) * 100
 
         if not ytd.empty:
             start = ytd.iloc[0]["value_ghs"]
-
             if start > 0:
                 ytd_pnl = total_value - start
                 ytd_pct = (ytd_pnl / start) * 100
@@ -491,21 +450,23 @@ def stock_app():
             y=history["value_ghs"],
             mode="lines",
             fill="tozeroy",
-            line=dict(
-                shape="spline",
-                smoothing=1.2,
-                width=3
-            ),
+            line=dict(shape="spline", smoothing=1.2, width=3),
             hovertemplate=f'{selected_currency["symbol"]} %{{y:,.2f}}<extra></extra>'
         ))
 
         fig.update_layout(
             margin=dict(l=10, r=10, t=10, b=10),
             hovermode="x unified",
-            yaxis_title=f"Value ({currency_code})"
+            yaxis_title=f"Value ({currency_code})",
+            dragmode="pan",
+            uirevision="stock_portfolio_trend"
         )
 
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(
+            fig,
+            use_container_width=True,
+            config=PLOTLY_CHART_CONFIG
+        )
 
     st.subheader("All-Time PnL Curve")
 
@@ -518,21 +479,23 @@ def stock_app():
             x=pnl_df["timestamp"],
             y=pnl_df["pnl"],
             mode="lines",
-            line=dict(
-                shape="spline",
-                smoothing=1.2,
-                width=3
-            ),
+            line=dict(shape="spline", smoothing=1.2, width=3),
             hovertemplate=f'{selected_currency["symbol"]} %{{y:,.2f}}<extra></extra>'
         ))
 
         fig.update_layout(
             margin=dict(l=10, r=10, b=10, t=10),
             hovermode="x unified",
-            yaxis_title=f"PnL ({currency_code})"
+            yaxis_title=f"PnL ({currency_code})",
+            dragmode="pan",
+            uirevision="stock_pnl_curve"
         )
 
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(
+            fig,
+            use_container_width=True,
+            config=PLOTLY_CHART_CONFIG
+        )
 
     st.markdown("---")
 
@@ -540,7 +503,6 @@ def stock_app():
 
     if not top_df.empty:
         pie_df = top_df.copy()
-
         total_allocation = pie_df[value_col].sum()
 
         if total_allocation > 0:
@@ -556,10 +518,7 @@ def stock_app():
             )
 
             pie = alt.Chart(pie_df).mark_arc().encode(
-                theta=alt.Theta(
-                    field=value_col,
-                    type="quantitative"
-                ),
+                theta=alt.Theta(field=value_col, type="quantitative"),
                 color=alt.Color(
                     field="Asset Share",
                     type="nominal",
@@ -577,15 +536,8 @@ def stock_app():
             st.altair_chart(pie, use_container_width=True)
 
     if total_value > 0 and not data_degraded:
-        autosave_portfolio_value(
-            user_id,
-            total_value,
-            "stock"
-        )
+        autosave_portfolio_value(user_id, total_value, "stock")
 
     if st.button("Save Snapshot"):
         if total_value > 0 and not data_degraded:
-            force_snapshot(
-                user_id,
-                total_value
-            )
+            force_snapshot(user_id, total_value)
