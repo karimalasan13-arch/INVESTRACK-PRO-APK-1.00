@@ -19,7 +19,6 @@ st.set_page_config(
 # MONETIZATION CONFIG
 # ------------------------------------
 SHOW_AD_PLACEHOLDERS = True
-
 INTERSTITIAL_COOLDOWN_SECONDS = 300
 
 
@@ -56,7 +55,6 @@ def render_ad_slot(label="Sponsored", slot_id="", height=120):
             </script>
         </div>
         """
-
         components.html(ad_html, height=height)
 
     elif SHOW_AD_PLACEHOLDERS:
@@ -160,6 +158,33 @@ elif now - st.session_state.last_refresh > REFRESH_INTERVAL:
 
 
 # ------------------------------------
+# HARDENED MODE STATE
+# ------------------------------------
+MODE_OPTIONS = ["Crypto", "Stocks"]
+
+if "selected_mode" not in st.session_state:
+    st.session_state.selected_mode = "Crypto"
+
+if st.session_state.selected_mode not in MODE_OPTIONS:
+    st.session_state.selected_mode = "Crypto"
+
+
+def on_mode_change():
+    new_mode = st.session_state.mode_radio
+
+    old_mode = st.session_state.get(
+        "selected_mode",
+        "Crypto"
+    )
+
+    if new_mode in MODE_OPTIONS:
+        st.session_state.selected_mode = new_mode
+
+    if old_mode != new_mode:
+        maybe_trigger_interstitial("mode_switch")
+
+
+# ------------------------------------
 # SIDEBAR
 # ------------------------------------
 st.sidebar.success(f"Logged in as\n{user.email}")
@@ -168,17 +193,15 @@ if st.sidebar.button("Logout"):
     logout()
     st.stop()
 
-mode = st.sidebar.radio(
+st.sidebar.radio(
     "Select Mode",
-    ["Crypto", "Stocks"],
+    MODE_OPTIONS,
+    index=MODE_OPTIONS.index(st.session_state.selected_mode),
+    key="mode_radio",
+    on_change=on_mode_change,
 )
 
-if "previous_mode" not in st.session_state:
-    st.session_state.previous_mode = mode
-
-elif st.session_state.previous_mode != mode:
-    st.session_state.previous_mode = mode
-    maybe_trigger_interstitial("mode_switch")
+mode = st.session_state.selected_mode
 
 st.sidebar.markdown("---")
 
