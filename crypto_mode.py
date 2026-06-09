@@ -10,55 +10,23 @@ from db import get_supabase
 
 
 API_MAP = {
-    "BTC": "bitcoin",
-    "ETH": "ethereum",
-    "USDT": "tether",
-    "XRP": "ripple",
-    "BNB": "binancecoin",
-    "SOL": "solana",
-    "USDC": "usd-coin",
-    "DOGE": "dogecoin",
-    "ADA": "cardano",
-    "TRX": "tron",
-    "STETH": "staked-ether",
-    "WBTC": "wrapped-bitcoin",
-    "SUI": "sui",
-    "LINK": "chainlink",
-    "AVAX": "avalanche-2",
-    "XLM": "stellar",
-    "SHIB": "shiba-inu",
-    "BCH": "bitcoin-cash",
-    "HBAR": "hedera-hashgraph",
-    "LEO": "leo-token",
-    "LTC": "litecoin",
-    "TON": "the-open-network",
-    "DOT": "polkadot",
-    "UNI": "uniswap",
-    "PEPE": "pepe",
-    "APT": "aptos",
-    "NEAR": "near",
-    "DAI": "dai",
-    "ICP": "internet-computer",
-    "ETC": "ethereum-classic",
-    "OKB": "okb",
-    "KAS": "kaspa",
-    "ATOM": "cosmos",
-    "CRO": "crypto-com-chain",
-    "POL": "polygon-ecosystem-token",
-    "FIL": "filecoin",
-    "ARB": "arbitrum",
-    "VET": "vechain",
-    "ALGO": "algorand",
-    "RENDER": "render-token",
-    "FET": "fetch-ai",
-    "OP": "optimism",
-    "WIF": "dogwifcoin",
-    "IMX": "immutable-x",
-    "INJ": "injective-protocol",
-    "SEI": "sei-network",
-    "AAVE": "aave",
-    "GRT": "the-graph",
-    "LDO": "lido-dao",
+    "BTC": "bitcoin", "ETH": "ethereum", "USDT": "tether", "XRP": "ripple",
+    "BNB": "binancecoin", "SOL": "solana", "USDC": "usd-coin",
+    "DOGE": "dogecoin", "ADA": "cardano", "TRX": "tron",
+    "STETH": "staked-ether", "WBTC": "wrapped-bitcoin", "SUI": "sui",
+    "LINK": "chainlink", "AVAX": "avalanche-2", "XLM": "stellar",
+    "SHIB": "shiba-inu", "BCH": "bitcoin-cash", "HBAR": "hedera-hashgraph",
+    "LEO": "leo-token", "LTC": "litecoin", "TON": "the-open-network",
+    "DOT": "polkadot", "UNI": "uniswap", "PEPE": "pepe", "APT": "aptos",
+    "NEAR": "near", "DAI": "dai", "ICP": "internet-computer",
+    "ETC": "ethereum-classic", "OKB": "okb", "KAS": "kaspa",
+    "ATOM": "cosmos", "CRO": "crypto-com-chain",
+    "POL": "polygon-ecosystem-token", "FIL": "filecoin",
+    "ARB": "arbitrum", "VET": "vechain", "ALGO": "algorand",
+    "RENDER": "render-token", "FET": "fetch-ai", "OP": "optimism",
+    "WIF": "dogwifcoin", "IMX": "immutable-x",
+    "INJ": "injective-protocol", "SEI": "sei-network",
+    "AAVE": "aave", "GRT": "the-graph", "LDO": "lido-dao",
     "QNT": "quant-network",
 }
 
@@ -77,6 +45,23 @@ CURRENCY_OPTIONS = [
     {"code": "CHF", "name": "Swiss Franc", "symbol": "CHF"},
     {"code": "EUR", "name": "Euro", "symbol": "€"},
 ]
+
+
+PLOTLY_CHART_CONFIG = {
+    "scrollZoom": True,
+    "displayModeBar": True,
+    "displaylogo": False,
+    "modeBarButtonsToAdd": [
+        "pan2d",
+        "zoomIn2d",
+        "zoomOut2d",
+        "resetScale2d",
+    ],
+    "modeBarButtonsToRemove": [
+        "select2d",
+        "lasso2d",
+    ],
+}
 
 
 def db():
@@ -150,11 +135,7 @@ def load_setting(user_id, key, default):
 
 def save_setting(user_id, key, value):
     db().table("user_settings").upsert(
-        {
-            "user_id": user_id,
-            "key": key,
-            "value": float(value),
-        },
+        {"user_id": user_id, "key": key, "value": float(value)},
         on_conflict="user_id,key",
     ).execute()
 
@@ -165,11 +146,7 @@ def currency_label(currency):
 
 def load_currency_index(user_id, mode):
     idx = int(load_setting(user_id, f"{mode}_currency_index", 0))
-
-    if idx < 0 or idx >= len(CURRENCY_OPTIONS):
-        idx = 0
-
-    return idx
+    return idx if 0 <= idx < len(CURRENCY_OPTIONS) else 0
 
 
 def fmt(v, currency):
@@ -187,7 +164,6 @@ def build_pnl_history(history, invested):
 
     h["timestamp"] = pd.to_datetime(h["timestamp"], errors="coerce")
     h["value_ghs"] = pd.to_numeric(h["value_ghs"], errors="coerce")
-
     h = h.dropna().sort_values("timestamp")
     h["pnl"] = h["value_ghs"] - invested
 
@@ -208,10 +184,8 @@ def load_crypto_holdings(user_id):
 
         for r in res.data or []:
             symbol = r["symbol"]
-
             if symbol in holdings:
                 holdings[symbol] = float(r["quantity"])
-
     except Exception:
         pass
 
@@ -220,11 +194,7 @@ def load_crypto_holdings(user_id):
 
 def save_crypto_holdings(user_id, holdings):
     rows = [
-        {
-            "user_id": user_id,
-            "symbol": k,
-            "quantity": float(v),
-        }
+        {"user_id": user_id, "symbol": k, "quantity": float(v)}
         for k, v in holdings.items()
     ]
 
@@ -253,10 +223,8 @@ def load_portfolio_history(user_id):
 def metric_delta(value):
     if value > 0:
         return f"{value:.2f}%"
-
     if value < 0:
         return f"-{abs(value):.2f}%"
-
     return "0.00%"
 
 
@@ -394,12 +362,7 @@ def crypto_app():
 
     df = pd.DataFrame(
         rows,
-        columns=[
-            "Asset",
-            "Qty",
-            "Price (USD)",
-            value_col
-        ]
+        columns=["Asset", "Qty", "Price (USD)", value_col]
     )
 
     df[value_col] = pd.to_numeric(df[value_col], errors="coerce").fillna(0.0)
@@ -431,10 +394,8 @@ def crypto_app():
     if history and len(history) >= 2:
         try:
             h = pd.DataFrame(history)
-
             h["timestamp"] = pd.to_datetime(h["timestamp"], errors="coerce")
             h["value_ghs"] = pd.to_numeric(h["value_ghs"], errors="coerce")
-
             h = h.dropna().sort_values("timestamp")
 
             if not h.empty:
@@ -442,22 +403,19 @@ def crypto_app():
 
                 mtd = h[
                     (h["timestamp"].dt.month == now.month)
-                    &
-                    (h["timestamp"].dt.year == now.year)
+                    & (h["timestamp"].dt.year == now.year)
                 ]
 
                 ytd = h[h["timestamp"].dt.year == now.year]
 
                 if not mtd.empty:
                     start = mtd.iloc[0]["value_ghs"]
-
                     if start > 0:
                         mtd_pnl = total_value - start
                         mtd_pct = (mtd_pnl / start) * 100
 
                 if not ytd.empty:
                     start = ytd.iloc[0]["value_ghs"]
-
                     if start > 0:
                         ytd_pnl = total_value - start
                         ytd_pct = (ytd_pnl / start) * 100
@@ -505,10 +463,8 @@ def crypto_app():
 
     if len(history) >= 2:
         h = pd.DataFrame(history)
-
         h["timestamp"] = pd.to_datetime(h["timestamp"], errors="coerce")
         h["value_ghs"] = pd.to_numeric(h["value_ghs"], errors="coerce")
-
         h = h.dropna()
 
         fig = go.Figure()
@@ -517,21 +473,23 @@ def crypto_app():
             x=h["timestamp"],
             y=h["value_ghs"],
             mode="lines",
-            line=dict(
-                shape="spline",
-                smoothing=1.1,
-                width=3
-            ),
+            line=dict(shape="spline", smoothing=1.1, width=3),
             fill="tozeroy",
             hovertemplate=f'{selected_currency["symbol"]} %{{y:,.2f}}<extra></extra>'
         ))
 
         fig.update_layout(
             yaxis_title=f"Value ({currency_code})",
-            hovermode="x unified"
+            hovermode="x unified",
+            dragmode="pan",
+            uirevision="crypto_portfolio_trend"
         )
 
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(
+            fig,
+            use_container_width=True,
+            config=PLOTLY_CHART_CONFIG
+        )
 
     else:
         st.info("Waiting for more history data...")
@@ -547,20 +505,22 @@ def crypto_app():
             x=pnl_df["timestamp"],
             y=pnl_df["pnl"],
             mode="lines",
-            line=dict(
-                shape="spline",
-                smoothing=1.1,
-                width=3
-            ),
+            line=dict(shape="spline", smoothing=1.1, width=3),
             hovertemplate=f'{selected_currency["symbol"]} %{{y:,.2f}}<extra></extra>'
         ))
 
         fig.update_layout(
             yaxis_title=f"PnL ({currency_code})",
-            hovermode="x unified"
+            hovermode="x unified",
+            dragmode="pan",
+            uirevision="crypto_pnl_curve"
         )
 
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(
+            fig,
+            use_container_width=True,
+            config=PLOTLY_CHART_CONFIG
+        )
 
     else:
         st.info("PnL history will appear soon.")
@@ -569,7 +529,6 @@ def crypto_app():
 
     if not top_df.empty:
         pie_df = top_df.copy()
-
         total_allocation = pie_df[value_col].sum()
 
         if total_allocation > 0:
@@ -585,10 +544,7 @@ def crypto_app():
             )
 
             pie = alt.Chart(pie_df).mark_arc().encode(
-                theta=alt.Theta(
-                    field=value_col,
-                    type="quantitative"
-                ),
+                theta=alt.Theta(field=value_col, type="quantitative"),
                 color=alt.Color(
                     field="Asset Share",
                     type="nominal",
