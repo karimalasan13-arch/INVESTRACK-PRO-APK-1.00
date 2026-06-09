@@ -20,6 +20,8 @@ st.set_page_config(
 # ------------------------------------
 SHOW_AD_PLACEHOLDERS = True
 
+INTERSTITIAL_COOLDOWN_SECONDS = 300
+
 
 def get_secret(key, default=""):
     try:
@@ -35,12 +37,6 @@ ADSENSE_SIDEBAR_SLOT = get_secret("ADSENSE_SIDEBAR_SLOT", "")
 
 
 def render_ad_slot(label="Sponsored", slot_id="", height=120):
-    """
-    Safe web ad container.
-    If AdSense IDs are not configured yet, it shows a clean placeholder.
-    This will not break your app if ads are not ready.
-    """
-
     if ADSENSE_CLIENT and slot_id:
         ad_html = f"""
         <div style="width:100%; text-align:center; margin:10px 0;">
@@ -103,6 +99,31 @@ def render_partner_cta():
     )
 
 
+def maybe_trigger_interstitial(reason="mode_switch"):
+    now = time.time()
+
+    last_trigger = st.session_state.get(
+        "last_interstitial_trigger",
+        0
+    )
+
+    if now - last_trigger < INTERSTITIAL_COOLDOWN_SECONDS:
+        return
+
+    st.session_state.last_interstitial_trigger = now
+
+    components.html(
+        f"""
+        <script>
+            setTimeout(function() {{
+                window.location.href = "investrackpro://show-interstitial?reason={reason}&t={int(now)}";
+            }}, 250);
+        </script>
+        """,
+        height=0,
+    )
+
+
 # ------------------------------------
 # HARD AUTH GATE
 # ------------------------------------
@@ -152,6 +173,13 @@ mode = st.sidebar.radio(
     ["Crypto", "Stocks"],
 )
 
+if "previous_mode" not in st.session_state:
+    st.session_state.previous_mode = mode
+
+elif st.session_state.previous_mode != mode:
+    st.session_state.previous_mode = mode
+    maybe_trigger_interstitial("mode_switch")
+
 st.sidebar.markdown("---")
 
 render_ad_slot(
@@ -184,7 +212,6 @@ render_ad_slot(
 # LAZY LOAD MODES
 # ------------------------------------
 try:
-
     if mode == "Crypto":
         from crypto_mode import crypto_app
         crypto_app()
@@ -194,7 +221,6 @@ try:
         stock_app()
 
 except Exception as e:
-
     st.error("Something went wrong. Please refresh the app.")
     print("APP ERROR:", type(e).__name__, e)
 
