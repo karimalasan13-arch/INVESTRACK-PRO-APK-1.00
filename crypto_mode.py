@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import altair as alt
 from datetime import datetime
 import plotly.graph_objects as go
 
@@ -61,6 +60,13 @@ PLOTLY_CHART_CONFIG = {
         "select2d",
         "lasso2d",
     ],
+}
+
+
+DONUT_CHART_CONFIG = {
+    "displayModeBar": False,
+    "displaylogo": False,
+    "responsive": True,
 }
 
 
@@ -186,6 +192,7 @@ def load_crypto_holdings(user_id):
             symbol = r["symbol"]
             if symbol in holdings:
                 holdings[symbol] = float(r["quantity"])
+
     except Exception:
         pass
 
@@ -216,6 +223,7 @@ def load_portfolio_history(user_id):
             .execute()
         )
         return res.data or []
+
     except Exception:
         return []
 
@@ -223,9 +231,103 @@ def load_portfolio_history(user_id):
 def metric_delta(value):
     if value > 0:
         return f"{value:.2f}%"
+
     if value < 0:
         return f"-{abs(value):.2f}%"
+
     return "0.00%"
+
+
+def build_donut_df(source_df, value_col, max_slices=7):
+    if source_df.empty:
+        return pd.DataFrame()
+
+    donut_df = (
+        source_df[source_df[value_col] > 0]
+        .copy()
+        .sort_values(value_col, ascending=False)
+    )
+
+    if donut_df.empty:
+        return pd.DataFrame()
+
+    if len(donut_df) > max_slices:
+        top = donut_df.head(max_slices).copy()
+        others_value = donut_df.iloc[max_slices:][value_col].sum()
+
+        if others_value > 0:
+            others_row = {
+                "Asset": "Others",
+                "Qty": "-",
+                "Price (USD)": "-",
+                value_col: others_value,
+            }
+            top = pd.concat([top, pd.DataFrame([others_row])], ignore_index=True)
+
+        donut_df = top
+
+    total = donut_df[value_col].sum()
+
+    if total <= 0:
+        return pd.DataFrame()
+
+    donut_df["Allocation %"] = (donut_df[value_col] / total * 100).round(2)
+
+    return donut_df
+
+
+def render_donut_chart(donut_df, value_col, selected_currency):
+    if donut_df.empty:
+        return
+
+    fig = go.Figure(
+        data=[
+            go.Pie(
+                labels=donut_df["Asset"],
+                values=donut_df[value_col],
+                hole=0.68,
+                sort=False,
+                direction="clockwise",
+                textinfo="none",
+                hovertemplate=(
+                    "<b>%{label}</b><br>"
+                    f"Value: {selected_currency['symbol']} %{{value:,.2f}}<br>"
+                    "Allocation: %{percent}<extra></extra>"
+                ),
+            )
+        ]
+    )
+
+    fig.update_layout(
+        height=360,
+        showlegend=True,
+        legend=dict(
+            orientation="v",
+            yanchor="middle",
+            y=0.5,
+            xanchor="left",
+            x=1.02,
+            font=dict(size=13),
+        ),
+        annotations=[
+            dict(
+                text="100%",
+                x=0.5,
+                y=0.5,
+                font=dict(size=26, color="white"),
+                showarrow=False,
+            )
+        ],
+        margin=dict(l=10, r=10, t=10, b=10),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+    )
+
+    st.plotly_chart(
+        fig,
+        use_container_width=True,
+        config=DONUT_CHART_CONFIG
+    )
 
 
 def crypto_app():
@@ -527,36 +629,5 @@ def crypto_app():
 
     st.subheader("Allocation")
 
-    if not top_df.empty:
-        pie_df = top_df.copy()
-        total_allocation = pie_df[value_col].sum()
-
-        if total_allocation > 0:
-            pie_df["Allocation %"] = (
-                pie_df[value_col] / total_allocation * 100
-            ).round(2)
-
-            pie_df["Asset Share"] = (
-                pie_df["Asset"]
-                + " — "
-                + pie_df["Allocation %"].astype(str)
-                + "%"
-            )
-
-            pie = alt.Chart(pie_df).mark_arc().encode(
-                theta=alt.Theta(field=value_col, type="quantitative"),
-                color=alt.Color(
-                    field="Asset Share",
-                    type="nominal",
-                    title="Asset"
-                ),
-                tooltip=[
-                    alt.Tooltip("Asset:N", title="Asset"),
-                    alt.Tooltip("Qty:Q", title="Quantity"),
-                    alt.Tooltip("Price (USD):Q", title="Price USD", format=",.6f"),
-                    alt.Tooltip(f"{value_col}:Q", title=value_col, format=",.2f"),
-                    alt.Tooltip("Allocation %:Q", title="Allocation %", format=".2f"),
-                ],
-            )
-
-            st.altair_chart(pie, use_container_width=True)
+    donut_df = build_donut_df(top_df, value_col)
+    render_donut_chart(donut_df, value_col, selected_currency)
