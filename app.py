@@ -5,9 +5,6 @@ import streamlit.components.v1 as components
 from auth import login_ui, ensure_auth, logout
 
 
-# ------------------------------------
-# PAGE CONFIG
-# ------------------------------------
 st.set_page_config(
     page_title="InvesTrack Pro",
     page_icon="📈",
@@ -15,9 +12,6 @@ st.set_page_config(
 )
 
 
-# ------------------------------------
-# MONETIZATION CONFIG
-# ------------------------------------
 SHOW_AD_PLACEHOLDERS = True
 INTERSTITIAL_COOLDOWN_SECONDS = 300
 
@@ -97,42 +91,48 @@ def render_partner_cta():
     )
 
 
-def maybe_trigger_interstitial(reason="mode_switch"):
+def request_interstitial(reason="mode_switch"):
     now = time.time()
-
-    last_trigger = st.session_state.get(
-        "last_interstitial_trigger",
-        0
-    )
+    last_trigger = st.session_state.get("last_interstitial_trigger", 0)
 
     if now - last_trigger < INTERSTITIAL_COOLDOWN_SECONDS:
         return
 
     st.session_state.last_interstitial_trigger = now
+    st.session_state.pending_interstitial_reason = reason
+    st.session_state.pending_interstitial_time = int(now)
+
+
+def render_pending_interstitial():
+    reason = st.session_state.pop("pending_interstitial_reason", None)
+    trigger_time = st.session_state.pop("pending_interstitial_time", None)
+
+    if not reason or not trigger_time:
+        return
 
     components.html(
         f"""
         <script>
             setTimeout(function() {{
-                window.location.href = "investrackpro://show-interstitial?reason={reason}&t={int(now)}";
-            }}, 250);
+                try {{
+                    window.top.location.href =
+                        "investrackpro://show-interstitial?reason={reason}&t={trigger_time}";
+                }} catch (e) {{
+                    window.location.href =
+                        "investrackpro://show-interstitial?reason={reason}&t={trigger_time}";
+                }}
+            }}, 500);
         </script>
         """,
         height=0,
     )
 
 
-# ------------------------------------
-# HARD AUTH GATE
-# ------------------------------------
 if not ensure_auth():
     login_ui()
     st.stop()
 
 
-# ------------------------------------
-# SESSION VALIDATION
-# ------------------------------------
 if "user" not in st.session_state or "user_id" not in st.session_state:
     st.error("Session expired. Please login again.")
     logout()
@@ -142,24 +142,16 @@ user = st.session_state.user
 user_id = st.session_state.user_id
 
 
-# ------------------------------------
-# SAFE AUTO REFRESH
-# ------------------------------------
 REFRESH_INTERVAL = 60
-
 now = time.time()
 
 if "last_refresh" not in st.session_state:
     st.session_state.last_refresh = now
-
 elif now - st.session_state.last_refresh > REFRESH_INTERVAL:
     st.session_state.last_refresh = now
     st.rerun()
 
 
-# ------------------------------------
-# HARDENED MODE STATE
-# ------------------------------------
 MODE_OPTIONS = ["Crypto", "Stocks"]
 
 if "selected_mode" not in st.session_state:
@@ -171,22 +163,15 @@ if st.session_state.selected_mode not in MODE_OPTIONS:
 
 def on_mode_change():
     new_mode = st.session_state.mode_radio
-
-    old_mode = st.session_state.get(
-        "selected_mode",
-        "Crypto"
-    )
+    old_mode = st.session_state.get("selected_mode", "Crypto")
 
     if new_mode in MODE_OPTIONS:
         st.session_state.selected_mode = new_mode
 
     if old_mode != new_mode:
-        maybe_trigger_interstitial("mode_switch")
+        request_interstitial("mode_switch")
 
 
-# ------------------------------------
-# SIDEBAR
-# ------------------------------------
 st.sidebar.success(f"Logged in as\n{user.email}")
 
 if st.sidebar.button("Logout"):
@@ -202,6 +187,8 @@ st.sidebar.radio(
 )
 
 mode = st.session_state.selected_mode
+
+render_pending_interstitial()
 
 st.sidebar.markdown("---")
 
@@ -221,9 +208,6 @@ st.sidebar.markdown(
 )
 
 
-# ------------------------------------
-# TOP MONETIZATION SLOT
-# ------------------------------------
 render_ad_slot(
     label="Top Sponsored Slot",
     slot_id=ADSENSE_TOP_SLOT,
@@ -231,9 +215,6 @@ render_ad_slot(
 )
 
 
-# ------------------------------------
-# LAZY LOAD MODES
-# ------------------------------------
 try:
     if mode == "Crypto":
         from crypto_mode import crypto_app
@@ -248,9 +229,6 @@ except Exception as e:
     print("APP ERROR:", type(e).__name__, e)
 
 
-# ------------------------------------
-# BOTTOM MONETIZATION SLOT
-# ------------------------------------
 st.markdown("---")
 
 render_partner_cta()
