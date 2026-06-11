@@ -110,18 +110,31 @@ def render_pending_interstitial():
     if not reason or not trigger_time:
         return
 
+    intent_url = (
+        "intent://show-interstitial"
+        f"?reason={reason}&t={trigger_time}"
+        "#Intent;"
+        "scheme=investrackpro;"
+        "package=com.investrackpro.app;"
+        "end"
+    )
+
     components.html(
         f"""
         <script>
             setTimeout(function() {{
+                var intentUrl = "{intent_url}";
+
                 try {{
-                    window.top.location.href =
-                        "investrackpro://show-interstitial?reason={reason}&t={trigger_time}";
+                    window.top.location.href = intentUrl;
                 }} catch (e) {{
-                    window.location.href =
-                        "investrackpro://show-interstitial?reason={reason}&t={trigger_time}";
+                    try {{
+                        window.parent.location.href = intentUrl;
+                    }} catch (e2) {{
+                        window.location.href = intentUrl;
+                    }}
                 }}
-            }}, 500);
+            }}, 700);
         </script>
         """,
         height=0,
