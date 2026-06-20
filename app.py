@@ -13,7 +13,9 @@ st.set_page_config(
 
 
 SHOW_AD_PLACEHOLDERS = True
-INTERSTITIAL_COOLDOWN_SECONDS = 300
+
+# Web-triggered Android ad timer
+ANDROID_AD_TIMER_SECONDS = 240  # 4 minutes
 
 
 def get_secret(key, default=""):
@@ -91,50 +93,40 @@ def render_partner_cta():
     )
 
 
-def request_interstitial(reason="mode_switch"):
-    now = time.time()
-    last_trigger = st.session_state.get("last_interstitial_trigger", 0)
-
-    if now - last_trigger < INTERSTITIAL_COOLDOWN_SECONDS:
-        return
-
-    st.session_state.last_interstitial_trigger = now
-    st.session_state.pending_interstitial_reason = reason
-    st.session_state.pending_interstitial_time = int(now)
-
-
-def render_pending_interstitial():
-    reason = st.session_state.pop("pending_interstitial_reason", None)
-    trigger_time = st.session_state.pop("pending_interstitial_time", None)
-
-    if not reason or not trigger_time:
-        return
-
-    intent_url = (
-        "intent://show-interstitial"
-        f"?reason={reason}&t={trigger_time}"
-        "#Intent;"
-        "scheme=investrackpro;"
-        "package=com.investrackpro.app;"
-        "end"
-    )
-
+def render_android_ad_timer():
     components.html(
         f"""
         <script>
-            setTimeout(function() {{
-                var intentUrl = "{intent_url}";
+            (function() {{
+                if (window.__investrackAdTimerStarted) {{
+                    return;
+                }}
 
-                try {{
-                    window.top.location.href = intentUrl;
-                }} catch (e) {{
+                window.__investrackAdTimerStarted = true;
+
+                function triggerAndroidAd() {{
+                    var now = Math.floor(Date.now() / 1000);
+
+                    var intentUrl =
+                        "intent://show-ad?reason=active_usage&t=" + now +
+                        "#Intent;" +
+                        "scheme=investrackpro;" +
+                        "package=com.investrackpro.app;" +
+                        "end";
+
                     try {{
-                        window.parent.location.href = intentUrl;
-                    }} catch (e2) {{
-                        window.location.href = intentUrl;
+                        window.top.location.href = intentUrl;
+                    }} catch (e) {{
+                        try {{
+                            window.parent.location.href = intentUrl;
+                        }} catch (e2) {{
+                            window.location.href = intentUrl;
+                        }}
                     }}
                 }}
-            }}, 700);
+
+                setInterval(triggerAndroidAd, {ANDROID_AD_TIMER_SECONDS * 1000});
+            }})();
         </script>
         """,
         height=0,
@@ -153,6 +145,10 @@ if "user" not in st.session_state or "user_id" not in st.session_state:
 
 user = st.session_state.user
 user_id = st.session_state.user_id
+
+
+# Start Android 4-minute active usage ad timer
+render_android_ad_timer()
 
 
 REFRESH_INTERVAL = 60
@@ -176,13 +172,9 @@ if st.session_state.selected_mode not in MODE_OPTIONS:
 
 def on_mode_change():
     new_mode = st.session_state.mode_radio
-    old_mode = st.session_state.get("selected_mode", "Crypto")
 
     if new_mode in MODE_OPTIONS:
         st.session_state.selected_mode = new_mode
-
-    if old_mode != new_mode:
-        request_interstitial("mode_switch")
 
 
 st.sidebar.success(f"Logged in as\n{user.email}")
@@ -200,8 +192,6 @@ st.sidebar.radio(
 )
 
 mode = st.session_state.selected_mode
-
-render_pending_interstitial()
 
 st.sidebar.markdown("---")
 
