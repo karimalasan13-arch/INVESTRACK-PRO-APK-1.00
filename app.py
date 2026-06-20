@@ -15,7 +15,7 @@ st.set_page_config(
 SHOW_AD_PLACEHOLDERS = True
 
 # Web-triggered Android ad timer
-ANDROID_AD_TIMER_SECONDS = 240  # 4 minutes
+ANDROID_AD_TIMER_SECONDS = 90  # 1 minute 30 seconds
 
 
 def get_secret(key, default=""):
@@ -147,7 +147,7 @@ user = st.session_state.user
 user_id = st.session_state.user_id
 
 
-# Start Android 4-minute active usage ad timer
+# Start Android 90-second active usage ad timer
 render_android_ad_timer()
 
 
