@@ -12,6 +12,41 @@ st.set_page_config(
 )
 
 
+st.markdown(
+    """
+    <style>
+    [data-testid="stToolbar"] {
+        display: none !important;
+    }
+
+    .stAppDeployButton {
+        display: none !important;
+    }
+
+    header {
+        display: none !important;
+    }
+
+    footer {
+        display: none !important;
+    }
+
+    #MainMenu {
+        visibility: hidden !important;
+    }
+
+    .viewerBadge_container__1QSob,
+    .styles_viewerBadge__1yB5_,
+    .viewerBadge_link__1S137,
+    [data-testid="stStatusWidget"] {
+        display: none !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+
 SHOW_AD_PLACEHOLDERS = True
 
 # Web-triggered Android ad timer
