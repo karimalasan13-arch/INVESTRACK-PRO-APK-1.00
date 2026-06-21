@@ -17,24 +17,45 @@ st.markdown(
     <style>
     footer {
         display: none !important;
-    }
-
-    #MainMenu {
         visibility: hidden !important;
     }
 
+    #MainMenu {
+        visibility: visible !important;
+    }
+
     [data-testid="stStatusWidget"],
+    [data-testid="stDecoration"],
+    [data-testid="manage-app-button"],
+    [data-testid="stToolbarActions"],
     .viewerBadge_container__1QSob,
     .styles_viewerBadge__1yB5_,
     .viewerBadge_link__1S137,
-    .st-emotion-cache-1dp5vir,
-    .st-emotion-cache-zt5igj,
-    .st-emotion-cache-1wbqy5l,
+    div[class*="viewerBadge"],
+    div[class*="ViewerBadge"],
+    div[class*="stStatusWidget"],
+    div[class*="stDecoration"],
+    div[class*="deploy"],
+    div[class*="Deploy"],
     a[href*="streamlit.io"],
     a[href*="share.streamlit.io"],
     a[href*="github.com"] {
         display: none !important;
         visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+    }
+
+    button[title*="Deploy"],
+    button[aria-label*="Deploy"],
+    button[title*="Fork"],
+    button[aria-label*="Fork"],
+    button[title*="GitHub"],
+    button[aria-label*="GitHub"] {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
     }
     </style>
     """,
