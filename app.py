@@ -201,15 +201,6 @@ render_ad_slot(
     height=120,
 )
 
-st.sidebar.markdown(
-    """
-    ---
-    🗑 **Delete Account**
-
-    Email **hassbuildllc@gmail.com**
-    """
-)
-
 
 render_ad_slot(
     label="Top Sponsored Slot",
