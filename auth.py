@@ -71,7 +71,8 @@ def logout():
 # -----------------------------------------
 def login_ui():
 
-    st.title("🔐 InvesTrack Pro")
+    st.title("InvesTrack Pro")
+    st.caption("Track your crypto and stock portfolio in one place.")
 
     login_tab, signup_tab = st.tabs(["Login", "Create Account"])
 
@@ -138,14 +139,4 @@ def login_ui():
                 st.error("Account creation failed.")
                 print("SIGNUP ERROR:", e)
 
-    # -----------------------------------------
-    # DELETE NOTICE
-    # -----------------------------------------
-    st.markdown(
-        """
-        ---
-        🗑 **Request Account Deletion**
-
-        Email **delete@investrackpro.app**
-        """
-    )
+    
