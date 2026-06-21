@@ -72,7 +72,7 @@ def logout():
 def login_ui():
 
     st.title("InvesTrack Pro")
-    st.caption("Track your crypto and stock portfolio in one place.")
+    st.caption("Track your cash holdings, crypto and stock portfolio in one place.")
 
     login_tab, signup_tab = st.tabs(["Login", "Create Account"])
 
