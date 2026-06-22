@@ -37,6 +37,12 @@ st.markdown(
     div[class*="stDecoration"],
     div[class*="deploy"],
     div[class*="Deploy"],
+    div[class*="floating"],
+    div[class*="Floating"],
+    div[class*="badge"],
+    div[class*="Badge"],
+    div[class*="crown"],
+    div[class*="Crown"],
     a[href*="streamlit.io"],
     a[href*="share.streamlit.io"],
     a[href*="github.com"] {
@@ -51,7 +57,25 @@ st.markdown(
     button[title*="Fork"],
     button[aria-label*="Fork"],
     button[title*="GitHub"],
-    button[aria-label*="GitHub"] {
+    button[aria-label*="GitHub"],
+    button[title*="Upgrade"],
+    button[aria-label*="Upgrade"],
+    button[title*="Manage app"],
+    button[aria-label*="Manage app"] {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+    }
+
+    svg[aria-label*="Streamlit"],
+    svg[aria-label*="streamlit"],
+    svg[aria-label*="Crown"],
+    svg[aria-label*="crown"],
+    svg[title*="Streamlit"],
+    svg[title*="streamlit"],
+    svg[title*="Crown"],
+    svg[title*="crown"] {
         display: none !important;
         visibility: hidden !important;
         opacity: 0 !important;
