@@ -3,27 +3,36 @@ import os
 import streamlit as st
 from supabase import create_client, Client
 
+
+# -----------------------------------------
+# SAFE SECRET LOADER
+# Works on:
+# - Render environment variables
+# - Streamlit Cloud secrets
+# -----------------------------------------
+def get_secret(key: str, default=None):
+    env_value = os.getenv(key)
+    if env_value:
+        return env_value
+
+    try:
+        return st.secrets.get(key, default)
+    except Exception:
+        return default
+
+
 # -----------------------------------------
 # LOAD KEYS
 # -----------------------------------------
-SUPABASE_URL = (
-    st.secrets.get("SUPABASE_URL")
-    if hasattr(st, "secrets")
-    else None
-) or os.getenv("SUPABASE_URL")
-
-SUPABASE_KEY = (
-    st.secrets.get("SUPABASE_ANON_KEY")
-    if hasattr(st, "secrets")
-    else None
-) or os.getenv("SUPABASE_ANON_KEY")
+SUPABASE_URL = get_secret("SUPABASE_URL")
+SUPABASE_KEY = get_secret("SUPABASE_ANON_KEY")
 
 if not SUPABASE_URL or not SUPABASE_KEY:
     raise RuntimeError("❌ Supabase credentials not found.")
 
 
 # -----------------------------------------
-# ✅ SESSION-ISOLATED CLIENT (FINAL FIX)
+# SESSION-ISOLATED CLIENT
 # -----------------------------------------
 def get_supabase() -> Client:
     """
@@ -44,7 +53,7 @@ def get_supabase() -> Client:
 
 
 # -----------------------------------------
-# GLOBAL ACCESSOR (SAFE)
+# GLOBAL ACCESSOR
 # -----------------------------------------
 supabase: Client = get_supabase()
 
@@ -54,7 +63,10 @@ supabase: Client = get_supabase()
 # -----------------------------------------
 def log_supabase_error(context: str, err: Exception):
     st.error(f"Supabase error in {context}")
-    if st.secrets.get("DEBUG", False):
+
+    debug = get_secret("DEBUG", False)
+
+    if str(debug).lower() in ["true", "1", "yes"]:
         st.exception(err)
 
 
