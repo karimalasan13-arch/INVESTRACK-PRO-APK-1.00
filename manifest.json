@@ -1,8 +1,8 @@
 {
   "name": "InvesTrack Pro",
   "short_name": "InvesTrack",
-  "start_url": "https://investrack-pro-apk-100-rdqbmv6pexwp4es6dvsanu.streamlit.app/",
-  "scope": "https://investrack-pro-apk-100-rdqbmv6pexwp4es6dvsanu.streamlit.app/",
+  "start_url": "https://com.investrackpro.app/",
+  "scope": "https://com.investrackpro.app/",
   "display": "standalone",
   "background_color": "#0e1117",
   "theme_color": "#0e1117",
