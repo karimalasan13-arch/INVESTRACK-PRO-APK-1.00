@@ -4,7 +4,7 @@ map $http_upgrade $connection_upgrade {
 }
 
 server {
-    listen ${PORT};
+    listen 10000;
 
     location = /.well-known/assetlinks.json {
         alias /app/.well-known/assetlinks.json;
