@@ -1,11 +1,15 @@
 [
   {
-    "relation": ["delegate_permission/common.handle_all_urls"],
+    "relation": [
+      "delegate_permission/common.handle_all_urls",
+      "delegate_permission/common.get_login_creds"
+    ],
     "target": {
       "namespace": "android_app",
       "package_name": "com.investrackpro.app",
       "sha256_cert_fingerprints": [
-        "1D:6F:E8:54:2F:CE:2B:35:BB:09:9F:99:04:E7:54:C7:94:31:1B:D3:12:8F:8A:81:FE:BC:83:48:D5:CC:4B:0E"
+        "FB:C5:9D:94:F8:97:05:D4:CA:5F:46:AC:3D:8B:E8:D6:3E:EC:31:48:03:95:26:97:5C:8D:03:06:77:EE:41:ED",
+        "AD:8F:88:05:48:AB:00:64:CC:F7:0A:FA:C2:BE:8C:86:79:29:38:D7:24:D8:88:D5:84:C0:3D:7B:88:C2:48:84"
       ]
     }
   }
