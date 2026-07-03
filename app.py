@@ -90,7 +90,7 @@ st.markdown(
 SHOW_AD_PLACEHOLDERS = True
 
 # Web-triggered Android ad timer
-ANDROID_AD_TIMER_SECONDS = 90  # 1 minute 30 seconds
+ANDROID_AD_TIMER_SECONDS = 180  # 3 minutes
 
 
 def get_secret(key, default=""):
