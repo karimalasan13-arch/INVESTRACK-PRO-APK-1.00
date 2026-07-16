@@ -1,21 +1,26 @@
 import streamlit as st
+
 from db import get_supabase
 
 
 # -----------------------------------------
-# AUTH SESSION ATTACHER (CRITICAL)
+# AUTH SESSION ATTACHER
 # -----------------------------------------
 def get_auth_client():
     """
-    Returns a Supabase client bound to THIS user's session.
+    Return the session-isolated Supabase client and attach
+    the current user's stored authentication session.
     """
     supabase = get_supabase()
 
-    if "access_token" in st.session_state:
+    access_token = st.session_state.get("access_token")
+    refresh_token = st.session_state.get("refresh_token")
+
+    if access_token and refresh_token:
         try:
             supabase.auth.set_session(
-                access_token=st.session_state.access_token,
-                refresh_token=st.session_state.refresh_token,
+                access_token=access_token,
+                refresh_token=refresh_token,
             )
         except Exception:
             pass
@@ -24,21 +29,24 @@ def get_auth_client():
 
 
 # -----------------------------------------
-# ENSURE AUTH (STABLE + ISOLATED)
+# ENSURE AUTH
 # -----------------------------------------
 def ensure_auth() -> bool:
-
+    """
+    Confirm that the current Streamlit session has a valid
+    authenticated Supabase user.
+    """
     if "access_token" not in st.session_state:
         return False
 
     supabase = get_auth_client()
 
     try:
-        res = supabase.auth.get_user()
+        response = supabase.auth.get_user()
 
-        if res and res.user:
-            st.session_state.user = res.user
-            st.session_state.user_id = res.user.id
+        if response and response.user:
+            st.session_state.user = response.user
+            st.session_state.user_id = response.user.id
             return True
 
     except Exception:
@@ -48,18 +56,17 @@ def ensure_auth() -> bool:
 
 
 # -----------------------------------------
-# LOGOUT (FULL HARD RESET)
+# LOGOUT
 # -----------------------------------------
 def logout():
-
-    supabase = get_auth_client()
-
+    """
+    Sign out and fully clear the current Streamlit session.
+    """
     try:
-        supabase.auth.sign_out()
+        get_auth_client().auth.sign_out()
     except Exception:
         pass
 
-    # 🔥 FULL WIPE
     for key in list(st.session_state.keys()):
         del st.session_state[key]
 
@@ -70,73 +77,149 @@ def logout():
 # LOGIN / SIGNUP UI
 # -----------------------------------------
 def login_ui():
-
     st.title("InvesTrack Pro")
-    st.caption("Track your cash holdings, crypto and stock portfolio in one place.")
+    st.caption(
+        "Track your cash holdings, cryptocurrency and stock portfolio "
+        "in one secure place."
+    )
 
-    login_tab, signup_tab = st.tabs(["Login", "Create Account"])
+    login_tab, signup_tab = st.tabs(
+        ["Login", "Create Account"]
+    )
 
     # ---------------- LOGIN ----------------
     with login_tab:
+        email = st.text_input(
+            "Email",
+            key="login_email",
+            placeholder="you@example.com",
+        )
 
-        email = st.text_input("Email", key="login_email")
-        password = st.text_input("Password", type="password", key="login_pass")
+        password = st.text_input(
+            "Password",
+            type="password",
+            key="login_pass",
+        )
 
-        if st.button("Login", key="login_btn"):
+        if st.button(
+            "Login",
+            key="login_btn",
+            type="primary",
+            use_container_width=True,
+        ):
+            clean_email = email.strip()
 
-            supabase = get_supabase()  # 🔥 fresh client
-
-            try:
-                res = supabase.auth.sign_in_with_password({
-                    "email": email.strip(),
-                    "password": password,
-                })
-
-                if res.user and res.session:
-
-                    # ✅ STORE TOKENS (PER SESSION)
-                    st.session_state.access_token = res.session.access_token
-                    st.session_state.refresh_token = res.session.refresh_token
-
-                    st.session_state.user = res.user
-                    st.session_state.user_id = res.user.id
-
-                    st.success("Login successful")
-                    st.rerun()
-
-                else:
-                    st.error("Login failed")
-
-            except Exception:
-                st.error("Invalid email or password")
-
-    # ---------------- SIGNUP ----------------
-    with signup_tab:
-
-        email = st.text_input("New Email", key="signup_email")
-        password = st.text_input("New Password", type="password", key="signup_pass")
-
-        if st.button("Create Account", key="signup_btn"):
-
-            if len(password) < 6:
-                st.error("Password must be at least 6 characters")
+            if not clean_email or not password:
+                st.warning("Enter your email address and password.")
                 return
 
             supabase = get_supabase()
 
             try:
-                res = supabase.auth.sign_up({
-                    "email": email.strip(),
-                    "password": password,
-                })
+                response = supabase.auth.sign_in_with_password(
+                    {
+                        "email": clean_email,
+                        "password": password,
+                    }
+                )
 
-                if res.user:
-                    st.success("Account created. Please log in.")
+                if response.user and response.session:
+                    st.session_state.access_token = (
+                        response.session.access_token
+                    )
+                    st.session_state.refresh_token = (
+                        response.session.refresh_token
+                    )
+
+                    st.session_state.user = response.user
+                    st.session_state.user_id = response.user.id
+                    st.session_state.public_page = "Dashboard"
+
+                    st.success("Login successful.")
+                    st.rerun()
+
                 else:
-                    st.error("Signup failed")
+                    st.error("Login failed. Please try again.")
 
-            except Exception as e:
-                st.error("Account creation failed.")
-                print("SIGNUP ERROR:", e)
+            except Exception:
+                st.error("Invalid email or password.")
 
-    
+    # ---------------- SIGNUP ----------------
+    with signup_tab:
+        email = st.text_input(
+            "New Email",
+            key="signup_email",
+            placeholder="you@example.com",
+        )
+
+        password = st.text_input(
+            "New Password",
+            type="password",
+            key="signup_pass",
+            help="Use at least 6 characters.",
+        )
+
+        confirm_password = st.text_input(
+            "Confirm Password",
+            type="password",
+            key="signup_confirm_pass",
+        )
+
+        if st.button(
+            "Create Account",
+            key="signup_btn",
+            type="primary",
+            use_container_width=True,
+        ):
+            clean_email = email.strip()
+
+            if not clean_email:
+                st.warning("Enter a valid email address.")
+                return
+
+            if len(password) < 6:
+                st.error("Password must be at least 6 characters.")
+                return
+
+            if password != confirm_password:
+                st.error("The passwords do not match.")
+                return
+
+            supabase = get_supabase()
+
+            try:
+                response = supabase.auth.sign_up(
+                    {
+                        "email": clean_email,
+                        "password": password,
+                    }
+                )
+
+                if response.user:
+                    if response.session:
+                        st.session_state.access_token = (
+                            response.session.access_token
+                        )
+                        st.session_state.refresh_token = (
+                            response.session.refresh_token
+                        )
+                        st.session_state.user = response.user
+                        st.session_state.user_id = response.user.id
+                        st.session_state.public_page = "Dashboard"
+
+                        st.success("Account created successfully.")
+                        st.rerun()
+
+                    st.success(
+                        "Account created. Check your email if confirmation "
+                        "is required, then log in."
+                    )
+
+                else:
+                    st.error("Account creation failed.")
+
+            except Exception as error:
+                st.error(
+                    "Account creation failed. The email may already be registered."
+                )
+                print("SIGNUP ERROR:", type(error).__name__, error)
