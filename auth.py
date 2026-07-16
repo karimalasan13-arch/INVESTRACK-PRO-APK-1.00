@@ -77,10 +77,23 @@ def logout():
 # LOGIN / SIGNUP UI
 # -----------------------------------------
 def login_ui():
-    st.title("InvesTrack Pro")
-    st.caption(
-        "Track your cash holdings, cryptocurrency and stock "
-        "portfolio in one secure place."
+    st.markdown(
+        """
+        <div style="
+            max-width:760px;
+            padding:1.3rem 1.4rem;
+            border-radius:20px;
+            background:linear-gradient(135deg,#0f172a,#172554);
+            color:white;
+            margin-bottom:1rem;
+        ">
+            <h1 style="margin:0 0 0.4rem;">Welcome to InvesTrack Pro</h1>
+            <p style="margin:0;color:#cbd5e1;">
+                Track cash holdings, cryptocurrency and stocks in one secure portfolio.
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
 
     login_tab, signup_tab = st.tabs(
@@ -133,6 +146,7 @@ def login_ui():
                     )
                     st.session_state.user = response.user
                     st.session_state.user_id = response.user.id
+                    st.session_state.profile_panel_open = False
                     st.session_state.pending_public_page = "Dashboard"
 
                     st.success("Login successful.")
@@ -210,6 +224,7 @@ def login_ui():
                         )
                         st.session_state.user = response.user
                         st.session_state.user_id = response.user.id
+                        st.session_state.profile_panel_open = False
                         st.session_state.pending_public_page = "Dashboard"
 
                         st.success(
