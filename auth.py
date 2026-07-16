@@ -9,7 +9,7 @@ from db import get_supabase
 def get_auth_client():
     """
     Return the session-isolated Supabase client and attach
-    the current user's stored authentication session.
+    the stored authentication session.
     """
     supabase = get_supabase()
 
@@ -33,8 +33,8 @@ def get_auth_client():
 # -----------------------------------------
 def ensure_auth() -> bool:
     """
-    Confirm that the current Streamlit session has a valid
-    authenticated Supabase user.
+    Confirm that the current Streamlit session contains
+    a valid authenticated Supabase user.
     """
     if "access_token" not in st.session_state:
         return False
@@ -60,7 +60,7 @@ def ensure_auth() -> bool:
 # -----------------------------------------
 def logout():
     """
-    Sign out and fully clear the current Streamlit session.
+    Sign out and clear the entire Streamlit session.
     """
     try:
         get_auth_client().auth.sign_out()
@@ -79,8 +79,8 @@ def logout():
 def login_ui():
     st.title("InvesTrack Pro")
     st.caption(
-        "Track your cash holdings, cryptocurrency and stock portfolio "
-        "in one secure place."
+        "Track your cash holdings, cryptocurrency and stock "
+        "portfolio in one secure place."
     )
 
     login_tab, signup_tab = st.tabs(
@@ -110,7 +110,9 @@ def login_ui():
             clean_email = email.strip()
 
             if not clean_email or not password:
-                st.warning("Enter your email address and password.")
+                st.warning(
+                    "Enter your email address and password."
+                )
                 return
 
             supabase = get_supabase()
@@ -127,19 +129,27 @@ def login_ui():
                     st.session_state.access_token = (
                         response.session.access_token
                     )
+
                     st.session_state.refresh_token = (
                         response.session.refresh_token
                     )
 
                     st.session_state.user = response.user
                     st.session_state.user_id = response.user.id
-                    st.session_state.public_page = "Dashboard"
+
+                    # Applied safely before navigation widgets
+                    # are created on the next rerun.
+                    st.session_state.pending_public_page = (
+                        "Dashboard"
+                    )
 
                     st.success("Login successful.")
                     st.rerun()
 
                 else:
-                    st.error("Login failed. Please try again.")
+                    st.error(
+                        "Login failed. Please try again."
+                    )
 
             except Exception:
                 st.error("Invalid email or password.")
@@ -174,11 +184,15 @@ def login_ui():
             clean_email = email.strip()
 
             if not clean_email:
-                st.warning("Enter a valid email address.")
+                st.warning(
+                    "Enter a valid email address."
+                )
                 return
 
             if len(password) < 6:
-                st.error("Password must be at least 6 characters.")
+                st.error(
+                    "Password must be at least 6 characters."
+                )
                 return
 
             if password != confirm_password:
@@ -200,19 +214,28 @@ def login_ui():
                         st.session_state.access_token = (
                             response.session.access_token
                         )
+
                         st.session_state.refresh_token = (
                             response.session.refresh_token
                         )
-                        st.session_state.user = response.user
-                        st.session_state.user_id = response.user.id
-                        st.session_state.public_page = "Dashboard"
 
-                        st.success("Account created successfully.")
+                        st.session_state.user = response.user
+                        st.session_state.user_id = (
+                            response.user.id
+                        )
+
+                        st.session_state.pending_public_page = (
+                            "Dashboard"
+                        )
+
+                        st.success(
+                            "Account created successfully."
+                        )
                         st.rerun()
 
                     st.success(
-                        "Account created. Check your email if confirmation "
-                        "is required, then log in."
+                        "Account created. Check your email if "
+                        "confirmation is required, then log in."
                     )
 
                 else:
@@ -220,6 +243,12 @@ def login_ui():
 
             except Exception as error:
                 st.error(
-                    "Account creation failed. The email may already be registered."
+                    "Account creation failed. The email may "
+                    "already be registered."
                 )
-                print("SIGNUP ERROR:", type(error).__name__, error)
+
+                print(
+                    "SIGNUP ERROR:",
+                    type(error).__name__,
+                    error,
+                )
