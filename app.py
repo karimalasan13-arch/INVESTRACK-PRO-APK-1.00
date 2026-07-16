@@ -236,9 +236,26 @@ PUBLIC_PAGES = [
 ]
 
 
-def set_public_page(page_name):
-    st.session_state.public_page = page_name
+def navigate(page_name):
+    """
+    Queue a page change and rerun.
+
+    The pending value is applied before the navigation widget
+    is created on the next run, avoiding Streamlit widget-state conflicts.
+    """
+    st.session_state.pending_public_page = page_name
     st.rerun()
+
+
+def apply_pending_navigation(valid_pages, authenticated):
+    pending_page = st.session_state.pop("pending_public_page", None)
+
+    if pending_page:
+        if pending_page == "Dashboard" and not authenticated:
+            pending_page = "Login"
+
+        if pending_page in valid_pages:
+            st.session_state.public_navigation = pending_page
 
 
 def render_public_navigation():
@@ -249,13 +266,18 @@ def render_public_navigation():
     if authenticated:
         navigation_items.append("Dashboard")
 
+    apply_pending_navigation(navigation_items, authenticated)
+
+    default_page = "Dashboard" if authenticated else "Home"
+
     current_page = st.session_state.get(
-        "public_page",
-        "Dashboard" if authenticated else "Home",
+        "public_navigation",
+        default_page,
     )
 
     if current_page not in navigation_items:
-        current_page = "Dashboard" if authenticated else "Home"
+        current_page = default_page
+        st.session_state.public_navigation = current_page
 
     selected_page = st.sidebar.radio(
         "Navigation",
@@ -263,8 +285,6 @@ def render_public_navigation():
         index=navigation_items.index(current_page),
         key="public_navigation",
     )
-
-    st.session_state.public_page = selected_page
 
     st.sidebar.markdown("---")
 
@@ -278,12 +298,14 @@ def render_public_navigation():
 
         if st.sidebar.button(
             "Open Dashboard",
+            key="sidebar_open_dashboard",
             use_container_width=True,
         ):
-            set_public_page("Dashboard")
+            navigate("Dashboard")
 
         if st.sidebar.button(
             "Logout",
+            key="sidebar_logout",
             use_container_width=True,
         ):
             logout()
@@ -296,10 +318,11 @@ def render_public_navigation():
 
         if st.sidebar.button(
             "Login / Create Account",
+            key="sidebar_login",
             type="primary",
             use_container_width=True,
         ):
-            set_public_page("Login")
+            navigate("Login")
 
     return selected_page, authenticated
 
@@ -346,24 +369,27 @@ def render_home_page(authenticated):
         if authenticated:
             if st.button(
                 "Open Dashboard",
+                key="home_open_dashboard",
                 type="primary",
                 use_container_width=True,
             ):
-                set_public_page("Dashboard")
+                navigate("Dashboard")
         else:
             if st.button(
                 "Start Tracking Free",
+                key="home_start_tracking",
                 type="primary",
                 use_container_width=True,
             ):
-                set_public_page("Login")
+                navigate("Login")
 
     with second_button:
         if st.button(
             "Learn More",
+            key="home_learn_more",
             use_container_width=True,
         ):
-            set_public_page("About")
+            navigate("About")
 
     st.markdown("## Everything you need to monitor your portfolio")
 
@@ -904,7 +930,14 @@ def render_dashboard():
         st.warning(
             "Please log in to access your portfolio dashboard."
         )
-        set_public_page("Login")
+
+        if st.button(
+            "Go to Login",
+            key="dashboard_go_to_login",
+            type="primary",
+        ):
+            navigate("Login")
+
         return
 
     if (
@@ -1037,9 +1070,10 @@ elif selected_page == "Login":
 
         if st.button(
             "Go to Dashboard",
+            key="login_go_to_dashboard",
             type="primary",
         ):
-            set_public_page("Dashboard")
+            navigate("Dashboard")
 
     else:
         login_ui()
