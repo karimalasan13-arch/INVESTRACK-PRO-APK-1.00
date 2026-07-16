@@ -87,7 +87,6 @@ def login_ui():
         ["Login", "Create Account"]
     )
 
-    # ---------------- LOGIN ----------------
     with login_tab:
         email = st.text_input(
             "Email",
@@ -129,19 +128,12 @@ def login_ui():
                     st.session_state.access_token = (
                         response.session.access_token
                     )
-
                     st.session_state.refresh_token = (
                         response.session.refresh_token
                     )
-
                     st.session_state.user = response.user
                     st.session_state.user_id = response.user.id
-
-                    # Applied safely before navigation widgets
-                    # are created on the next rerun.
-                    st.session_state.pending_public_page = (
-                        "Dashboard"
-                    )
+                    st.session_state.pending_public_page = "Dashboard"
 
                     st.success("Login successful.")
                     st.rerun()
@@ -154,7 +146,6 @@ def login_ui():
             except Exception:
                 st.error("Invalid email or password.")
 
-    # ---------------- SIGNUP ----------------
     with signup_tab:
         email = st.text_input(
             "New Email",
@@ -214,29 +205,23 @@ def login_ui():
                         st.session_state.access_token = (
                             response.session.access_token
                         )
-
                         st.session_state.refresh_token = (
                             response.session.refresh_token
                         )
-
                         st.session_state.user = response.user
-                        st.session_state.user_id = (
-                            response.user.id
-                        )
-
-                        st.session_state.pending_public_page = (
-                            "Dashboard"
-                        )
+                        st.session_state.user_id = response.user.id
+                        st.session_state.pending_public_page = "Dashboard"
 
                         st.success(
                             "Account created successfully."
                         )
                         st.rerun()
 
-                    st.success(
-                        "Account created. Check your email if "
-                        "confirmation is required, then log in."
-                    )
+                    else:
+                        st.success(
+                            "Account created. Check your email if "
+                            "confirmation is required, then log in."
+                        )
 
                 else:
                     st.error("Account creation failed.")
