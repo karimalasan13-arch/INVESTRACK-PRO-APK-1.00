@@ -1,5 +1,7 @@
+import base64
 import os
 import time
+from pathlib import Path
 
 import streamlit as st
 import streamlit.components.v1 as components
@@ -22,131 +24,121 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-    footer {
-        display: none !important;
-        visibility: hidden !important;
+    :root {
+        --iv-navy: #0f172a;
+        --iv-green: #84cc16;
+        --iv-muted: #64748b;
+        --iv-border: rgba(148, 163, 184, 0.25);
     }
 
-    #MainMenu {
-        visibility: visible !important;
+    footer { display: none !important; visibility: hidden !important; }
+    #MainMenu { visibility: visible !important; }
+
+    [data-testid="stStatusWidget"], [data-testid="stDecoration"],
+    [data-testid="manage-app-button"], [data-testid="stToolbarActions"],
+    .viewerBadge_container__1QSob, .styles_viewerBadge__1yB5_,
+    .viewerBadge_link__1S137, div[class*="viewerBadge"],
+    div[class*="ViewerBadge"], div[class*="stStatusWidget"],
+    div[class*="stDecoration"], div[class*="deploy"],
+    div[class*="Deploy"], div[class*="floating"],
+    div[class*="Floating"], div[class*="badge"],
+    div[class*="Badge"], div[class*="crown"],
+    div[class*="Crown"], a[href*="streamlit.io"],
+    a[href*="share.streamlit.io"], a[href*="github.com"] {
+        display: none !important; visibility: hidden !important;
+        opacity: 0 !important; pointer-events: none !important;
     }
 
-    [data-testid="stStatusWidget"],
-    [data-testid="stDecoration"],
-    [data-testid="manage-app-button"],
-    [data-testid="stToolbarActions"],
-    .viewerBadge_container__1QSob,
-    .styles_viewerBadge__1yB5_,
-    .viewerBadge_link__1S137,
-    div[class*="viewerBadge"],
-    div[class*="ViewerBadge"],
-    div[class*="stStatusWidget"],
-    div[class*="stDecoration"],
-    div[class*="deploy"],
-    div[class*="Deploy"],
-    div[class*="floating"],
-    div[class*="Floating"],
-    div[class*="badge"],
-    div[class*="Badge"],
-    div[class*="crown"],
-    div[class*="Crown"],
-    a[href*="streamlit.io"],
-    a[href*="share.streamlit.io"],
-    a[href*="github.com"] {
-        display: none !important;
-        visibility: hidden !important;
-        opacity: 0 !important;
-        pointer-events: none !important;
+    button[title*="Deploy"], button[aria-label*="Deploy"],
+    button[title*="Fork"], button[aria-label*="Fork"],
+    button[title*="GitHub"], button[aria-label*="GitHub"],
+    button[title*="Upgrade"], button[aria-label*="Upgrade"],
+    button[title*="Manage app"], button[aria-label*="Manage app"] {
+        display: none !important; visibility: hidden !important;
+        opacity: 0 !important; pointer-events: none !important;
     }
 
-    button[title*="Deploy"],
-    button[aria-label*="Deploy"],
-    button[title*="Fork"],
-    button[aria-label*="Fork"],
-    button[title*="GitHub"],
-    button[aria-label*="GitHub"],
-    button[title*="Upgrade"],
-    button[aria-label*="Upgrade"],
-    button[title*="Manage app"],
-    button[aria-label*="Manage app"] {
-        display: none !important;
-        visibility: hidden !important;
-        opacity: 0 !important;
-        pointer-events: none !important;
+    [data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #0f172a 0%, #172554 55%, #0f172a 100%);
+        border-right: 1px solid rgba(148,163,184,0.16);
+    }
+    [data-testid="stSidebar"] * { color: #e2e8f0; }
+    [data-testid="stSidebar"] .stButton > button {
+        width: 100%; min-height: 43px; border-radius: 12px;
+        border: 1px solid rgba(148,163,184,0.18);
+        background: rgba(255,255,255,0.06); color: #f8fafc;
+        font-weight: 650; text-align: left; padding: .65rem .8rem;
+        transition: transform .15s ease, background .15s ease;
+    }
+    [data-testid="stSidebar"] .stButton > button:hover {
+        transform: translateX(2px);
+        background: linear-gradient(90deg, rgba(132,204,22,.22), rgba(255,255,255,.08));
+        border-color: rgba(132,204,22,.65);
+    }
+    [data-testid="stSidebar"] .stButton > button[kind="primary"] {
+        background: linear-gradient(135deg, #65a30d, #84cc16);
+        color: #0f172a; border-color: rgba(190,242,100,.65);
+        box-shadow: 0 10px 25px rgba(132,204,22,.18);
     }
 
-    svg[aria-label*="Streamlit"],
-    svg[aria-label*="streamlit"],
-    svg[aria-label*="Crown"],
-    svg[aria-label*="crown"],
-    svg[title*="Streamlit"],
-    svg[title*="streamlit"],
-    svg[title*="Crown"],
-    svg[title*="crown"] {
-        display: none !important;
-        visibility: hidden !important;
-        opacity: 0 !important;
-        pointer-events: none !important;
+    .iv-sidebar-brand { text-align:center; padding:.45rem .3rem 1rem; }
+    .iv-sidebar-logo {
+        width:112px; height:112px; border-radius:24px; object-fit:cover;
+        background:white; padding:4px; margin-bottom:.7rem;
+        box-shadow:0 16px 35px rgba(0,0,0,.32);
+    }
+    .iv-sidebar-title { margin:0; color:white; font-size:1.18rem; font-weight:850; }
+    .iv-sidebar-subtitle { margin:.22rem 0 0; color:#94a3b8; font-size:.77rem; }
+    .iv-section-label {
+        margin:.7rem 0 .35rem; text-transform:uppercase; letter-spacing:.12em;
+        color:#94a3b8; font-size:.67rem; font-weight:750;
+    }
+    .iv-profile-wrap { text-align:center; padding:.55rem 0 .6rem; }
+    .iv-avatar {
+        width:58px; height:58px; margin:0 auto .5rem; border-radius:50%;
+        display:flex; align-items:center; justify-content:center;
+        background:linear-gradient(135deg,#bef264,#65a30d); color:#172554;
+        font-size:1.05rem; font-weight:900; border:3px solid rgba(255,255,255,.88);
+        box-shadow:0 10px 25px rgba(132,204,22,.22);
+    }
+    .iv-profile-name { margin:0; color:white; font-weight:800; }
+    .iv-profile-hint { margin:.15rem 0 0; color:#94a3b8; font-size:.74rem; }
+    .iv-profile-panel {
+        border:1px solid rgba(148,163,184,.18); border-radius:14px;
+        padding:.75rem; margin:.25rem 0 .65rem; background:rgba(255,255,255,.06);
+        overflow-wrap:anywhere;
     }
 
     .iv-hero {
-        padding: 3rem 1.5rem;
-        border-radius: 22px;
-        background:
-            linear-gradient(
-                135deg,
-                rgba(15, 23, 42, 0.98),
-                rgba(30, 41, 59, 0.96)
-            );
-        color: white;
-        margin-bottom: 1.5rem;
+        padding:clamp(2.2rem,6vw,4.4rem); border-radius:28px;
+        background:radial-gradient(circle at 85% 20%,rgba(132,204,22,.3),transparent 26%),
+                   radial-gradient(circle at 20% 100%,rgba(245,158,11,.18),transparent 35%),
+                   linear-gradient(135deg,#0f172a,#172554 58%,#1e293b);
+        color:white; margin-bottom:1.5rem; box-shadow:0 24px 55px rgba(15,23,42,.22);
     }
-
-    .iv-hero h1 {
-        font-size: clamp(2.2rem, 6vw, 4.4rem);
-        line-height: 1.05;
-        margin: 0 0 1rem 0;
+    .iv-hero-badge {
+        display:inline-block; border-radius:999px; padding:.45rem .8rem;
+        background:rgba(190,242,100,.13); border:1px solid rgba(190,242,100,.3);
+        color:#d9f99d; font-size:.78rem; font-weight:800; margin-bottom:1rem;
     }
-
-    .iv-hero p {
-        font-size: 1.1rem;
-        max-width: 760px;
-        color: #dbeafe;
-        margin-bottom: 0;
-    }
-
+    .iv-hero h1 { font-size:clamp(2.35rem,7vw,5rem); line-height:1.01; margin:0 0 1rem; letter-spacing:-.045em; }
+    .iv-hero p { font-size:clamp(1rem,2.2vw,1.2rem); max-width:760px; color:#dbeafe; }
     .iv-card {
-        border: 1px solid rgba(128, 128, 128, 0.25);
-        border-radius: 16px;
-        padding: 1.25rem;
-        min-height: 175px;
-        margin-bottom: 1rem;
+        border:1px solid var(--iv-border); border-radius:20px; padding:1.35rem;
+        min-height:190px; margin-bottom:1rem;
+        background:linear-gradient(145deg,rgba(255,255,255,.86),rgba(248,250,252,.68));
+        box-shadow:0 14px 35px rgba(15,23,42,.06); transition:.2s ease;
     }
-
-    .iv-card h3 {
-        margin-top: 0;
-    }
-
-    .iv-footer {
-        border-top: 1px solid rgba(128, 128, 128, 0.25);
-        margin-top: 2.5rem;
-        padding: 1.5rem 0 2rem 0;
-        text-align: center;
-        font-size: 0.9rem;
-        opacity: 0.8;
-    }
-
-    .iv-legal {
-        max-width: 900px;
-        margin: 0 auto;
-    }
+    .iv-card:hover { transform:translateY(-3px); box-shadow:0 18px 42px rgba(15,23,42,.1); }
+    .iv-card h3 { margin-top:0; }
+    .iv-footer { border-top:1px solid var(--iv-border); margin-top:2.5rem; padding:1.5rem 0 2rem; text-align:center; font-size:.9rem; opacity:.82; }
+    .iv-legal { max-width:900px; margin:0 auto; }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
 
-SHOW_AD_PLACEHOLDERS = True
 
 # Web-triggered Android interstitial timer.
 ANDROID_AD_TIMER_SECONDS = 180  # 3 minutes
@@ -169,161 +161,144 @@ def get_secret(key, default=""):
         return default
 
 
-ADSENSE_CLIENT = get_secret("ADSENSE_CLIENT", "")
-ADSENSE_TOP_SLOT = get_secret("ADSENSE_TOP_SLOT", "")
-ADSENSE_BOTTOM_SLOT = get_secret("ADSENSE_BOTTOM_SLOT", "")
-ADSENSE_SIDEBAR_SLOT = get_secret("ADSENSE_SIDEBAR_SLOT", "")
+LOGO_CANDIDATES = [
+    Path("assets/investrack_logo.png"),
+    Path("investrack_logo.png"),
+    Path("INVSTRK  LOGO.png"),
+]
 
 
-# -----------------------------------------
-# AD SLOT
-# -----------------------------------------
-def render_ad_slot(label="Sponsored", slot_id="", height=120):
-    if ADSENSE_CLIENT and slot_id:
-        ad_html = f"""
-        <div style="width:100%; text-align:center; margin:10px 0;">
-            <script async
-                src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client={ADSENSE_CLIENT}"
-                crossorigin="anonymous"></script>
+def get_logo_path():
+    for candidate in LOGO_CANDIDATES:
+        if candidate.exists():
+            return candidate
+    return None
 
-            <ins class="adsbygoogle"
-                style="display:block"
-                data-ad-client="{ADSENSE_CLIENT}"
-                data-ad-slot="{slot_id}"
-                data-ad-format="auto"
-                data-full-width-responsive="true"></ins>
 
-            <script>
-                (adsbygoogle = window.adsbygoogle || []).push({{}});
-            </script>
-        </div>
-        """
+def image_to_data_uri(path):
+    if not path:
+        return ""
+    encoded = base64.b64encode(path.read_bytes()).decode("utf-8")
+    return f"data:image/png;base64,{encoded}"
 
-        components.html(
-            ad_html,
-            height=height,
-        )
 
-    elif SHOW_AD_PLACEHOLDERS:
-        st.markdown(
-            f"""
-            <div style="
-                border:1px dashed rgba(128,128,128,0.45);
-                border-radius:12px;
-                padding:14px;
-                text-align:center;
-                opacity:0.75;
-                margin:10px 0;
-            ">
-                <strong>{label}</strong><br>
-                Ad placement ready
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+def get_user_initials(email):
+    local = (email or "User").split("@")[0]
+    cleaned = "".join(ch for ch in local if ch.isalnum())
+    return (cleaned[:2] or "U").upper()
 
 
 # -----------------------------------------
 # COMMON SITE NAVIGATION
 # -----------------------------------------
 PUBLIC_PAGES = [
-    "Home",
-    "About",
-    "Privacy",
-    "Terms",
-    "Contact",
-    "Login",
+    ("Home", "🏠"),
+    ("About", "ℹ️"),
+    ("Privacy", "🔒"),
+    ("Terms", "📜"),
+    ("Contact", "✉️"),
+    ("Login", "🔑"),
 ]
 
 
 def navigate(page_name):
-    """
-    Queue a page change and rerun.
-
-    The pending value is applied before the navigation widget
-    is created on the next run, avoiding Streamlit widget-state conflicts.
-    """
     st.session_state.pending_public_page = page_name
     st.rerun()
 
 
 def apply_pending_navigation(valid_pages, authenticated):
     pending_page = st.session_state.pop("pending_public_page", None)
-
     if pending_page:
         if pending_page == "Dashboard" and not authenticated:
             pending_page = "Login"
-
         if pending_page in valid_pages:
             st.session_state.public_navigation = pending_page
 
 
-def render_public_navigation():
-    authenticated = ensure_auth()
-
-    navigation_items = PUBLIC_PAGES.copy()
-
-    if authenticated:
-        navigation_items.append("Dashboard")
-
-    apply_pending_navigation(navigation_items, authenticated)
-
-    default_page = "Dashboard" if authenticated else "Home"
-
-    current_page = st.session_state.get(
-        "public_navigation",
-        default_page,
+def render_sidebar_brand():
+    logo_uri = image_to_data_uri(get_logo_path())
+    logo_html = (
+        f'<img class="iv-sidebar-logo" src="{logo_uri}" alt="InvesTrack Pro logo">'
+        if logo_uri else '<div class="iv-avatar">IP</div>'
+    )
+    st.sidebar.markdown(
+        f"""
+        <div class="iv-sidebar-brand">
+            {logo_html}
+            <p class="iv-sidebar-title">InvesTrack Pro</p>
+            <p class="iv-sidebar-subtitle">Smart portfolio tracking</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
 
-    if current_page not in navigation_items:
-        current_page = default_page
-        st.session_state.public_navigation = current_page
 
-    selected_page = st.sidebar.radio(
-        "Navigation",
-        navigation_items,
-        index=navigation_items.index(current_page),
-        key="public_navigation",
-    )
+def render_navigation_buttons(items, selected_page):
+    st.sidebar.markdown('<div class="iv-section-label">Navigation</div>', unsafe_allow_html=True)
+    for page_name, icon in items:
+        if st.sidebar.button(
+            f"{icon}  {page_name}",
+            key=f"nav_{page_name.lower()}",
+            type="primary" if page_name == selected_page else "secondary",
+            use_container_width=True,
+        ):
+            navigate(page_name)
 
+
+def render_profile_section(user):
+    email = getattr(user, "email", "") or ""
+    initials = get_user_initials(email)
     st.sidebar.markdown("---")
-
-    if authenticated:
-        user = st.session_state.get("user")
-
-        if user:
-            st.sidebar.success(
-                f"Logged in as\n{user.email}"
-            )
-
-        if st.sidebar.button(
-            "Open Dashboard",
-            key="sidebar_open_dashboard",
-            use_container_width=True,
-        ):
+    st.sidebar.markdown(
+        f"""
+        <div class="iv-profile-wrap">
+            <div class="iv-avatar">{initials}</div>
+            <p class="iv-profile-name">My profile</p>
+            <p class="iv-profile-hint">Tap below for account details</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    if "profile_panel_open" not in st.session_state:
+        st.session_state.profile_panel_open = False
+    if st.sidebar.button("👤  Profile", key="toggle_profile_panel", use_container_width=True):
+        st.session_state.profile_panel_open = not st.session_state.profile_panel_open
+        st.rerun()
+    if st.session_state.profile_panel_open:
+        st.sidebar.markdown(
+            f'<div class="iv-profile-panel"><strong>Signed in</strong><br><small>{email}</small></div>',
+            unsafe_allow_html=True,
+        )
+        if st.sidebar.button("📈  Open Dashboard", key="profile_open_dashboard", use_container_width=True):
             navigate("Dashboard")
-
-        if st.sidebar.button(
-            "Logout",
-            key="sidebar_logout",
-            use_container_width=True,
-        ):
+        if st.sidebar.button("🚪  Logout", key="profile_logout", use_container_width=True):
             logout()
             st.stop()
 
+
+def render_public_navigation():
+    authenticated = ensure_auth()
+    navigation_items = PUBLIC_PAGES.copy()
+    if authenticated:
+        navigation_items.append(("Dashboard", "📈"))
+    valid_pages = [name for name, _ in navigation_items]
+    apply_pending_navigation(valid_pages, authenticated)
+    default_page = "Dashboard" if authenticated else "Home"
+    selected_page = st.session_state.get("public_navigation", default_page)
+    if selected_page not in valid_pages:
+        selected_page = default_page
+        st.session_state.public_navigation = selected_page
+    render_sidebar_brand()
+    render_navigation_buttons(navigation_items, selected_page)
+    if authenticated:
+        user = st.session_state.get("user")
+        if user:
+            render_profile_section(user)
     else:
-        st.sidebar.caption(
-            "Create a free account to track your portfolio."
-        )
-
-        if st.sidebar.button(
-            "Login / Create Account",
-            key="sidebar_login",
-            type="primary",
-            use_container_width=True,
-        ):
+        st.sidebar.markdown("---")
+        st.sidebar.caption("Create a free account to track your portfolio.")
+        if st.sidebar.button("✨  Start Free", key="sidebar_start_free", type="primary", use_container_width=True):
             navigate("Login")
-
     return selected_page, authenticated
 
 
@@ -350,11 +325,12 @@ def render_home_page(authenticated):
     st.markdown(
         """
         <div class="iv-hero">
-            <h1>Track your investments in one place.</h1>
+            <div class="iv-hero-badge">ONE PORTFOLIO • EVERY ASSET</div>
+            <h1>Know where your money stands.</h1>
             <p>
-                InvesTrack Pro helps you monitor stocks, cryptocurrency,
-                cash holdings and portfolio performance from a single,
-                easy-to-use dashboard.
+                Track stocks, cryptocurrency and cash holdings from one
+                polished dashboard. See your portfolio clearly and make
+                better-informed decisions with less effort.
             </p>
         </div>
         """,
@@ -385,7 +361,7 @@ def render_home_page(authenticated):
 
     with second_button:
         if st.button(
-            "Learn More",
+            "Explore Features",
             key="home_learn_more",
             use_container_width=True,
         ):
@@ -439,12 +415,6 @@ def render_home_page(authenticated):
         monitoring a growing stock portfolio, InvesTrack Pro gives you
         a clearer view of your investments without unnecessary complexity.
         """
-    )
-
-    render_ad_slot(
-        label="Sponsored",
-        slot_id=ADSENSE_BOTTOM_SLOT,
-        height=120,
     )
 
     render_public_footer()
@@ -853,24 +823,17 @@ def render_contact_page():
 # -----------------------------------------
 def render_partner_cta():
     st.markdown(
-        """
-        <div style="
-            border-radius:14px;
-            padding:18px;
-            background:linear-gradient(135deg,#0f172a,#1e293b);
-            color:white;
-            margin:14px 0;
-        ">
-            <h4 style="margin:0 0 8px 0;">
-                🚀 Pro Investor Tools Coming Soon
-            </h4>
-
-            <p style="margin:0; color:#d1d5db;">
-                Advanced analytics, exportable reports, portfolio scoring,
-                and market insights.
-            </p>
-        </div>
-        """,
+        (
+            '<div style="border-radius:14px;padding:18px;'
+            'background:linear-gradient(135deg,#0f172a,#1e293b);'
+            'color:white;margin:14px 0;">'
+            '<h4 style="margin:0 0 8px 0;color:white;">'
+            '🚀 Pro Investor Tools Coming Soon</h4>'
+            '<p style="margin:0;color:#d1d5db;line-height:1.6;">'
+            'Advanced analytics, exportable reports, portfolio scoring '
+            'and market insights.</p>'
+            '</div>'
+        ),
         unsafe_allow_html=True,
     )
 
@@ -979,10 +942,6 @@ def render_dashboard():
         if new_mode in mode_options:
             st.session_state.selected_mode = new_mode
 
-    st.sidebar.markdown("---")
-    st.sidebar.success(
-        f"Portfolio account\n{user.email}"
-    )
 
     st.sidebar.radio(
         "Select Mode",
@@ -995,18 +954,6 @@ def render_dashboard():
     )
 
     mode = st.session_state.selected_mode
-
-    render_ad_slot(
-        label="Sidebar Sponsored Slot",
-        slot_id=ADSENSE_SIDEBAR_SLOT,
-        height=120,
-    )
-
-    render_ad_slot(
-        label="Top Sponsored Slot",
-        slot_id=ADSENSE_TOP_SLOT,
-        height=120,
-    )
 
     try:
         if mode == "Crypto":
@@ -1032,12 +979,6 @@ def render_dashboard():
     st.markdown("---")
 
     render_partner_cta()
-
-    render_ad_slot(
-        label="Bottom Sponsored Slot",
-        slot_id=ADSENSE_BOTTOM_SLOT,
-        height=120,
-    )
 
 
 # -----------------------------------------
