@@ -6,6 +6,13 @@ map $http_upgrade $connection_upgrade {
 server {
     listen 10000;
 
+    location = /ads.txt {
+        alias /app/ads.txt;
+        default_type text/plain;
+        add_header Content-Type "text/plain; charset=utf-8";
+        add_header Cache-Control "no-cache, no-store, must-revalidate";
+    }
+
     location = /.well-known/assetlinks.json {
         alias /app/.well-known/assetlinks.json;
         default_type application/json;
