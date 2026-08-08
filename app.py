@@ -82,6 +82,43 @@ st.markdown(
         box-shadow: 0 10px 25px rgba(132,204,22,.18);
     }
 
+    /* Sidebar form controls: keep white fields but force readable dark text. */
+    [data-testid="stSidebar"] input {
+        color: #0f172a !important;
+        -webkit-text-fill-color: #0f172a !important;
+        caret-color: #0f172a !important;
+        opacity: 1 !important;
+    }
+
+    [data-testid="stSidebar"] input::placeholder {
+        color: #64748b !important;
+        -webkit-text-fill-color: #64748b !important;
+        opacity: 1 !important;
+    }
+
+    [data-testid="stSidebar"] [data-baseweb="input"] > div,
+    [data-testid="stSidebar"] [data-baseweb="select"] > div {
+        background: #ffffff !important;
+        color: #0f172a !important;
+    }
+
+    [data-testid="stSidebar"] [data-baseweb="select"] span,
+    [data-testid="stSidebar"] [data-baseweb="select"] div {
+        color: #0f172a !important;
+        -webkit-text-fill-color: #0f172a !important;
+    }
+
+    [data-testid="stSidebar"] [data-testid="stNumberInput"] button {
+        background: #ffffff !important;
+        color: #334155 !important;
+    }
+
+    [data-testid="stSidebar"] [data-testid="stNumberInput"] button svg,
+    [data-testid="stSidebar"] [data-baseweb="select"] svg {
+        fill: #334155 !important;
+        color: #334155 !important;
+    }
+
     .iv-sidebar-brand { text-align:center; padding:.45rem .3rem 1rem; }
     .iv-sidebar-logo {
         width:112px; height:112px; border-radius:24px; object-fit:cover;
