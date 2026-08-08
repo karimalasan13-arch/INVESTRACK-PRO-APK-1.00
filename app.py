@@ -143,6 +143,9 @@ st.markdown(
 # Web-triggered Android interstitial timer.
 ANDROID_AD_TIMER_SECONDS = 180  # 3 minutes
 
+# Official InvesTrack Pro Google Play listing
+PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.investrackpro.app&pcampaignid=web_share"
+
 
 # -----------------------------------------
 # SAFE CONFIG LOADER
@@ -311,6 +314,22 @@ def render_public_footer():
         <div class="iv-footer">
             <strong>InvesTrack Pro</strong><br>
             Portfolio tracking for stocks, cryptocurrency and cash holdings.<br><br>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    footer_left, footer_store, footer_right = st.columns([1.5, 1, 1.5])
+    with footer_store:
+        st.link_button(
+            "▶  Get it on Google Play",
+            PLAY_STORE_URL,
+            use_container_width=True,
+        )
+
+    st.markdown(
+        """
+        <div class="iv-footer" style="border-top:none;margin-top:.4rem;padding-top:.4rem;">
             © 2026 InvesTrack Pro. All rights reserved.
         </div>
         """,
@@ -366,6 +385,14 @@ def render_home_page(authenticated):
             use_container_width=True,
         ):
             navigate("About")
+
+    store_left, store_button, store_right = st.columns([1, 1.25, 1])
+    with store_button:
+        st.link_button(
+            "▶  Get InvesTrack Pro on Google Play",
+            PLAY_STORE_URL,
+            use_container_width=True,
+        )
 
     st.markdown("## Everything you need to monitor your portfolio")
 
