@@ -322,7 +322,7 @@ def render_public_footer():
     footer_left, footer_store, footer_right = st.columns([1.5, 1, 1.5])
     with footer_store:
         st.link_button(
-            "▶  Get it on Google Play",
+            "🔺  Get it on Google Play",
             PLAY_STORE_URL,
             use_container_width=True,
         )
@@ -388,8 +388,15 @@ def render_home_page(authenticated):
 
     store_left, store_button, store_right = st.columns([1, 1.25, 1])
     with store_button:
+        st.markdown(
+            """
+            <div style="text-align:center;font-size:2rem;margin-bottom:.2rem;"
+                 title="Google Play">▶️</div>
+            """,
+            unsafe_allow_html=True,
+        )
         st.link_button(
-            "▶  Get InvesTrack Pro on Google Play",
+            "🔺  Get InvesTrack Pro on Google Play",
             PLAY_STORE_URL,
             use_container_width=True,
         )
