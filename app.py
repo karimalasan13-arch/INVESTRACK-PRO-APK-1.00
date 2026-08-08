@@ -2,6 +2,7 @@ import base64
 import os
 import time
 from pathlib import Path
+from pathlib import Path
 
 import streamlit as st
 import streamlit.components.v1 as components
@@ -145,6 +146,7 @@ ANDROID_AD_TIMER_SECONDS = 180  # 3 minutes
 
 # Official InvesTrack Pro Google Play listing
 PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.investrackpro.app&pcampaignid=web_share"
+PLAY_STORE_BADGE = Path(__file__).parent / "static" / "google-play-badge.png"
 
 
 # -----------------------------------------
@@ -321,11 +323,18 @@ def render_public_footer():
 
     footer_left, footer_store, footer_right = st.columns([1.5, 1, 1.5])
     with footer_store:
-        st.link_button(
-            "🔺  Get it on Google Play",
-            PLAY_STORE_URL,
-            use_container_width=True,
-        )
+        if PLAY_STORE_BADGE.exists():
+            st.image(
+                str(PLAY_STORE_BADGE),
+                width=190,
+                link=PLAY_STORE_URL,
+            )
+        else:
+            st.link_button(
+                "Get it on Google Play",
+                PLAY_STORE_URL,
+                use_container_width=True,
+            )
 
     st.markdown(
         """
@@ -388,18 +397,18 @@ def render_home_page(authenticated):
 
     store_left, store_button, store_right = st.columns([1, 1.25, 1])
     with store_button:
-        st.markdown(
-            """
-            <div style="text-align:center;font-size:2rem;margin-bottom:.2rem;"
-                 title="Google Play">▶️</div>
-            """,
-            unsafe_allow_html=True,
-        )
-        st.link_button(
-            "🔺  Get InvesTrack Pro on Google Play",
-            PLAY_STORE_URL,
-            use_container_width=True,
-        )
+        if PLAY_STORE_BADGE.exists():
+            st.image(
+                str(PLAY_STORE_BADGE),
+                width=240,
+                link=PLAY_STORE_URL,
+            )
+        else:
+            st.link_button(
+                "Get InvesTrack Pro on Google Play",
+                PLAY_STORE_URL,
+                use_container_width=True,
+            )
 
     st.markdown("## Everything you need to monitor your portfolio")
 
