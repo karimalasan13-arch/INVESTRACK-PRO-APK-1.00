@@ -1,7 +1,11 @@
 import base64
+import html
 import os
 import time
+from datetime import datetime, timezone
 from pathlib import Path
+
+import requests
 
 import streamlit as st
 import streamlit.components.v1 as components
@@ -184,6 +188,11 @@ st.markdown(
     .iv-article {border:1px solid var(--iv-border);border-radius:20px;padding:1.35rem;margin:1rem 0;background:rgba(255,255,255,.82);}
     .iv-article h3 {margin-top:.15rem;}
     .iv-note {border-left:4px solid #84cc16;background:rgba(132,204,22,.08);border-radius:10px;padding:.9rem 1rem;margin:1rem 0;color:#334155;}
+    .iv-news-card {border:1px solid var(--iv-border);border-radius:18px;padding:1.1rem 1.2rem;margin:.8rem 0;background:rgba(255,255,255,.86);box-shadow:0 10px 28px rgba(15,23,42,.05);}
+    .iv-news-card h4 {margin:.25rem 0 .45rem;line-height:1.35;}
+    .iv-news-meta {font-size:.78rem;color:#64748b;margin-bottom:.5rem;}
+    .iv-news-desc {color:#475569;line-height:1.55;margin:.2rem 0 .7rem;}
+    .iv-live-dot {display:inline-block;width:8px;height:8px;border-radius:50%;background:#22c55e;margin-right:.35rem;box-shadow:0 0 0 4px rgba(34,197,94,.12);}
     @media (max-width:900px){.iv-info-grid{grid-template-columns:1fr;}}
     </style>
     """,
@@ -215,6 +224,160 @@ def get_secret(key, default=""):
         return st.secrets.get(key, default)
     except Exception:
         return default
+
+
+MARKETAUX_API_TOKEN = get_secret("MARKETAUX_API_TOKEN", "")
+MARKETAUX_NEWS_URL = "https://api.marketaux.com/v1/news/all"
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def fetch_marketaux_news():
+    """
+    Fetch a quota-conscious, cached snapshot of the latest English-language
+    financial-market news. The free Marketaux plan currently returns up to
+    three articles per request, so one cached request supplies both the
+    homepage and Markets & Economy page.
+    """
+    if not MARKETAUX_API_TOKEN:
+        return {
+            "ok": False,
+            "articles": [],
+            "message": "Live market news is not configured yet.",
+        }
+
+    params = {
+        "api_token": MARKETAUX_API_TOKEN,
+        "language": "en",
+        "limit": 3,
+        "sort": "published_at",
+    }
+
+    try:
+        response = requests.get(
+            MARKETAUX_NEWS_URL,
+            params=params,
+            timeout=12,
+        )
+
+        if response.status_code != 200:
+            return {
+                "ok": False,
+                "articles": [],
+                "message": "Live market news is temporarily unavailable.",
+            }
+
+        payload = response.json()
+        articles = payload.get("data", [])
+
+        if not isinstance(articles, list):
+            articles = []
+
+        return {
+            "ok": True,
+            "articles": articles,
+            "message": "",
+        }
+
+    except (requests.RequestException, ValueError):
+        return {
+            "ok": False,
+            "articles": [],
+            "message": "Live market news is temporarily unavailable.",
+        }
+
+
+def format_news_time(value):
+    if not value:
+        return ""
+
+    try:
+        normalized = value.replace("Z", "+00:00")
+        published = datetime.fromisoformat(normalized)
+
+        if published.tzinfo is None:
+            published = published.replace(tzinfo=timezone.utc)
+
+        published = published.astimezone(timezone.utc)
+        return published.strftime("%d %b %Y · %H:%M UTC")
+    except Exception:
+        return ""
+
+
+def render_live_market_news(compact=False):
+    """
+    Render the cached Marketaux news snapshot.
+    `compact=True` is used on the homepage; the full version is shown
+    on Markets & Economy.
+    """
+    result = fetch_marketaux_news()
+    articles = result.get("articles", [])
+
+    if not result.get("ok") or not articles:
+        if not compact:
+            st.markdown(
+                f"""
+                <div class="iv-note">
+                    <strong>Live news:</strong>
+                    {html.escape(result.get("message", "Live market news is temporarily unavailable."))}
+                    The educational market guides below remain available.
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        return
+
+    if compact:
+        st.markdown("## Latest Market News")
+        st.caption("A live snapshot of global financial-market headlines.")
+    else:
+        st.markdown("### Latest Market News")
+        st.markdown(
+            """
+            <div class="iv-note">
+                <span class="iv-live-dot"></span>
+                <strong>Live feed:</strong> Headlines are supplied by Marketaux
+                and link to the original publishers. InvesTrack Pro does not
+                rewrite or present them as investment recommendations.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    visible_articles = articles[:3]
+
+    for index, article in enumerate(visible_articles):
+        title = html.escape(str(article.get("title") or "Market update"))
+        description = article.get("description") or article.get("snippet") or ""
+        description = html.escape(str(description)).strip()
+        source = html.escape(str(article.get("source") or "Source"))
+        published = html.escape(format_news_time(str(article.get("published_at") or "")))
+        url = str(article.get("url") or "").strip()
+
+        if compact and len(description) > 180:
+            description = description[:177].rstrip() + "…"
+        elif len(description) > 320:
+            description = description[:317].rstrip() + "…"
+
+        meta_parts = [part for part in [source, published] if part]
+        meta = " · ".join(meta_parts)
+
+        st.markdown(
+            f"""
+            <div class="iv-news-card">
+                <div class="iv-news-meta">{meta}</div>
+                <h4>{title}</h4>
+                <div class="iv-news-desc">{description}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        if url:
+            st.link_button(
+                "Read original article ↗",
+                url,
+                key=f"marketaux_article_{'home' if compact else 'markets'}_{index}",
+            )
 
 
 LOGO_CANDIDATES = [
@@ -470,6 +633,8 @@ def render_home_page(authenticated):
     with feature_three:
         st.markdown("""<div class="iv-card"><h3>🌍 Multi-currency view</h3>View your investment portfolio in a currency that is meaningful to you.</div>""", unsafe_allow_html=True)
 
+    render_live_market_news(compact=True)
+
     st.markdown("## What investors should watch each week")
     st.markdown(
         """
@@ -501,6 +666,8 @@ def render_markets_economy_page():
     st.caption("A practical guide to the economic releases and policy decisions that investors watch.")
     st.markdown("""<div class="iv-section-shell"><div class="iv-kicker">Economic Calendar Framework</div><h2 style="margin-top:.2rem;">What belongs on an investor's weekly calendar?</h2><p>A useful economic calendar is more than a list of dates. It should help investors understand what each release measures, why markets care, and which assets may be sensitive to a surprise.</p></div>""", unsafe_allow_html=True)
 
+    render_live_market_news(compact=False)
+
     st.markdown("### High-impact releases")
     rows=[
         ("Inflation","CPI / PCE inflation","High","Rates, bonds, USD, stocks, gold and crypto"),
@@ -531,7 +698,7 @@ def render_markets_economy_page():
         <div class="iv-info-card"><h4>🛢️ Commodities</h4><p>Oil, gold and other commodities can reflect inflation, geopolitics, demand and safe-haven flows.</p></div>
     </div>
     """, unsafe_allow_html=True)
-    st.markdown("""<div class="iv-note"><strong>Data note:</strong> InvesTrack Pro is building toward a live economic-calendar feed. Until a licensed data source is connected, this page focuses on original educational context rather than displaying fabricated or stale release values.</div>""", unsafe_allow_html=True)
+    st.markdown("""<div class="iv-note"><strong>Calendar data note:</strong> Live financial news is now connected through Marketaux. The economic-calendar section remains educational until a suitable licensed calendar source is connected, so InvesTrack Pro does not display fabricated or stale release values.</div>""", unsafe_allow_html=True)
     render_public_footer()
 
 
