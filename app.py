@@ -408,6 +408,51 @@ def get_user_initials(email):
 
 
 # -----------------------------------------
+# SEO + SHAREABLE PUBLIC URL ROUTING
+# -----------------------------------------
+SITE_URL = "https://investrackpro.com"
+
+PAGE_QUERY_MAP = {
+    "Home": "home",
+    "Markets & Economy": "markets",
+    "Investor Tools": "tools",
+    "Learn": "learn",
+    "Editorial": "editorial",
+    "About": "about",
+    "Privacy": "privacy",
+    "Terms": "terms",
+    "Contact": "contact",
+    "Login": "login",
+    "Dashboard": "dashboard",
+}
+QUERY_PAGE_MAP = {value: key for key, value in PAGE_QUERY_MAP.items()}
+
+def sync_route_from_url():
+    """Read shareable query parameters into Streamlit session state."""
+    article_slug = str(st.query_params.get("article", "") or "").strip()
+    page_key = str(st.query_params.get("page", "") or "").strip().lower()
+
+    if article_slug and article_slug in LEARN_ARTICLES:
+        st.session_state.public_navigation = "Learn"
+        st.session_state.learn_article_slug = article_slug
+        return
+
+    if page_key in QUERY_PAGE_MAP:
+        st.session_state.public_navigation = QUERY_PAGE_MAP[page_key]
+        if QUERY_PAGE_MAP[page_key] != "Learn":
+            st.session_state.pop("learn_article_slug", None)
+
+def write_route_to_url(page_name, article_slug=None):
+    """Keep the browser URL shareable without changing the Streamlit app structure."""
+    st.query_params.clear()
+    if article_slug:
+        st.query_params["article"] = article_slug
+    elif page_name != "Home":
+        page_key = PAGE_QUERY_MAP.get(page_name)
+        if page_key:
+            st.query_params["page"] = page_key
+
+# -----------------------------------------
 # COMMON SITE NAVIGATION
 # -----------------------------------------
 PUBLIC_PAGES = [
@@ -428,6 +473,7 @@ def navigate(page_name):
     if page_name != "Learn":
         st.session_state.pop("learn_article_slug", None)
 
+    write_route_to_url(page_name)
     st.session_state.pending_public_page = page_name
     st.rerun()
 
@@ -1144,6 +1190,7 @@ An economic calendar is most useful as a preparation tool, not as a prediction e
 
 def open_learn_article(slug):
     if slug in LEARN_ARTICLES:
+        write_route_to_url("Learn", article_slug=slug)
         st.session_state.learn_article_slug = slug
         st.session_state.pending_public_page = "Learn"
         st.rerun()
@@ -1151,6 +1198,8 @@ def open_learn_article(slug):
 
 def close_learn_article():
     st.session_state.pop("learn_article_slug", None)
+    write_route_to_url("Learn")
+    st.session_state.public_navigation = "Learn"
     st.rerun()
 
 
@@ -1938,6 +1987,8 @@ def render_dashboard():
 # -----------------------------------------
 # MAIN ROUTER
 # -----------------------------------------
+sync_route_from_url()
+
 selected_page, user_is_authenticated = (
     render_public_navigation()
 )
