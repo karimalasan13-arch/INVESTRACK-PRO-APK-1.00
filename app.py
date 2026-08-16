@@ -2,7 +2,6 @@ import base64
 import os
 import time
 from pathlib import Path
-from pathlib import Path
 
 import streamlit as st
 import streamlit.components.v1 as components
@@ -171,6 +170,21 @@ st.markdown(
     .iv-card h3 { margin-top:0; }
     .iv-footer { border-top:1px solid var(--iv-border); margin-top:2.5rem; padding:1.5rem 0 2rem; text-align:center; font-size:.9rem; opacity:.82; }
     .iv-legal { max-width:900px; margin:0 auto; }
+
+    .iv-section-shell {border:1px solid var(--iv-border);border-radius:22px;padding:1.4rem;margin:1rem 0 1.4rem;background:linear-gradient(145deg,rgba(255,255,255,.88),rgba(248,250,252,.72));box-shadow:0 14px 35px rgba(15,23,42,.05);}
+    .iv-kicker {display:inline-block;padding:.32rem .7rem;border-radius:999px;background:rgba(132,204,22,.12);border:1px solid rgba(132,204,22,.25);color:#4d7c0f;font-size:.75rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;margin-bottom:.55rem;}
+    .iv-info-grid {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1rem;margin:1rem 0 1.4rem;}
+    .iv-info-card {border:1px solid var(--iv-border);border-radius:18px;padding:1.15rem;background:rgba(255,255,255,.82);box-shadow:0 10px 28px rgba(15,23,42,.05);}
+    .iv-info-card h4 {margin:.1rem 0 .45rem;}
+    .iv-info-card p {margin:.1rem 0;color:#475569;line-height:1.55;}
+    .iv-impact-high,.iv-impact-medium,.iv-impact-low {display:inline-block;border-radius:999px;padding:.2rem .55rem;font-size:.7rem;font-weight:800;}
+    .iv-impact-high {background:#fee2e2;color:#991b1b;}
+    .iv-impact-medium {background:#fef3c7;color:#92400e;}
+    .iv-impact-low {background:#dcfce7;color:#166534;}
+    .iv-article {border:1px solid var(--iv-border);border-radius:20px;padding:1.35rem;margin:1rem 0;background:rgba(255,255,255,.82);}
+    .iv-article h3 {margin-top:.15rem;}
+    .iv-note {border-left:4px solid #84cc16;background:rgba(132,204,22,.08);border-radius:10px;padding:.9rem 1rem;margin:1rem 0;color:#334155;}
+    @media (max-width:900px){.iv-info-grid{grid-template-columns:1fr;}}
     </style>
     """,
     unsafe_allow_html=True,
@@ -235,6 +249,9 @@ def get_user_initials(email):
 # -----------------------------------------
 PUBLIC_PAGES = [
     ("Home", "🏠"),
+    ("Markets & Economy", "🌐"),
+    ("Investor Tools", "🧮"),
+    ("Learn", "📚"),
     ("About", "ℹ️"),
     ("Privacy", "🔒"),
     ("Terms", "📜"),
@@ -393,110 +410,228 @@ def render_home_page(authenticated):
             <div class="iv-hero-badge">ONE PORTFOLIO • EVERY ASSET</div>
             <h1>Know where your money stands.</h1>
             <p>
-                Track stocks, cryptocurrency and cash holdings from one
-                polished dashboard. See your portfolio clearly and make
-                better-informed decisions with less effort.
+                Track stocks, cryptocurrency and cash holdings from one polished dashboard —
+                and use InvesTrack Pro's public market education, investor tools and economic
+                insights to understand the forces moving markets.
             </p>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    first_button, second_button, spacer = st.columns(
-        [1, 1, 2]
-    )
-
+    first_button, second_button, third_button = st.columns([1, 1, 1])
     with first_button:
         if authenticated:
-            if st.button(
-                "Open Dashboard",
-                key="home_open_dashboard",
-                type="primary",
-                use_container_width=True,
-            ):
+            if st.button("Open Dashboard", key="home_open_dashboard", type="primary", use_container_width=True):
                 navigate("Dashboard")
         else:
-            if st.button(
-                "Start Tracking Free",
-                key="home_start_tracking",
-                type="primary",
-                use_container_width=True,
-            ):
+            if st.button("Start Tracking Free", key="home_start_tracking", type="primary", use_container_width=True):
                 navigate("Login")
-
     with second_button:
-        if st.button(
-            "Explore Features",
-            key="home_learn_more",
-            use_container_width=True,
-        ):
-            navigate("About")
+        if st.button("Markets & Economy", key="home_markets", use_container_width=True):
+            navigate("Markets & Economy")
+    with third_button:
+        if st.button("Investor Tools", key="home_tools", use_container_width=True):
+            navigate("Investor Tools")
 
     store_left, store_button, store_right = st.columns([1, 1.25, 1])
     with store_button:
         if PLAY_STORE_BADGE.exists():
-            st.image(
-                str(PLAY_STORE_BADGE),
-                width=240,
-                link=PLAY_STORE_URL,
-            )
+            st.image(str(PLAY_STORE_BADGE), width=240, link=PLAY_STORE_URL)
         else:
-            st.link_button(
-                "Get InvesTrack Pro on Google Play",
-                PLAY_STORE_URL,
-                use_container_width=True,
-            )
+            st.link_button("Get InvesTrack Pro on Google Play", PLAY_STORE_URL, use_container_width=True)
 
-    st.markdown("## Everything you need to monitor your portfolio")
-
-    feature_one, feature_two, feature_three = st.columns(3)
-
-    with feature_one:
-        st.markdown(
-            """
-            <div class="iv-card">
-                <h3>📊 Unified portfolio</h3>
-                Track stocks, cryptocurrency and cash holdings from one
-                secure account.
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    with feature_two:
-        st.markdown(
-            """
-            <div class="iv-card">
-                <h3>📈 Performance insights</h3>
-                Review portfolio value, gains, losses and historical
-                performance over time.
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    with feature_three:
-        st.markdown(
-            """
-            <div class="iv-card">
-                <h3>🌍 Multi-currency view</h3>
-                View your investment portfolio in a currency that is
-                meaningful to you.
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    st.markdown("## Built for investors who value clarity")
-
-    st.write(
+    st.markdown("## Your public market companion")
+    st.markdown(
         """
-        Whether you are tracking your first cryptocurrency holding or
-        monitoring a growing stock portfolio, InvesTrack Pro gives you
-        a clearer view of your investments without unnecessary complexity.
-        """
+        <div class="iv-info-grid">
+            <div class="iv-info-card"><div class="iv-kicker">Markets & Economy</div><h4>Understand what moves markets</h4><p>Learn how inflation, employment, GDP, central-bank policy, bond yields and currencies can influence stocks, crypto, gold and the wider economy.</p></div>
+            <div class="iv-info-card"><div class="iv-kicker">Investor Tools</div><h4>Turn numbers into decisions</h4><p>Calculate investment returns, compound growth, dollar-cost averaging outcomes and profit or loss without leaving the site.</p></div>
+            <div class="iv-info-card"><div class="iv-kicker">Learn</div><h4>Build financial understanding</h4><p>Explore clear guides to portfolio allocation, stocks, crypto, risk, diversification and macroeconomic indicators.</p></div>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
 
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        if st.button("Explore Markets & Economy →", key="home_go_markets", use_container_width=True): navigate("Markets & Economy")
+    with c2:
+        if st.button("Open Investor Tools →", key="home_go_tools", use_container_width=True): navigate("Investor Tools")
+    with c3:
+        if st.button("Visit Learning Centre →", key="home_go_learn", use_container_width=True): navigate("Learn")
+
+    st.markdown("## Everything you need to monitor your portfolio")
+    feature_one, feature_two, feature_three = st.columns(3)
+    with feature_one:
+        st.markdown("""<div class="iv-card"><h3>📊 Unified portfolio</h3>Track stocks, cryptocurrency and cash holdings from one secure account.</div>""", unsafe_allow_html=True)
+    with feature_two:
+        st.markdown("""<div class="iv-card"><h3>📈 Performance insights</h3>Review portfolio value, gains, losses and historical performance over time.</div>""", unsafe_allow_html=True)
+    with feature_three:
+        st.markdown("""<div class="iv-card"><h3>🌍 Multi-currency view</h3>View your investment portfolio in a currency that is meaningful to you.</div>""", unsafe_allow_html=True)
+
+    st.markdown("## What investors should watch each week")
+    st.markdown(
+        """
+        <div class="iv-section-shell">
+            <div class="iv-kicker">Economic Calendar Guide</div>
+            <h3 style="margin-top:.2rem;">The releases that often shape the trading week</h3>
+            <p>Market attention tends to cluster around a small number of recurring economic releases. Understanding them helps investors interpret market moves instead of reacting to headlines alone.</p>
+            <div class="iv-info-grid">
+                <div class="iv-info-card"><span class="iv-impact-high">HIGH IMPACT</span><h4>Inflation & central banks</h4><p>CPI, PCE inflation, interest-rate decisions and policy statements can alter rate expectations across global markets.</p></div>
+                <div class="iv-info-card"><span class="iv-impact-high">HIGH IMPACT</span><h4>Employment</h4><p>Payrolls, unemployment and wage growth offer clues about demand, inflation pressure and the likely policy path.</p></div>
+                <div class="iv-info-card"><span class="iv-impact-medium">MEDIUM / HIGH</span><h4>Growth & activity</h4><p>GDP, PMI, retail sales and industrial data help investors judge whether economic momentum is strengthening or weakening.</p></div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    if st.button("See the full Markets & Economy guide", key="home_calendar_guide", use_container_width=True): navigate("Markets & Economy")
+
+    st.markdown("## Built for investors who value clarity")
+    st.write("""Whether you are tracking your first cryptocurrency holding or monitoring a growing stock portfolio, InvesTrack Pro combines portfolio tracking with practical financial education so you can understand both your holdings and the wider market environment.""")
+    render_public_footer()
+
+
+# -----------------------------------------
+# MARKETS & ECONOMY
+# -----------------------------------------
+def render_markets_economy_page():
+    st.title("Markets & Economy")
+    st.caption("A practical guide to the economic releases and policy decisions that investors watch.")
+    st.markdown("""<div class="iv-section-shell"><div class="iv-kicker">Economic Calendar Framework</div><h2 style="margin-top:.2rem;">What belongs on an investor's weekly calendar?</h2><p>A useful economic calendar is more than a list of dates. It should help investors understand what each release measures, why markets care, and which assets may be sensitive to a surprise.</p></div>""", unsafe_allow_html=True)
+
+    st.markdown("### High-impact releases")
+    rows=[
+        ("Inflation","CPI / PCE inflation","High","Rates, bonds, USD, stocks, gold and crypto"),
+        ("Central banks","Rate decisions / policy statements","High","Broad cross-asset impact"),
+        ("Employment","Payrolls / unemployment / wages","High","Rates, USD, equities and risk assets"),
+        ("Growth","GDP","Medium / High","Equities, currencies and yields"),
+        ("Business activity","PMI / ISM","Medium / High","Cyclical stocks, currencies and yields"),
+        ("Consumer demand","Retail sales","Medium","Consumer stocks, GDP expectations and rates"),
+        ("Labour market","Jobless claims","Medium","Rates, USD and equities"),
+    ]
+    st.dataframe({"Theme":[r[0] for r in rows],"Release":[r[1] for r in rows],"Typical impact":[r[2] for r in rows],"Why investors watch":[r[3] for r in rows]},use_container_width=True,hide_index=True)
+
+    st.markdown("### How to read an economic release")
+    st.markdown("""
+    <div class="iv-article"><h3>1. Compare actual vs forecast</h3><p>Markets often react more to the <strong>surprise</strong> than to the number itself. An inflation reading can be bullish or bearish depending on what investors expected beforehand.</p></div>
+    <div class="iv-article"><h3>2. Consider the policy implication</h3><p>Ask whether the release makes rate cuts, rate hikes or unchanged policy more likely. This link between data and policy expectations is often what moves bond yields, currencies and growth assets.</p></div>
+    <div class="iv-article"><h3>3. Watch the market's first reaction carefully</h3><p>The first move is not always the lasting move. Investors may initially react to the headline figure and then reassess revisions, components, guidance and positioning.</p></div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("### Economic news themes worth following")
+    st.markdown("""
+    <div class="iv-info-grid">
+        <div class="iv-info-card"><h4>🏦 Monetary policy</h4><p>Interest rates, balance sheets, central-bank guidance and bond-market expectations.</p></div>
+        <div class="iv-info-card"><h4>📉 Inflation</h4><p>Consumer prices, producer prices, services inflation, wages and inflation expectations.</p></div>
+        <div class="iv-info-card"><h4>👷 Employment</h4><p>Job creation, unemployment, wages, participation and claims data.</p></div>
+        <div class="iv-info-card"><h4>🏭 Growth</h4><p>GDP, business surveys, industrial activity, consumer spending and recession risk.</p></div>
+        <div class="iv-info-card"><h4>💵 Currencies & yields</h4><p>Exchange-rate moves and government-bond yields often transmit macroeconomic news across markets.</p></div>
+        <div class="iv-info-card"><h4>🛢️ Commodities</h4><p>Oil, gold and other commodities can reflect inflation, geopolitics, demand and safe-haven flows.</p></div>
+    </div>
+    """, unsafe_allow_html=True)
+    st.markdown("""<div class="iv-note"><strong>Data note:</strong> InvesTrack Pro is building toward a live economic-calendar feed. Until a licensed data source is connected, this page focuses on original educational context rather than displaying fabricated or stale release values.</div>""", unsafe_allow_html=True)
+    render_public_footer()
+
+
+# -----------------------------------------
+# INVESTOR TOOLS
+# -----------------------------------------
+def render_investor_tools_page():
+    st.title("Investor Tools")
+    st.caption("Free calculators for common investing questions.")
+    tab_return,tab_compound,tab_dca,tab_pnl=st.tabs(["Investment Return","Compound Growth","DCA","Profit / Loss"])
+
+    with tab_return:
+        st.subheader("Investment Return Calculator")
+        c1,c2=st.columns(2)
+        with c1: initial=st.number_input("Initial investment",min_value=0.0,value=1000.0,step=100.0,key="tool_return_initial")
+        with c2: final=st.number_input("Final value",min_value=0.0,value=1250.0,step=100.0,key="tool_return_final")
+        gain=final-initial; pct=((gain/initial)*100) if initial>0 else 0.0
+        m1,m2=st.columns(2); m1.metric("Gain / Loss",f"{gain:,.2f}"); m2.metric("Return",f"{pct:,.2f}%")
+        st.caption("Return = (final value − initial investment) ÷ initial investment.")
+
+    with tab_compound:
+        st.subheader("Compound Growth Calculator")
+        c1,c2,c3=st.columns(3)
+        with c1: principal=st.number_input("Starting amount",min_value=0.0,value=1000.0,step=100.0,key="tool_compound_principal")
+        with c2: annual_rate=st.number_input("Annual return (%)",value=8.0,step=0.5,key="tool_compound_rate")
+        with c3: years=st.number_input("Years",min_value=0,value=10,step=1,key="tool_compound_years")
+        future_value=principal*((1+annual_rate/100)**years); growth=future_value-principal
+        m1,m2=st.columns(2); m1.metric("Estimated future value",f"{future_value:,.2f}"); m2.metric("Estimated growth",f"{growth:,.2f}")
+        st.caption("This is a mathematical illustration, not a forecast of future investment performance.")
+
+    with tab_dca:
+        st.subheader("Dollar-Cost Averaging Calculator")
+        c1,c2,c3=st.columns(3)
+        with c1: monthly=st.number_input("Monthly contribution",min_value=0.0,value=100.0,step=25.0,key="tool_dca_monthly")
+        with c2: annual_rate_dca=st.number_input("Assumed annual return (%)",value=8.0,step=0.5,key="tool_dca_rate")
+        with c3: years_dca=st.number_input("Years",min_value=1,value=10,step=1,key="tool_dca_years")
+        months=years_dca*12; monthly_rate=annual_rate_dca/100/12
+        estimated_value=monthly*months if abs(monthly_rate)<1e-12 else monthly*(((1+monthly_rate)**months-1)/monthly_rate)
+        contributed=monthly*months; estimated_growth=estimated_value-contributed
+        m1,m2,m3=st.columns(3); m1.metric("Total contributed",f"{contributed:,.2f}"); m2.metric("Estimated value",f"{estimated_value:,.2f}"); m3.metric("Estimated growth",f"{estimated_growth:,.2f}")
+        st.caption("Assumes contributions are made at the end of each month and the selected return is constant.")
+
+    with tab_pnl:
+        st.subheader("Profit / Loss Calculator")
+        c1,c2,c3=st.columns(3)
+        with c1: buy_price=st.number_input("Buy price",min_value=0.0,value=100.0,step=1.0,key="tool_pnl_buy")
+        with c2: sell_price=st.number_input("Current / sell price",min_value=0.0,value=120.0,step=1.0,key="tool_pnl_sell")
+        with c3: quantity=st.number_input("Quantity",min_value=0.0,value=10.0,step=1.0,key="tool_pnl_qty")
+        cost=buy_price*quantity; value=sell_price*quantity; pnl=value-cost; pnl_pct=((pnl/cost)*100) if cost>0 else 0.0
+        m1,m2,m3=st.columns(3); m1.metric("Cost basis",f"{cost:,.2f}"); m2.metric("Current / sale value",f"{value:,.2f}"); m3.metric("Profit / Loss",f"{pnl:,.2f}",f"{pnl_pct:,.2f}%")
+
+    st.markdown("""<div class="iv-note">These tools are for general educational use. They do not include taxes, fees, spreads, slippage or every real-world investing cost.</div>""", unsafe_allow_html=True)
+    render_public_footer()
+
+
+# -----------------------------------------
+# LEARNING CENTRE
+# -----------------------------------------
+def render_learn_page():
+    st.title("InvesTrack Learning Centre")
+    st.caption("Clear, practical financial education for investors building long-term understanding.")
+    st.markdown("""
+    <div class="iv-info-grid">
+        <div class="iv-info-card"><div class="iv-kicker">Portfolio Management</div><h4>Diversification & allocation</h4><p>Understand concentration risk, asset allocation and why portfolio structure matters.</p></div>
+        <div class="iv-info-card"><div class="iv-kicker">Markets</div><h4>Stocks, crypto & ETFs</h4><p>Learn how common investment assets work and what can influence their prices.</p></div>
+        <div class="iv-info-card"><div class="iv-kicker">Macroeconomics</div><h4>Rates, inflation & growth</h4><p>Connect economic releases to currencies, yields, equities and risk assets.</p></div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    with st.expander("📘 How to track investment portfolio performance", expanded=True):
+        st.markdown("""Portfolio performance is more than the difference between today's account value and what you originally deposited. A useful review separates **contributions**, **withdrawals**, **market gains or losses** and **currency effects**.
+
+Start with three questions:
+1. **How much capital did I actually contribute?**
+2. **What is the portfolio worth now?**
+3. **What changed because of investment performance rather than new deposits?**
+
+For portfolios containing both local and foreign assets, exchange-rate movements can materially change the value reported in your home currency. That is why InvesTrack Pro's multi-currency view can be useful when interpreting performance.""")
+    with st.expander("📗 What portfolio diversification really means"):
+        st.markdown("""Diversification means spreading exposure so that one company, sector, asset class or economic event does not dominate the entire portfolio.
+
+Owning ten assets is not automatically diversified. Ten technology companies can still behave similarly. A more thoughtful approach looks at **what drives each holding** — growth, interest rates, commodities, currencies, defensive demand or other factors.
+
+Diversification cannot eliminate losses, but it can reduce dependence on a single outcome.""")
+    with st.expander("📕 Realized vs unrealized profit"):
+        st.markdown("""**Unrealized profit or loss** is the change in value of an investment you still own. **Realized profit or loss** occurs after the position is sold or otherwise closed.
+
+This distinction matters because portfolio dashboards often show unrealized performance while tax or cash-flow decisions may depend on realized transactions.""")
+    with st.expander("📙 Dollar-cost averaging explained"):
+        st.markdown("""Dollar-cost averaging (DCA) means investing a fixed amount at regular intervals rather than investing the entire amount at one time.
+
+When prices are lower, the fixed contribution buys more units; when prices are higher, it buys fewer. DCA can simplify discipline and reduce the pressure to choose a perfect entry point, but it does not guarantee a profit or prevent losses.""")
+    with st.expander("📓 Why interest rates matter to investors"):
+        st.markdown("""Interest rates influence borrowing costs, bond yields, currency demand and the valuation investors are willing to place on future company profits.
+
+When expected rates rise, long-duration growth assets can face valuation pressure because future cash flows are discounted at a higher rate. When expected rates fall, financial conditions may become easier — but investors still need to ask **why** rates are falling. A healthy decline in inflation is different from emergency cuts caused by economic stress.""")
+    with st.expander("📒 How inflation can affect a portfolio"):
+        st.markdown("""Inflation reduces the purchasing power of money. For investors, it can also affect central-bank policy, corporate costs, consumer spending and bond yields.
+
+Different assets can react differently depending on whether inflation is rising because of strong demand, supply disruption, energy prices or wages. The market response therefore depends on both the inflation number and what investors think it means for future policy.""")
     render_public_footer()
 
 
@@ -1070,6 +1205,15 @@ selected_page, user_is_authenticated = (
 
 if selected_page == "Home":
     render_home_page(user_is_authenticated)
+
+elif selected_page == "Markets & Economy":
+    render_markets_economy_page()
+
+elif selected_page == "Investor Tools":
+    render_investor_tools_page()
+
+elif selected_page == "Learn":
+    render_learn_page()
 
 elif selected_page == "About":
     render_about_page()
