@@ -424,6 +424,9 @@ PUBLIC_PAGES = [
 
 
 def navigate(page_name):
+    if page_name != "Learn":
+        st.session_state.pop("learn_article_slug", None)
+
     st.session_state.pending_public_page = page_name
     st.rerun()
 
@@ -653,6 +656,38 @@ def render_home_page(authenticated):
     )
     if st.button("See the full Markets & Economy guide", key="home_calendar_guide", use_container_width=True): navigate("Markets & Economy")
 
+    st.markdown("## Popular Investment Guides")
+
+    featured_guides = [
+        "portfolio-performance",
+        "interest-rates",
+        "economic-calendar",
+    ]
+
+    guide_columns = st.columns(3)
+
+    for column, slug in zip(guide_columns, featured_guides):
+        article = LEARN_ARTICLES[slug]
+
+        with column:
+            st.markdown(
+                f"""
+                <div class="iv-info-card">
+                    <div class="iv-kicker">{article["category"]}</div>
+                    <h4>{article["title"]}</h4>
+                    <p>{article["summary"]}</p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            if st.button(
+                "Read guide →",
+                key=f"home_guide_{slug}",
+                use_container_width=True,
+            ):
+                open_learn_article(slug)
+
     st.markdown("## Built for investors who value clarity")
     st.write("""Whether you are tracking your first cryptocurrency holding or monitoring a growing stock portfolio, InvesTrack Pro combines portfolio tracking with practical financial education so you can understand both your holdings and the wider market environment.""")
     render_public_footer()
@@ -754,51 +789,473 @@ def render_investor_tools_page():
     render_public_footer()
 
 
+
+LEARN_ARTICLES = {
+    "portfolio-performance": {
+        "title": "How to Track Investment Portfolio Performance",
+        "category": "Portfolio Management",
+        "summary": "A practical framework for separating contributions, withdrawals, market performance and currency effects.",
+        "body": """
+### Start with the right baseline
+
+Portfolio performance is not simply today's account balance minus the amount you remember investing. Deposits and withdrawals change the account value without representing investment gains or losses. A useful review starts with a clear record of capital contributed, capital withdrawn and the current portfolio value.
+
+### Separate cash flows from investment performance
+
+Suppose a portfolio rises from 10,000 to 14,000 during the year, but the investor added another 3,000 during that period. The apparent 40% increase in account value is not a 40% investment return. Most of the increase came from new capital.
+
+Tracking contributions separately makes the performance figure more meaningful.
+
+### Understand unrealized and realized results
+
+An unrealized gain or loss belongs to an investment that is still held. A realized result occurs after a position is closed. Both matter, but they answer different questions. Unrealized performance describes the changing value of current holdings; realized performance records completed investment outcomes.
+
+### Account for currencies
+
+Investors holding foreign assets can experience two simultaneous changes: the underlying asset price and the exchange rate between the asset's currency and their reporting currency. A US stock can rise in dollars while producing a smaller gain—or even a loss—when translated into another currency.
+
+### Review allocation as well as return
+
+Performance should be considered alongside concentration. A portfolio can post a strong return because one asset became unusually large. That may also mean the portfolio has become more dependent on that asset.
+
+A regular review should therefore ask: What produced the return? How concentrated is the portfolio now? Has the risk profile changed?
+
+### Use consistent periods
+
+Compare performance over consistent periods such as month-to-date, year-to-date and since inception. Short periods can be heavily influenced by market noise, while longer periods provide more context.
+
+### A simple review checklist
+
+Record contributions and withdrawals, update current values, calculate gains and losses, review asset allocation, consider currency effects and compare the result with your original investment objective. The purpose is not to chase the best recent performer; it is to understand what has actually happened to your capital.
+""",
+    },
+    "diversification": {
+        "title": "Portfolio Diversification Explained",
+        "category": "Portfolio Management",
+        "summary": "Why owning many investments is not necessarily the same as being diversified.",
+        "body": """
+### What diversification means
+
+Diversification is the practice of spreading investment exposure so that one company, sector, asset class or economic outcome does not dominate the portfolio.
+
+Owning ten securities does not automatically create diversification. Ten technology companies may still respond to many of the same forces: interest rates, semiconductor demand, advertising spending or expectations for economic growth.
+
+### Look at the drivers behind each holding
+
+A better question than “How many assets do I own?” is “What makes each asset rise or fall?” Holdings driven by different economic factors may provide more meaningful diversification than a long list of closely related investments.
+
+### Concentration can develop gradually
+
+Even a portfolio that began diversified can become concentrated when one investment substantially outperforms the others. Reviewing allocation percentages helps reveal when this happens.
+
+### Diversification has limits
+
+Diversification cannot guarantee profits or prevent losses. During broad market stress, correlations between assets can increase and many investments may fall together. Its purpose is risk management, not loss elimination.
+
+### Rebalancing
+
+Rebalancing means bringing a portfolio back toward a chosen allocation after market movements change its weights. This can involve adding to underweight areas, trimming overweight areas or directing new contributions toward parts of the portfolio that have become relatively small.
+
+A sensible allocation depends on an investor's objectives, time horizon, liquidity needs and ability to tolerate losses. There is no single allocation that is appropriate for everyone.
+""",
+    },
+    "realized-unrealized": {
+        "title": "Realized vs Unrealized Gains and Losses",
+        "category": "Investing Basics",
+        "summary": "Understand the difference between changing market value and completed investment outcomes.",
+        "body": """
+### Unrealized gains and losses
+
+An unrealized gain exists when an investment is worth more than its cost but has not been sold. An unrealized loss exists when its market value is below cost while the position remains open.
+
+Because market prices change, unrealized results can expand, shrink or reverse.
+
+### Realized gains and losses
+
+A gain or loss generally becomes realized when the investment is sold or otherwise closed. The difference matters because realized transactions affect available cash and may have tax consequences depending on the investor's jurisdiction.
+
+### Why portfolio dashboards show both concepts
+
+A portfolio tracker usually needs current market values to show what the holdings are worth today. That naturally includes unrealized performance. Investors should avoid treating every displayed gain as cash already earned.
+
+### Cost basis matters
+
+To interpret a gain or loss, the investor needs a reliable cost basis: what was paid for the investment, adjusted where appropriate for transaction costs and other relevant events.
+
+Keeping accurate transaction records makes portfolio performance much easier to understand.
+""",
+    },
+    "dca": {
+        "title": "Dollar-Cost Averaging Explained",
+        "category": "Investing Basics",
+        "summary": "How regular fixed contributions work, and what DCA can and cannot do.",
+        "body": """
+### The basic idea
+
+Dollar-cost averaging, commonly called DCA, means investing a fixed amount at regular intervals rather than committing the entire amount at one time.
+
+When the asset price is lower, the fixed contribution purchases more units. When the price is higher, it purchases fewer.
+
+### Why investors use it
+
+DCA can create a repeatable contribution habit and reduce the pressure to identify a perfect entry point. It can be particularly practical when investment capital becomes available gradually through monthly income.
+
+### What DCA does not guarantee
+
+Regular investing does not guarantee a profit and does not protect a portfolio from falling markets. If an asset experiences a sustained decline, repeated purchases can also lose value.
+
+### DCA and lump-sum investing are different decisions
+
+An investor who already has a large amount available faces a different decision from someone investing part of each monthly salary. The appropriate approach depends on circumstances, risk tolerance and the purpose of the capital.
+
+The InvesTrack Pro DCA calculator provides a mathematical illustration of regular contributions and assumed growth; it is not a forecast of actual returns.
+""",
+    },
+    "interest-rates": {
+        "title": "How Interest Rates Affect Stocks, Crypto and Markets",
+        "category": "Macroeconomics",
+        "summary": "A clear guide to the transmission of central-bank rates through financial markets.",
+        "body": """
+### Interest rates are a price for money
+
+Central-bank policy rates influence borrowing costs throughout an economy. Changes in expected rates can affect mortgages, business financing, government bonds, currencies and the valuation of financial assets.
+
+### Stocks
+
+Higher rates can increase corporate borrowing costs and raise the return available on lower-risk assets such as government debt. They also increase the discount rate investors may apply to future company cash flows. Growth companies whose expected profits lie far in the future can therefore be particularly sensitive to changing rate expectations.
+
+### Crypto and other risk assets
+
+Crypto does not have one mechanical relationship with interest rates. However, easier financial conditions and abundant liquidity can support demand for risk assets, while tighter conditions can reduce risk appetite. Other factors—including adoption, regulation and market-specific flows—also matter.
+
+### Currencies and bonds
+
+Higher expected rates can increase a currency's relative attractiveness, although growth, inflation and risk sentiment complicate the relationship. Bond prices and yields also respond directly to changing expectations about inflation and monetary policy.
+
+### The reason for a rate change matters
+
+A rate cut caused by falling inflation and stable growth can be interpreted differently from an emergency cut during severe economic weakness. Investors should therefore consider the economic backdrop rather than treating “cuts” as automatically bullish or “hikes” as automatically bearish.
+""",
+    },
+    "inflation": {
+        "title": "How Inflation Can Affect Your Investment Portfolio",
+        "category": "Macroeconomics",
+        "summary": "Why inflation influences purchasing power, interest rates, company costs and asset valuations.",
+        "body": """
+### Purchasing power
+
+Inflation describes a broad increase in prices over time. When prices rise, a fixed amount of money buys fewer goods and services. Investors therefore care about returns after considering inflation, not only nominal gains.
+
+### Central-bank policy
+
+Persistent inflation can lead central banks to maintain higher interest rates or tighten policy. Because interest-rate expectations influence bonds, currencies and equity valuations, inflation releases can move several markets at once.
+
+### Companies experience inflation differently
+
+Some businesses can pass higher costs to customers; others cannot. Energy prices, wages, raw materials and financing costs can therefore affect industries differently.
+
+### Inflation and bonds
+
+Unexpected inflation can be particularly important for fixed-income investments because future fixed payments may have less purchasing power. Bond yields may rise when investors demand greater compensation for inflation risk.
+
+### There is no universal inflation hedge
+
+Assets often described as inflation hedges can behave differently across time periods. The source of inflation, policy response, valuation and investor positioning all matter.
+
+For portfolio analysis, inflation is best treated as part of the wider economic environment rather than as a signal that one specific asset must rise or fall.
+""",
+    },
+    "pnl": {
+        "title": "Understanding Investment P&L",
+        "category": "Investing Basics",
+        "summary": "How profit and loss figures are calculated and why percentage returns need context.",
+        "body": """
+### What P&L means
+
+P&L means profit and loss. At its simplest, investment P&L compares the value received or currently held with the cost of acquiring the investment.
+
+If 10 units were purchased at 100 each, the basic cost is 1,000. If those units are later worth 120 each, the position value is 1,200 and the simple unrealized gain is 200 before fees, taxes and other costs.
+
+### Percentage return
+
+Percentage return puts the gain or loss in relation to the amount invested. A gain of 200 means something very different on a 1,000 investment than on a 100,000 investment.
+
+### P&L can be distorted by cash flows
+
+Adding new money increases portfolio value but is not investment profit. Withdrawing money reduces account value but is not necessarily an investment loss. Portfolio-level P&L therefore needs transaction records.
+
+### Fees and taxes
+
+Real-world returns can differ from simplified calculations because of commissions, spreads, slippage, taxes and currency conversion. InvesTrack Pro's public calculator is designed as an educational estimate rather than a tax or accounting calculation.
+""",
+    },
+    "stocks-etfs-crypto": {
+        "title": "Stocks vs ETFs vs Crypto: Understanding the Differences",
+        "category": "Markets",
+        "summary": "Compare three widely followed investment types without treating them as interchangeable.",
+        "body": """
+### Stocks
+
+A share of stock represents an ownership interest in a company. Its value can be influenced by earnings, cash flows, competition, management, interest rates and expectations about the company's future.
+
+### ETFs
+
+An exchange-traded fund is a pooled investment vehicle traded on an exchange. Depending on its mandate, an ETF may hold many stocks, bonds, commodities or other assets. Some ETFs provide broad diversification; others are highly concentrated.
+
+### Cryptoassets
+
+Cryptoassets are digital assets whose characteristics vary considerably. Their prices may be influenced by network usage, token economics, liquidity, regulation, technology, market sentiment and broader financial conditions.
+
+### Risk is not determined by the label alone
+
+A diversified broad-market ETF can have a very different risk profile from a single speculative stock. Likewise, cryptoassets differ greatly from one another.
+
+When comparing investments, consider what the asset represents, what drives its value, its volatility, liquidity, concentration and how it fits with the rest of the portfolio.
+""",
+    },
+    "fx-foreign-investments": {
+        "title": "How Exchange Rates Affect Foreign Investments",
+        "category": "Portfolio Management",
+        "summary": "Why the return on a foreign asset can look different in your home currency.",
+        "body": """
+### Two sources of movement
+
+When you invest in an asset priced in a foreign currency, your home-currency result can depend on both the investment price and the exchange rate.
+
+A stock may rise in US dollars while the dollar weakens against your reporting currency. The currency movement can reduce the home-currency gain. The reverse can also occur.
+
+### Why this matters for international portfolios
+
+Investors often compare assets using the currency in which they trade, but personal wealth and spending may be measured in another currency. Viewing the portfolio in a meaningful reporting currency can therefore reveal a different picture.
+
+### Currency movements have their own drivers
+
+Exchange rates respond to relative interest rates, inflation, economic growth, trade flows, risk sentiment and policy expectations. They can add volatility to foreign investments even when the underlying asset is unchanged.
+
+### Track both views
+
+Where possible, review the asset's native-currency performance and the translated portfolio performance. This helps distinguish whether a result came from the investment itself, the currency, or both.
+""",
+    },
+    "market-cap": {
+        "title": "Understanding Market Capitalization",
+        "category": "Investing Basics",
+        "summary": "What market cap measures, how it is calculated and what it does not tell you.",
+        "body": """
+### The calculation
+
+For a publicly traded company, market capitalization is broadly calculated as share price multiplied by shares outstanding. It represents the market value investors collectively place on the company's equity at that time.
+
+### Why investors use it
+
+Market cap provides a convenient way to compare the relative size of listed companies. Index providers may also use market capitalization when determining index weights.
+
+### A high share price does not mean a larger company
+
+Share price alone says little about company size because companies have different numbers of shares outstanding. A company trading at 50 per share can have a larger market capitalization than one trading at 500.
+
+### Market cap is not the same as business value
+
+Market capitalization focuses on equity. Measures such as enterprise value incorporate other balance-sheet items such as debt and cash. Market cap also does not tell investors whether a company is cheap, expensive, profitable or financially strong.
+
+It is a useful starting statistic, not a complete valuation framework.
+""",
+    },
+    "economic-indicators": {
+        "title": "Economic Indicators Investors Should Understand",
+        "category": "Macroeconomics",
+        "summary": "A practical introduction to inflation, employment, GDP, PMI, retail sales and central-bank decisions.",
+        "body": """
+### Inflation
+
+CPI and other inflation measures help investors assess changes in prices and possible central-bank responses. Markets often focus on whether the release differs from expectations.
+
+### Employment
+
+Payroll growth, unemployment, wage growth and jobless claims provide information about labour demand and household income. Strong labour data can support growth while also affecting inflation and rate expectations.
+
+### GDP
+
+Gross domestic product measures broad economic output. Investors watch both the growth rate and the components behind it.
+
+### PMI and business surveys
+
+Purchasing Managers' Index surveys can provide relatively timely information about business activity, new orders, employment and prices.
+
+### Retail sales
+
+Retail data offer clues about consumer demand, an important part of many economies.
+
+### Central-bank decisions
+
+Rate decisions and policy statements can influence borrowing costs, bond yields, currencies and risk appetite. The guidance surrounding a decision can sometimes matter more than the decision itself.
+
+No indicator should be interpreted in isolation. Markets combine new data with expectations, previous releases and the broader policy environment.
+""",
+    },
+    "economic-calendar": {
+        "title": "How to Read an Economic Calendar",
+        "category": "Macroeconomics",
+        "summary": "Learn how previous, forecast and actual values help investors interpret scheduled economic releases.",
+        "body": """
+### What an economic calendar does
+
+An economic calendar organizes scheduled releases and policy events by date and time. Common entries include inflation reports, employment data, GDP, business surveys and central-bank decisions.
+
+### Previous
+
+The previous value shows the earlier reported reading. It provides context but may later be revised.
+
+### Forecast
+
+The forecast represents the market or surveyed expectation before the release. Because financial markets continuously price expectations, the gap between the actual result and the forecast can matter more than the absolute number.
+
+### Actual
+
+The actual figure is the newly released value. A result above forecast is not automatically bullish or bearish. Interpretation depends on the indicator.
+
+For example, stronger-than-expected growth may support company earnings expectations but could also increase expectations for higher interest rates.
+
+### Impact labels
+
+Calendars commonly classify events by expected market impact. These labels are useful for prioritization, but an event marked “medium” can still produce a large move if the surprise is substantial.
+
+### Build context before the release
+
+Before a major event, know the previous value, consensus forecast and why the indicator matters. After release, compare actual with forecast, check revisions and consider the likely policy implication.
+
+An economic calendar is most useful as a preparation tool, not as a prediction engine.
+""",
+    },
+}
+
+
+def open_learn_article(slug):
+    if slug in LEARN_ARTICLES:
+        st.session_state.learn_article_slug = slug
+        st.session_state.pending_public_page = "Learn"
+        st.rerun()
+
+
+def close_learn_article():
+    st.session_state.pop("learn_article_slug", None)
+    st.rerun()
+
+
+def render_learn_article(slug):
+    article = LEARN_ARTICLES.get(slug)
+
+    if not article:
+        st.session_state.pop("learn_article_slug", None)
+        return False
+
+    if st.button("← Back to Learning Centre", key=f"article_back_{slug}"):
+        close_learn_article()
+
+    st.caption(article["category"])
+    st.title(article["title"])
+    st.markdown(f"**{article['summary']}**")
+    st.markdown(article["body"])
+
+    st.markdown(
+        """
+        <div class="iv-note">
+            <strong>Educational information only.</strong> This guide is intended
+            to explain general investing concepts and does not provide personalised
+            financial, investment, tax or legal advice.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    if st.button(
+        "Track your own portfolio with InvesTrack Pro",
+        key=f"article_cta_{slug}",
+        type="primary",
+        use_container_width=True,
+    ):
+        navigate("Login")
+
+    render_public_footer()
+    return True
+
+
+
 # -----------------------------------------
 # LEARNING CENTRE
 # -----------------------------------------
 def render_learn_page():
+    article_slug = st.session_state.get("learn_article_slug")
+
+    if article_slug:
+        if render_learn_article(article_slug):
+            return
+
     st.title("InvesTrack Learning Centre")
-    st.caption("Clear, practical financial education for investors building long-term understanding.")
-    st.markdown("""
-    <div class="iv-info-grid">
-        <div class="iv-info-card"><div class="iv-kicker">Portfolio Management</div><h4>Diversification & allocation</h4><p>Understand concentration risk, asset allocation and why portfolio structure matters.</p></div>
-        <div class="iv-info-card"><div class="iv-kicker">Markets</div><h4>Stocks, crypto & ETFs</h4><p>Learn how common investment assets work and what can influence their prices.</p></div>
-        <div class="iv-info-card"><div class="iv-kicker">Macroeconomics</div><h4>Rates, inflation & growth</h4><p>Connect economic releases to currencies, yields, equities and risk assets.</p></div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.caption(
+        "Original, practical financial education for investors building long-term understanding."
+    )
 
-    with st.expander("📘 How to track investment portfolio performance", expanded=True):
-        st.markdown("""Portfolio performance is more than the difference between today's account value and what you originally deposited. A useful review separates **contributions**, **withdrawals**, **market gains or losses** and **currency effects**.
+    st.markdown(
+        """
+        <div class="iv-section-shell">
+            <div class="iv-kicker">Investor Education</div>
+            <h2 style="margin-top:.2rem;">Learn the concepts behind the numbers</h2>
+            <p>
+                Portfolio dashboards show what changed. The Learning Centre is
+                designed to explain why the numbers matter — from investment
+                performance and diversification to inflation, interest rates,
+                currencies and scheduled economic releases.
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-Start with three questions:
-1. **How much capital did I actually contribute?**
-2. **What is the portfolio worth now?**
-3. **What changed because of investment performance rather than new deposits?**
+    categories = [
+        ("Portfolio Management", "📊"),
+        ("Investing Basics", "📘"),
+        ("Macroeconomics", "🌐"),
+        ("Markets", "📈"),
+    ]
 
-For portfolios containing both local and foreign assets, exchange-rate movements can materially change the value reported in your home currency. That is why InvesTrack Pro's multi-currency view can be useful when interpreting performance.""")
-    with st.expander("📗 What portfolio diversification really means"):
-        st.markdown("""Diversification means spreading exposure so that one company, sector, asset class or economic event does not dominate the entire portfolio.
+    for category, icon in categories:
+        st.markdown(f"### {icon} {category}")
 
-Owning ten assets is not automatically diversified. Ten technology companies can still behave similarly. A more thoughtful approach looks at **what drives each holding** — growth, interest rates, commodities, currencies, defensive demand or other factors.
+        category_articles = [
+            (slug, article)
+            for slug, article in LEARN_ARTICLES.items()
+            if article["category"] == category
+        ]
 
-Diversification cannot eliminate losses, but it can reduce dependence on a single outcome.""")
-    with st.expander("📕 Realized vs unrealized profit"):
-        st.markdown("""**Unrealized profit or loss** is the change in value of an investment you still own. **Realized profit or loss** occurs after the position is sold or otherwise closed.
+        for slug, article in category_articles:
+            left, right = st.columns([4, 1])
 
-This distinction matters because portfolio dashboards often show unrealized performance while tax or cash-flow decisions may depend on realized transactions.""")
-    with st.expander("📙 Dollar-cost averaging explained"):
-        st.markdown("""Dollar-cost averaging (DCA) means investing a fixed amount at regular intervals rather than investing the entire amount at one time.
+            with left:
+                st.markdown(f"**{article['title']}**")
+                st.caption(article["summary"])
 
-When prices are lower, the fixed contribution buys more units; when prices are higher, it buys fewer. DCA can simplify discipline and reduce the pressure to choose a perfect entry point, but it does not guarantee a profit or prevent losses.""")
-    with st.expander("📓 Why interest rates matter to investors"):
-        st.markdown("""Interest rates influence borrowing costs, bond yields, currency demand and the valuation investors are willing to place on future company profits.
+            with right:
+                if st.button(
+                    "Read guide",
+                    key=f"learn_open_{slug}",
+                    use_container_width=True,
+                ):
+                    open_learn_article(slug)
 
-When expected rates rise, long-duration growth assets can face valuation pressure because future cash flows are discounted at a higher rate. When expected rates fall, financial conditions may become easier — but investors still need to ask **why** rates are falling. A healthy decline in inflation is different from emergency cuts caused by economic stress.""")
-    with st.expander("📒 How inflation can affect a portfolio"):
-        st.markdown("""Inflation reduces the purchasing power of money. For investors, it can also affect central-bank policy, corporate costs, consumer spending and bond yields.
+        st.markdown("")
 
-Different assets can react differently depending on whether inflation is rising because of strong demand, supply disruption, energy prices or wages. The market response therefore depends on both the inflation number and what investors think it means for future policy.""")
+    st.markdown(
+        """
+        <div class="iv-note">
+            InvesTrack Pro's educational material is written to explain general
+            financial concepts clearly. It does not tell readers what to buy or
+            sell and should not be treated as personalised investment advice.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
     render_public_footer()
 
 
