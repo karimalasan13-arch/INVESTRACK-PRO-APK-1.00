@@ -415,6 +415,7 @@ PUBLIC_PAGES = [
     ("Markets & Economy", "🌐"),
     ("Investor Tools", "🧮"),
     ("Learn", "📚"),
+    ("Editorial", "🛡️"),
     ("About", "ℹ️"),
     ("Privacy", "🔒"),
     ("Terms", "📜"),
@@ -555,6 +556,17 @@ def render_public_footer():
                 PLAY_STORE_URL,
                 use_container_width=True,
             )
+
+    footer_policy_left, footer_policy_mid, footer_policy_right = st.columns(3)
+    with footer_policy_left:
+        if st.button("Editorial Policy", key=f"footer_editorial_{st.session_state.get('public_navigation','page')}_{st.session_state.get('learn_article_slug','')}", use_container_width=True):
+            navigate("Editorial")
+    with footer_policy_mid:
+        if st.button("Privacy", key=f"footer_privacy_{st.session_state.get('public_navigation','page')}_{st.session_state.get('learn_article_slug','')}", use_container_width=True):
+            navigate("Privacy")
+    with footer_policy_right:
+        if st.button("Contact", key=f"footer_contact_{st.session_state.get('public_navigation','page')}_{st.session_state.get('learn_article_slug','')}", use_container_width=True):
+            navigate("Contact")
 
     st.markdown(
         """
@@ -1260,6 +1272,100 @@ def render_learn_page():
 
 
 # -----------------------------------------
+# EDITORIAL POLICY & CONTENT METHODOLOGY
+# -----------------------------------------
+def render_editorial_page():
+    st.title("Editorial Policy & Content Methodology")
+    st.caption("How InvesTrack Pro creates, reviews and presents financial education and market information.")
+
+    st.markdown(
+        """
+        <div class="iv-section-shell">
+            <div class="iv-kicker">Editorial Standards</div>
+            <h2 style="margin-top:.2rem;">Clear information before market noise</h2>
+            <p>
+                InvesTrack Pro publishes educational material to help readers understand
+                investing, portfolio management and the economic forces that can affect
+                financial markets. Our public content is designed to explain concepts,
+                not to tell readers what they should buy or sell.
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("### Our editorial principles")
+    st.markdown(
+        """
+        **Accuracy and context.** We aim to explain financial concepts in plain language
+        without removing important qualifications. Where a topic depends on changing
+        market conditions, readers should distinguish educational explanation from
+        current market data.
+
+        **Original educational value.** InvesTrack Pro guides are prepared for this
+        platform and are intended to add practical explanation rather than simply
+        reproduce third-party material.
+
+        **Neutrality.** Educational articles are not written as recommendations to buy,
+        sell or hold a particular security, cryptocurrency or other financial asset.
+
+        **Clear separation of sources.** Third-party market headlines are identified as
+        external content and link to their original publishers. They are not presented
+        as InvesTrack Pro articles.
+
+        **Corrections.** Material may be revised when an explanation is incomplete,
+        inaccurate or no longer reflects the information the page is intended to teach.
+        """
+    )
+
+    st.markdown("### Content methodology")
+    st.markdown(
+        """
+        Our educational guides focus on established investing and macroeconomic concepts
+        such as portfolio returns, diversification, inflation, interest rates, currencies
+        and economic indicators. Articles are structured around the questions an investor
+        needs to understand: what a concept means, how it is commonly measured, why it
+        matters and what its limitations are.
+
+        Live financial headlines displayed on InvesTrack Pro are supplied through the
+        Marketaux news service. Headline cards identify the source and direct readers to
+        the original publisher. InvesTrack Pro does not treat an external headline as a
+        trading recommendation.
+
+        Calculator outputs are mathematical illustrations based on the values entered by
+        the user. They do not predict future returns and may exclude taxes, fees, spreads,
+        slippage and other real-world costs.
+        """
+    )
+
+    st.markdown("### Financial-content standard")
+    st.markdown(
+        """
+        InvesTrack Pro does not provide personalised financial, investment, trading, tax
+        or legal advice. Readers remain responsible for evaluating information in light of
+        their own circumstances and, where appropriate, obtaining advice from a qualified
+        professional.
+        """
+    )
+
+    st.markdown("### Publisher & contact")
+    st.markdown(
+        """
+        **Publisher:** InvesTrack Pro  
+        **Website:** app.investrackpro.com  
+        **Editorial and correction enquiries:** hassbuildllc@gmail.com
+        """
+    )
+
+    st.markdown(
+        """<div class="iv-note"><strong>Transparency note:</strong> Advertising, when enabled, does not change the educational purpose of our articles or the distinction between InvesTrack Pro content and third-party market headlines.</div>""",
+        unsafe_allow_html=True,
+    )
+
+    render_public_footer()
+
+
+# -----------------------------------------
 # ABOUT PAGE
 # -----------------------------------------
 def render_about_page():
@@ -1301,6 +1407,15 @@ def render_about_page():
         """,
         unsafe_allow_html=True,
     )
+
+    st.markdown("### Publishing standards")
+    st.write(
+        "InvesTrack Pro maintains a dedicated Editorial Policy & Content Methodology "
+        "page explaining how its educational material, calculators and third-party "
+        "market headlines are presented."
+    )
+    if st.button("Read our Editorial Policy", key="about_editorial_policy", use_container_width=True):
+        navigate("Editorial")
 
     render_public_footer()
 
@@ -1838,6 +1953,9 @@ elif selected_page == "Investor Tools":
 
 elif selected_page == "Learn":
     render_learn_page()
+
+elif selected_page == "Editorial":
+    render_editorial_page()
 
 elif selected_page == "About":
     render_about_page()
