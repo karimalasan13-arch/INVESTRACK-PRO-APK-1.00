@@ -1931,13 +1931,13 @@ def render_dashboard():
         st.session_state.last_refresh = current_time
         st.rerun()
 
-    mode_options = ["Crypto", "Stocks", "ETFs", "Bonds"]
+    mode_options = ["Overview", "Crypto", "Stocks", "ETFs", "Bonds"]
 
     if "selected_mode" not in st.session_state:
-        st.session_state.selected_mode = "Crypto"
+        st.session_state.selected_mode = "Overview"
 
     if st.session_state.selected_mode not in mode_options:
-        st.session_state.selected_mode = "Crypto"
+        st.session_state.selected_mode = "Overview"
 
     def on_mode_change():
         new_mode = st.session_state.mode_radio
@@ -1959,7 +1959,12 @@ def render_dashboard():
     mode = st.session_state.selected_mode
 
     try:
-        if mode == "Crypto":
+        if mode == "Overview":
+            from overview_mode import overview_app
+
+            overview_app()
+
+        elif mode == "Crypto":
             from crypto_mode import crypto_app
 
             crypto_app()
