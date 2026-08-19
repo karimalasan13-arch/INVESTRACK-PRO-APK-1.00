@@ -1931,7 +1931,7 @@ def render_dashboard():
         st.session_state.last_refresh = current_time
         st.rerun()
 
-    mode_options = ["Crypto", "Stocks", "ETFs"]
+    mode_options = ["Crypto", "Stocks", "ETFs", "Bonds"]
 
     if "selected_mode" not in st.session_state:
         st.session_state.selected_mode = "Crypto"
@@ -1973,6 +1973,11 @@ def render_dashboard():
             from etf_mode import etf_app
 
             etf_app()
+
+        elif mode == "Bonds":
+            from bond_mode import bond_app
+
+            bond_app()
 
     except Exception as error:
         st.error(
