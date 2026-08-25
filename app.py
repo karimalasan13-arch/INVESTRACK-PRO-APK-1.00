@@ -452,7 +452,11 @@ def get_user_initials(email):
 # -----------------------------------------
 # SEO + SHAREABLE PUBLIC URL ROUTING
 # -----------------------------------------
-SITE_URL = "https://investrackpro.com"
+# Canonical public website.
+# Render already redirects the bare domain to www, so all public SEO signals
+# should point to the final, indexable www host instead of creating duplicate
+# canonical signals for the bare domain or app subdomain.
+SITE_URL = "https://www.investrackpro.com"
 
 SEO_TITLE = "InvesTrack Pro | Unified Investment Portfolio Tracker"
 SEO_DESCRIPTION = (
@@ -474,7 +478,7 @@ def inject_site_identity():
       "@type": "WebSite",
       "name": "InvesTrack Pro",
       "alternateName": "InvesTrackPro",
-      "url": "https://investrackpro.com/"
+      "url": "https://www.investrackpro.com/"
     }
     """.strip()
 
