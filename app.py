@@ -1,4 +1,4 @@
-import base64
+
 import html
 import os
 import time
@@ -193,6 +193,8 @@ st.markdown(
     .iv-news-meta {font-size:.78rem;color:#64748b;margin-bottom:.5rem;}
     .iv-news-desc {color:#475569;line-height:1.55;margin:.2rem 0 .7rem;}
     .iv-live-dot {display:inline-block;width:8px;height:8px;border-radius:50%;background:#22c55e;margin-right:.35rem;box-shadow:0 0 0 4px rgba(34,197,94,.12);}
+    .iv-ad-label {font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;color:#94a3b8;text-align:center;margin:.35rem 0 .2rem;}
+    .iv-trust-strip {border:1px solid var(--iv-border);border-radius:16px;padding:.9rem 1rem;margin:1rem 0 1.4rem;background:rgba(248,250,252,.72);color:#475569;line-height:1.55;}
     @media (max-width:900px){.iv-info-grid{grid-template-columns:1fr;}}
     </style>
     """,
@@ -228,6 +230,38 @@ def get_secret(key, default=""):
 
 MARKETAUX_API_TOKEN = get_secret("MARKETAUX_API_TOKEN", "")
 MARKETAUX_NEWS_URL = "https://api.marketaux.com/v1/news/all"
+
+# -----------------------------------------
+# ADSENSE CONFIGURATION
+# Public web ads stay off by default. After AdSense approval, set
+# WEB_ADS_ENABLED=true and provide the client + slot IDs in Render
+# environment variables or Streamlit secrets.
+# -----------------------------------------
+WEB_ADS_ENABLED = str(get_secret("WEB_ADS_ENABLED", "false")).strip().lower() in {"1", "true", "yes", "on"}
+ADSENSE_CLIENT = get_secret("ADSENSE_CLIENT", "")
+ADSENSE_TOP_SLOT = get_secret("ADSENSE_TOP_SLOT", "")
+ADSENSE_MID_SLOT = get_secret("ADSENSE_MID_SLOT", "")
+ADSENSE_BOTTOM_SLOT = get_secret("ADSENSE_BOTTOM_SLOT", "")
+
+
+def render_ad_slot(slot_id="", height=120):
+    """Render an AdSense unit only when web advertising is explicitly enabled."""
+    if not WEB_ADS_ENABLED or not ADSENSE_CLIENT or not slot_id:
+        return
+
+    safe_client = html.escape(str(ADSENSE_CLIENT), quote=True)
+    safe_slot = html.escape(str(slot_id), quote=True)
+    components.html(
+        f"""
+        <div style="width:100%;text-align:center;margin:10px 0 18px;">
+          <div style="font:10px Arial,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#94a3b8;margin-bottom:4px;">Advertisement</div>
+          <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client={safe_client}" crossorigin="anonymous"></script>
+          <ins class="adsbygoogle" style="display:block" data-ad-client="{safe_client}" data-ad-slot="{safe_slot}" data-ad-format="auto" data-full-width-responsive="true"></ins>
+          <script>(adsbygoogle = window.adsbygoogle || []).push({{}});</script>
+        </div>
+        """,
+        height=height,
+    )
 
 
 @st.cache_data(ttl=1800, show_spinner=False)
@@ -582,7 +616,7 @@ def render_public_footer():
         """
         <div class="iv-footer">
             <strong>InvesTrack Pro</strong><br>
-            Portfolio tracking for stocks, cryptocurrency and cash holdings.<br><br>
+            Portfolio tracking for stocks, ETFs, bonds, cryptocurrency and cash holdings.<br><br>
         </div>
         """,
         unsafe_allow_html=True,
@@ -665,6 +699,18 @@ def render_home_page(authenticated):
         else:
             st.link_button("Get InvesTrack Pro on Google Play", PLAY_STORE_URL, use_container_width=True)
 
+    st.markdown(
+        """
+        <div class="iv-trust-strip">
+            <strong>Independent portfolio tools + original investor education.</strong>
+            InvesTrack Pro combines personal portfolio tracking, practical calculators,
+            educational market guides and clearly attributed third-party headlines.
+            Educational content is separate from advertising and is not personalised investment advice.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
     st.markdown("## Your public market companion")
     st.markdown(
         """
@@ -677,6 +723,8 @@ def render_home_page(authenticated):
         unsafe_allow_html=True,
     )
 
+    render_ad_slot(ADSENSE_TOP_SLOT, height=130)
+
     c1, c2, c3 = st.columns(3)
     with c1:
         if st.button("Explore Markets & Economy →", key="home_go_markets", use_container_width=True): navigate("Markets & Economy")
@@ -684,6 +732,18 @@ def render_home_page(authenticated):
         if st.button("Open Investor Tools →", key="home_go_tools", use_container_width=True): navigate("Investor Tools")
     with c3:
         if st.button("Visit Learning Centre →", key="home_go_learn", use_container_width=True): navigate("Learn")
+
+    st.markdown("## Browse by topic")
+    st.markdown(
+        """
+        <div class="iv-info-grid">
+            <div class="iv-info-card"><div class="iv-kicker">Portfolio</div><h4>Performance & diversification</h4><p>Understand returns, allocation, concentration, realized and unrealized results, and currency effects.</p></div>
+            <div class="iv-info-card"><div class="iv-kicker">Economy</div><h4>Rates, inflation & growth</h4><p>Learn how central-bank decisions, inflation, employment and economic activity feed into financial markets.</p></div>
+            <div class="iv-info-card"><div class="iv-kicker">Markets</div><h4>Stocks, ETFs, bonds & crypto</h4><p>Build a clearer picture of what different assets represent, what drives them and how their risks differ.</p></div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     st.markdown("## Everything you need to monitor your portfolio")
     feature_one, feature_two, feature_three = st.columns(3)
@@ -695,6 +755,8 @@ def render_home_page(authenticated):
         st.markdown("""<div class="iv-card"><h3>🌍 Multi-currency view</h3>View your investment portfolio in a currency that is meaningful to you.</div>""", unsafe_allow_html=True)
 
     render_live_market_news(compact=True)
+
+    render_ad_slot(ADSENSE_MID_SLOT, height=130)
 
     st.markdown("## What investors should watch each week")
     st.markdown(
@@ -748,6 +810,7 @@ def render_home_page(authenticated):
 
     st.markdown("## Built for investors who value clarity")
     st.write("""Whether you are tracking your first cryptocurrency holding or monitoring a growing stock portfolio, InvesTrack Pro combines portfolio tracking with practical financial education so you can understand both your holdings and the wider market environment.""")
+    render_ad_slot(ADSENSE_BOTTOM_SLOT, height=130)
     render_public_footer()
 
 
@@ -760,6 +823,7 @@ def render_markets_economy_page():
     st.markdown("""<div class="iv-section-shell"><div class="iv-kicker">Economic Calendar Framework</div><h2 style="margin-top:.2rem;">What belongs on an investor's weekly calendar?</h2><p>A useful economic calendar is more than a list of dates. It should help investors understand what each release measures, why markets care, and which assets may be sensitive to a surprise.</p></div>""", unsafe_allow_html=True)
 
     render_live_market_news(compact=False)
+    render_ad_slot(ADSENSE_TOP_SLOT, height=130)
 
     st.markdown("### High-impact releases")
     rows=[
@@ -1217,6 +1281,7 @@ def render_learn_article(slug):
     st.title(article["title"])
     st.markdown(f"**{article['summary']}**")
     st.markdown(article["body"])
+    render_ad_slot(ADSENSE_MID_SLOT, height=130)
 
     st.markdown(
         """
@@ -1305,6 +1370,8 @@ def render_learn_page():
                     open_learn_article(slug)
 
         st.markdown("")
+
+    render_ad_slot(ADSENSE_MID_SLOT, height=130)
 
     st.markdown(
         """
@@ -1426,7 +1493,7 @@ def render_about_page():
         InvesTrack Pro is a portfolio management platform created to make
         investment tracking simpler, clearer and more accessible.
 
-        The platform allows users to monitor cryptocurrency, stock and cash
+        The platform allows users to monitor cryptocurrency, stock, ETF, bond and cash
         holdings through a unified dashboard. Users can review portfolio
         values, performance history and asset allocation without maintaining
         separate spreadsheets or switching between multiple applications.
@@ -1440,6 +1507,8 @@ def render_about_page():
 
         - Cryptocurrency portfolio tracking
         - Stock portfolio tracking
+        - ETF portfolio tracking
+        - Bond portfolio tracking
         - Cash holding records
         - Portfolio value and performance summaries
         - Historical portfolio tracking
