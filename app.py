@@ -245,7 +245,11 @@ ADSENSE_BOTTOM_SLOT = get_secret("ADSENSE_BOTTOM_SLOT", "")
 
 
 def render_ad_slot(slot_id="", height=120):
-    """Render an AdSense unit only when web advertising is explicitly enabled."""
+    """Render an AdSense unit only when web advertising is explicitly enabled.
+
+    Keep calls to this function on publisher-content pages only. Do not place
+    web AdSense units on login, dashboard, error, navigation-only or empty states.
+    """
     if not WEB_ADS_ENABLED or not ADSENSE_CLIENT or not slot_id:
         return
 
@@ -668,7 +672,7 @@ def render_home_page(authenticated):
             <div class="iv-hero-badge">ONE PORTFOLIO • EVERY ASSET</div>
             <h1>Know where your money stands.</h1>
             <p>
-                Track stocks, cryptocurrency and cash holdings from one polished dashboard —
+                Track stocks, ETFs, bonds, cryptocurrency and cash holdings from one polished dashboard —
                 and use InvesTrack Pro's public market education, investor tools and economic
                 insights to understand the forces moving markets.
             </p>
@@ -748,7 +752,7 @@ def render_home_page(authenticated):
     st.markdown("## Everything you need to monitor your portfolio")
     feature_one, feature_two, feature_three = st.columns(3)
     with feature_one:
-        st.markdown("""<div class="iv-card"><h3>📊 Unified portfolio</h3>Track stocks, cryptocurrency and cash holdings from one secure account.</div>""", unsafe_allow_html=True)
+        st.markdown("""<div class="iv-card"><h3>📊 Unified portfolio</h3>Track stocks, ETFs, bonds, cryptocurrency and cash holdings from one secure account.</div>""", unsafe_allow_html=True)
     with feature_two:
         st.markdown("""<div class="iv-card"><h3>📈 Performance insights</h3>Review portfolio value, gains, losses and historical performance over time.</div>""", unsafe_allow_html=True)
     with feature_three:
@@ -808,8 +812,43 @@ def render_home_page(authenticated):
             ):
                 open_learn_article(slug)
 
+
+    st.markdown("## Multi-Asset Investing Guides")
+    st.caption(
+        "Original guides for investors managing assets across more than one platform or asset class."
+    )
+
+    multi_asset_guides = [
+        "etf-investing-basics",
+        "bonds-treasury-bills",
+        "multi-asset-allocation",
+        "why-unified-portfolio-tracking",
+    ]
+
+    ma_cols = st.columns(2)
+
+    for index, slug in enumerate(multi_asset_guides):
+        article = LEARN_ARTICLES[slug]
+        with ma_cols[index % 2]:
+            st.markdown(
+                f"""
+                <div class="iv-info-card">
+                    <div class="iv-kicker">{article["category"]}</div>
+                    <h4>{article["title"]}</h4>
+                    <p>{article["summary"]}</p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            if st.button(
+                "Read guide →",
+                key=f"home_multi_asset_{slug}",
+                use_container_width=True,
+            ):
+                open_learn_article(slug)
+
     st.markdown("## Built for investors who value clarity")
-    st.write("""Whether you are tracking your first cryptocurrency holding or monitoring a growing stock portfolio, InvesTrack Pro combines portfolio tracking with practical financial education so you can understand both your holdings and the wider market environment.""")
+    st.write("""Whether you are tracking your first investment or managing a portfolio spread across stocks, ETFs, bonds, cryptocurrency and cash, InvesTrack Pro combines multi-asset tracking with practical financial education so you can understand both your holdings and the wider market environment.""")
     render_ad_slot(ADSENSE_BOTTOM_SLOT, height=130)
     render_public_footer()
 
@@ -824,6 +863,44 @@ def render_markets_economy_page():
 
     render_live_market_news(compact=False)
     render_ad_slot(ADSENSE_TOP_SLOT, height=130)
+
+
+    st.markdown(
+        """
+        <div class="iv-article">
+            <h3>How investors can prepare for a data-heavy week</h3>
+            <p>
+                Scheduled economic releases matter because markets form expectations before
+                the numbers arrive. A disciplined weekly review starts by identifying the
+                highest-impact events, recording the consensus forecast and understanding
+                which market narrative is already dominant.
+            </p>
+            <p>
+                An inflation release, for example, should not be judged only by whether the
+                number is high or low. Investors also compare it with the previous reading,
+                the consensus forecast and the components that may influence future central-bank
+                decisions. Employment data can affect both growth expectations and inflation
+                expectations, while GDP and business surveys help describe the underlying pace
+                of economic activity.
+            </p>
+            <p>
+                The same release can affect assets differently. A stronger-than-expected
+                economic report may support cyclical company earnings while simultaneously
+                pushing bond yields higher. Rising yields can then place pressure on
+                interest-rate-sensitive equities or other risk assets. Context matters more
+                than a simple bullish or bearish label.
+            </p>
+            <p>
+                A practical process is to note the event time, previous value, forecast,
+                likely policy relevance and assets that may be sensitive to a surprise.
+                After the release, compare the actual figure with expectations, check
+                revisions and observe whether the market reaction confirms or contradicts
+                the initial interpretation.
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     st.markdown("### High-impact releases")
     rows=[
@@ -1249,6 +1326,278 @@ Before a major event, know the previous value, consensus forecast and why the in
 An economic calendar is most useful as a preparation tool, not as a prediction engine.
 """,
     },
+"etf-investing-basics": {
+        "title": "ETF Investing: What Investors Should Understand",
+        "category": "Markets",
+        "summary": "A practical guide to how exchange-traded funds work, what they can hold, and why two ETFs can have very different risks.",
+        "body": """
+### What an ETF is
+
+An exchange-traded fund, or ETF, is an investment fund whose shares trade on an exchange. Buying one ETF share can give an investor exposure to a basket of underlying assets instead of requiring the investor to purchase every security separately.
+
+The word “ETF” describes the structure of the product, not its risk level. A broad global equity ETF, a short-duration government-bond ETF and a leveraged technology ETF are all ETFs, but they can behave very differently.
+
+### What an ETF can hold
+
+ETFs can hold stocks, government bonds, corporate bonds, commodities, real-estate securities or combinations of assets. Some funds track well-known market indexes. Others follow sectors, investment styles, countries, themes or actively managed strategies.
+
+Before using an ETF in a portfolio, investors should understand what the fund actually owns. The fund name can provide a clue, but the underlying holdings, index methodology and concentration are more informative.
+
+### Diversification depends on the holdings
+
+One reason investors use ETFs is diversification. A broad-market ETF can spread exposure across hundreds or thousands of securities. That can reduce the effect of a single company on the portfolio.
+
+However, an ETF is not automatically diversified. A sector ETF may hold many companies that respond to the same economic forces. A thematic ETF may be concentrated in a small number of businesses. A bond ETF may concentrate heavily on one maturity range or credit category.
+
+A useful review therefore looks beyond the number of holdings and asks whether the underlying exposures are genuinely different.
+
+### Expense ratios and tracking
+
+Most ETFs charge an annual expense ratio. The percentage may look small, but costs reduce the return that ultimately reaches investors. Two funds that track similar markets can have different fees, trading spreads and tracking quality.
+
+Index-tracking funds also attempt to follow a benchmark rather than outperform it. Their return can differ slightly from the index because of expenses, portfolio implementation, taxes, cash balances and trading effects.
+
+### Market price and net asset value
+
+ETF shares trade throughout the trading day. Their market price can move as buyers and sellers interact. The fund also has an underlying net asset value based on the securities it owns.
+
+For large, liquid ETFs, the market price often remains close to the value of the underlying portfolio. During stressed or illiquid markets, temporary differences can become more noticeable. Trading volume and bid-ask spreads therefore matter, particularly for investors placing larger orders.
+
+### Income and distributions
+
+Stock ETFs may distribute dividends received from their holdings. Bond ETFs may distribute interest income. Distribution schedules vary by fund, and a high distribution yield should not be interpreted as a guaranteed return.
+
+The total investment result includes both price movement and distributions received. Looking only at the price chart can therefore provide an incomplete picture.
+
+### Currency exposure
+
+An ETF may trade in one currency while holding assets denominated in several others. For an investor measuring wealth in a home currency, exchange-rate movements can affect the final result.
+
+A fund can also be currency-hedged or unhedged. The distinction is important because it changes how foreign-exchange movements influence returns.
+
+### Where ETFs fit in a unified portfolio
+
+ETFs are often only one part of an investor's financial picture. The same person may also own individual stocks, cryptocurrency, government bonds, Treasury bills and cash.
+
+For that reason, reviewing an ETF in isolation is not enough. Investors should also consider how it changes the allocation of the entire portfolio. A broad US equity ETF, for example, may increase exposure to companies already owned individually.
+
+A unified portfolio view can make these overlaps easier to see by showing the ETF alongside the investor's other asset classes.
+
+### Questions to ask before buying an ETF
+
+Before investing, understand the fund's objective, underlying holdings, concentration, expense ratio, distribution policy, liquidity and major risks. Consider how it fits with the investments you already own rather than assuming that adding another ticker automatically creates diversification.
+
+ETFs can be powerful portfolio tools, but the useful question is not simply “Is this an ETF?” It is “What exposure does this ETF add to my total portfolio?”
+""",
+    },
+    "bonds-treasury-bills": {
+        "title": "Bonds and Treasury Bills: A Practical Investor Guide",
+        "category": "Markets",
+        "summary": "Understand principal, coupons, maturity, yields and the difference between bonds and short-term Treasury bills.",
+        "body": """
+### Fixed income is not one single investment
+
+The term fixed income covers a wide range of investments in which an investor lends money to a government, company or other issuer. In return, the issuer promises payments according to agreed terms.
+
+Government bonds, corporate bonds and Treasury bills can all belong to the fixed-income part of a portfolio, but their maturity, payment structure, credit risk and market behaviour can differ considerably.
+
+### Principal and maturity
+
+The principal, sometimes called face value or par value, is the amount associated with the security's repayment at maturity. The maturity date is when the issuer is scheduled to repay the principal, subject to the terms of the instrument and the issuer meeting its obligations.
+
+Short maturities generally expose investors to less sensitivity to changing interest rates than very long maturities, although other risks still matter.
+
+### Coupon-paying bonds
+
+Many bonds pay periodic interest known as a coupon. A bond with a face value of 10,000 and an annual coupon rate of 5% would contractually pay 500 per year if the coupon is calculated directly from face value and the issuer continues to meet its obligations.
+
+Coupon frequency can be annual, semi-annual, quarterly or structured differently. The coupon rate is not the same thing as the investor's total return because the price paid for the bond may differ from face value.
+
+### Treasury bills and zero-coupon instruments
+
+Treasury bills are commonly short-term government securities. They may not pay a periodic coupon. Instead, an investor may purchase the bill for less than the amount received at maturity.
+
+For example, an investor might pay 9,600 for an instrument that is scheduled to redeem for 10,000. The difference represents the investment return before taxes, fees and other effects.
+
+Because the cash-flow structure differs from a coupon bond, comparing quoted rates requires care. Discount rates, money-market yields and annualized investment yields are not always calculated in the same way.
+
+### Bond prices and interest rates
+
+Existing bond prices can move when market interest rates change. If newly issued bonds begin offering higher yields, an older bond with a lower coupon may become less attractive unless its market price falls. Conversely, falling market yields can make an existing higher-coupon bond more valuable.
+
+This relationship is one reason long-duration bonds can experience meaningful price movements even though they are often described as fixed income.
+
+### Yield is more than the coupon
+
+Current yield compares annual coupon income with the bond's current market price. Yield to maturity attempts to incorporate coupon payments, the purchase price, the repayment amount and the time remaining until maturity under a set of assumptions.
+
+A higher quoted yield can signal greater expected return, but it can also reflect greater credit, duration, liquidity or other risk.
+
+### Credit risk
+
+A bond is a promise to pay, not a guarantee that payment will occur. Credit risk is the possibility that the issuer cannot meet interest or principal obligations.
+
+Government securities can have different risk characteristics across countries. Corporate bonds can vary from high-quality issuers to speculative borrowers. Investors should therefore avoid treating all bonds as interchangeable simply because they are labelled fixed income.
+
+### Inflation and purchasing power
+
+Fixed payments can lose purchasing power when inflation is high. If an investor receives the same nominal coupon while the cost of living rises rapidly, the real value of that income declines.
+
+Inflation expectations can also push market yields higher, which can reduce the market value of existing fixed-rate bonds.
+
+### Why fixed income matters in a mixed portfolio
+
+Investors may use bonds or Treasury bills for income, capital preservation objectives, liquidity management, diversification or to match future spending needs. The role depends on maturity, issuer quality and the investor's circumstances.
+
+A person who owns stocks, ETFs, cryptoassets and local government securities can easily lose sight of how much of the total portfolio is actually allocated to fixed income. Tracking the instruments together helps reveal the true balance between growth assets, defensive assets and cash.
+
+### Track the details that matter
+
+For fixed-income holdings, useful records include issuer, purchase value, face or maturity value, coupon or stated rate, maturity date, payment frequency, income received and current estimated value.
+
+Where no reliable live market price exists, investors should use statements or values from their broker, bank, custodian or issuer rather than inventing a market value.
+
+A portfolio tracker can organize these figures, but it does not replace the legal terms of the security or professional advice about a particular bond.
+""",
+    },
+    "multi-asset-allocation": {
+        "title": "How to Think About a Multi-Asset Portfolio",
+        "category": "Portfolio Management",
+        "summary": "A framework for viewing stocks, ETFs, bonds, crypto and cash as one portfolio instead of separate accounts.",
+        "body": """
+### Your accounts are not your asset allocation
+
+Investors often organize their finances according to where assets are held: one brokerage account for stocks, another platform for ETFs, a crypto exchange, a bank account and perhaps government bonds purchased through a separate institution.
+
+That organization is convenient operationally, but it can hide the real investment picture. Asset allocation is determined by what you own, not by how many apps or accounts contain the investments.
+
+### Start with the total portfolio
+
+A useful portfolio review begins by adding the current value of every investment and cash balance that belongs in the portfolio. Each holding can then be expressed as a percentage of the total.
+
+This allows an investor to answer questions such as: How much is in equities? How much is in fixed income? How much is in crypto? How much is sitting in cash?
+
+Without a consolidated view, it is easy to underestimate a large exposure simply because it is divided across several platforms.
+
+### Look through overlapping holdings
+
+ETFs can create hidden overlap. An investor may own a broad-market ETF while also holding several of the ETF's largest companies individually. The portfolio may appear diversified because it contains many tickers, but the economic exposure can still be concentrated.
+
+The same issue can occur across asset classes. A technology-heavy stock portfolio and a technology-focused ETF may respond to many of the same forces.
+
+A unified view is therefore a starting point, not the end of portfolio analysis. Understanding what sits inside pooled investments can provide additional context.
+
+### Cash has a role too
+
+Cash is sometimes ignored because it does not feel like an investment position. But cash affects portfolio risk, liquidity and the ability to respond to opportunities or meet near-term obligations.
+
+A portfolio with 20% cash has a different risk profile from one that is fully invested. Including cash in the total allocation provides a more honest picture.
+
+### Fixed income can change the portfolio's behaviour
+
+Bonds and Treasury bills may provide income and can behave differently from equities or cryptoassets. Their role depends on maturity, credit quality and interest-rate sensitivity.
+
+Short-term government bills, for example, may behave very differently from long-duration corporate bonds. Simply labelling both as “bonds” can hide important differences.
+
+For a high-level allocation dashboard, grouping them as fixed income is useful. For deeper analysis, the underlying maturity and credit exposures still matter.
+
+### Crypto can dominate faster than expected
+
+Highly volatile assets can change portfolio weights quickly. A crypto position that began as a small percentage of a portfolio can become much larger after a strong price move.
+
+This is why allocation should be reviewed using current values rather than original purchase amounts alone. A portfolio's present risk can differ substantially from its starting allocation.
+
+### Currency is another layer of exposure
+
+International investors frequently hold assets in several currencies. A US stock, a local government bond and a global ETF may all be part of the same portfolio but reported in different currencies.
+
+To calculate meaningful portfolio weights, values need to be translated into one consistent reporting currency. Exchange-rate movements then become part of the investor's overall wealth experience.
+
+The reporting currency should usually be one that is meaningful to the investor's financial life, although investors may also choose to review native-currency performance separately.
+
+### Allocation is not the same as a recommendation
+
+There is no universally correct percentage for stocks, bonds, cash, crypto or any other asset. Appropriate allocation depends on objectives, time horizon, liquidity needs, financial circumstances and tolerance for losses.
+
+A dashboard can show the current allocation clearly. It cannot determine what allocation is appropriate for a particular person.
+
+### A practical review process
+
+Start by consolidating all holdings into one reporting currency. Review the percentage in each major asset class. Identify the largest individual holdings. Look for overlap between direct holdings and ETFs. Check how much cash is available. Review the maturity profile of fixed-income investments and consider whether one volatile asset has become unusually large.
+
+The purpose of a unified dashboard is not to encourage constant trading. Its value is that it turns a fragmented collection of accounts into one coherent financial picture.
+
+When investors can see the entire portfolio, they are better able to understand where their exposure actually sits.
+""",
+    },
+    "why-unified-portfolio-tracking": {
+        "title": "Why a Unified Portfolio View Matters",
+        "category": "Portfolio Management",
+        "summary": "How fragmented brokers, exchanges and investment accounts can make it harder to understand your true portfolio.",
+        "body": """
+### The modern portfolio is often fragmented
+
+Investing has become easier to access, but managing the full picture can become harder. An investor may hold individual shares with one broker, ETFs with another, cryptocurrency on an exchange, Treasury bills through a bank and cash in several currencies.
+
+Each platform may provide a perfectly good view of the assets held there. The problem appears when the investor wants to answer a broader question: What does my entire portfolio look like right now?
+
+### Separate dashboards create separate perspectives
+
+A brokerage dashboard can show stock performance accurately while knowing nothing about the investor's crypto holdings. A crypto exchange can show digital-asset gains while being unaware of government bonds held elsewhere.
+
+Looking at each platform separately can therefore create an incomplete sense of performance and risk. A strong gain on one account may feel significant even though it represents a small portion of total wealth. A concentrated position may look reasonable on one platform while becoming much larger when overlapping ETF exposure is included.
+
+### Total portfolio value is the starting point
+
+A unified tracker combines the values of different investment accounts into one reporting currency. This gives the investor a single estimate of total portfolio value.
+
+That number is useful, but the bigger benefit comes from what can be calculated from it: asset-class weights, concentration, total cash, largest holdings and changes in overall portfolio value.
+
+The objective is not to replace the statements issued by brokers, exchanges, banks or custodians. Those remain the authoritative records for transactions and legal ownership. A unified dashboard is an organizational layer that helps an investor interpret the combined picture.
+
+### Performance should not be confused with deposits
+
+Fragmented accounts can also make performance measurement difficult. Adding new money increases portfolio value even though no investment gain occurred. Moving money from one platform to another can look like a withdrawal in one account and a deposit in another.
+
+A useful tracking process separates capital contributions from investment performance. This is especially important when investors regularly add money to different platforms.
+
+### One reporting currency improves comparability
+
+Investors with international holdings often see values in several currencies. Comparing a local-currency bond with a US-dollar stock and a sterling-denominated ETF requires a common unit of measurement.
+
+A unified dashboard can translate each holding into one reporting currency for allocation purposes. This does not remove currency risk; it makes that risk easier to observe.
+
+Exchange rates can materially change the home-currency result of foreign investments, so the conversion assumptions should be visible and kept current.
+
+### Allocation becomes easier to understand
+
+Once every holding is expressed consistently, the investor can see how much of the total portfolio belongs to stocks, ETFs, bonds, crypto and cash.
+
+This can reveal surprises. An investor who thinks of themselves as primarily a stock investor may discover that crypto has grown into a large allocation. Someone who owns several ETFs may discover significant overlap with individual stocks.
+
+The unified view does not tell the investor what to change. It simply makes the current position harder to misunderstand.
+
+### Less switching can also improve the investing experience
+
+Constantly moving between platforms creates friction. It takes time, and it encourages investors to focus on whichever account they opened most recently.
+
+A consolidated dashboard can reduce the need to open several apps merely to check balances. Individual platforms are still needed for trading, deposits, withdrawals and official records, but routine monitoring can happen from one place.
+
+### Security and privacy still matter
+
+A portfolio tracker should collect only the information necessary for its purpose and should be transparent about what it does with user data. Investors should also understand whether a tracker connects directly to financial institutions or relies on manually entered holdings.
+
+Manually entered portfolio tracking avoids giving a third party trading authority, but users still need to protect account credentials and use strong authentication practices.
+
+### The useful question is broader than “How did this account perform?”
+
+A fragmented approach asks how each account performed separately. A portfolio approach asks how all investments work together.
+
+That broader perspective is particularly useful for investors who hold more than one asset class or invest across several countries and currencies.
+
+The value of unified tracking is therefore not simply convenience. It is clarity: one place to see the size, composition and direction of the portfolio as a whole.
+""",
+    },
 }
 
 
@@ -1371,7 +1720,6 @@ def render_learn_page():
 
         st.markdown("")
 
-    render_ad_slot(ADSENSE_MID_SLOT, height=130)
 
     st.markdown(
         """
