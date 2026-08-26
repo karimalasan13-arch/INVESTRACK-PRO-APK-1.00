@@ -30,6 +30,15 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 
+        # Required so nginx can modify Streamlit's HTML response.
+        proxy_set_header Accept-Encoding "";
+
+        # Insert a server-rendered canonical URL into the actual HTML <head>.
+        # $is_args$args preserves routes such as ?article=dca.
+        sub_filter_types text/html;
+        sub_filter_once on;
+        sub_filter '<head>' '<head><link rel="canonical" href="https://www.investrackpro.com$uri$is_args$args">';
+
         proxy_read_timeout 86400;
     }
 }
