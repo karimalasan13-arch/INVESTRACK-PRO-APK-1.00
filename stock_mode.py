@@ -38,7 +38,21 @@ CURRENCY_OPTIONS = [
     {"code": "CAD", "name": "Canadian Dollar", "symbol": "C$"},
     {"code": "CHF", "name": "Swiss Franc", "symbol": "CHF"},
     {"code": "EUR", "name": "Euro", "symbol": "€"},
+    {"code": "PHP", "name": "Philippine Peso", "symbol": "₱"},
+    {"code": "NZD", "name": "New Zealand Dollar", "symbol": "NZ$"},
+    {"code": "AED", "name": "UAE Dirham", "symbol": "د.إ"},
 ]
+
+
+# Indicative initial USD conversion rates for newly supported currencies.
+# These are NOT live quotes. Users should confirm and save their preferred rate.
+NEW_CURRENCY_INITIAL_RATES = {"PHP": 58.0, "NZD": 1.7, "AED": 3.6725}
+
+def suggested_new_currency_rate(code, saved_index, chosen_index, stored_rate):
+    if chosen_index != saved_index and code in NEW_CURRENCY_INITIAL_RATES:
+        return NEW_CURRENCY_INITIAL_RATES[code]
+    return stored_rate
+
 
 
 PLOTLY_CHART_CONFIG = {
@@ -334,189 +348,6 @@ def render_donut_chart(donut_df, value_col, selected_currency):
     )
 
 
-
-
-def render_performance_trend(history_df, current_value, currency, currency_code, uirevision):
-    """Render a Robinhood-style portfolio performance chart with range controls."""
-    if history_df is None or len(history_df) < 2:
-        return False
-
-    h = history_df.copy()
-    h["timestamp"] = pd.to_datetime(h["timestamp"], errors="coerce")
-    h["value_ghs"] = pd.to_numeric(h["value_ghs"], errors="coerce")
-    h = h.dropna(subset=["timestamp", "value_ghs"]).sort_values("timestamp")
-    h = h.drop_duplicates(subset=["timestamp"], keep="last")
-
-    if len(h) < 2:
-        return False
-
-    # Keep the chart anchored to the live value even when the most recent
-    # autosave/snapshot predates the current dashboard refresh.
-    now = pd.Timestamp.now(tz=None)
-    last_ts = h["timestamp"].iloc[-1]
-    if getattr(last_ts, "tzinfo", None) is not None:
-        now = pd.Timestamp.now(tz=last_ts.tzinfo)
-
-    live_row = pd.DataFrame({
-        "timestamp": [now],
-        "value_ghs": [float(current_value)],
-    })
-    h = pd.concat([h[["timestamp", "value_ghs"]], live_row], ignore_index=True)
-    h = h.dropna().sort_values("timestamp")
-
-    end = h["timestamp"].iloc[-1]
-    ranges = [
-        ("1W", end - pd.Timedelta(days=7)),
-        ("1M", end - pd.DateOffset(months=1)),
-        ("3M", end - pd.DateOffset(months=3)),
-        ("YTD", pd.Timestamp(year=end.year, month=1, day=1, tz=end.tz)),
-        ("1Y", end - pd.DateOffset(years=1)),
-        ("ALL", None),
-    ]
-
-    symbol = currency["symbol"]
-    fig = go.Figure()
-    period_frames = []
-    period_meta = []
-
-    for label, cutoff in ranges:
-        period = h.copy() if cutoff is None else h[h["timestamp"] >= cutoff].copy()
-
-        # If the selected period contains only the live point, include the
-        # immediately preceding observation so the user still sees a change.
-        if len(period) < 2 and cutoff is not None:
-            earlier = h[h["timestamp"] < cutoff].tail(1)
-            period = pd.concat([earlier, period], ignore_index=True).sort_values("timestamp")
-
-        if period.empty:
-            period = h.tail(1).copy()
-
-        start_value = float(period["value_ghs"].iloc[0])
-        end_value = float(period["value_ghs"].iloc[-1])
-        change = end_value - start_value
-        change_pct = (change / start_value * 100.0) if start_value else 0.0
-        positive = change >= 0
-        line_color = "#22c55e" if positive else "#ef4444"
-        fill_color = "rgba(34,197,94,0.16)" if positive else "rgba(239,68,68,0.14)"
-
-        period_frames.append(period)
-        period_meta.append((label, end_value, change, change_pct, line_color, fill_color))
-
-        fig.add_trace(go.Scatter(
-            x=period["timestamp"],
-            y=period["value_ghs"],
-            mode="lines",
-            visible=False,
-            line=dict(color=line_color, width=3, shape="spline", smoothing=0.85),
-            fill="tozeroy",
-            fillcolor=fill_color,
-            hovertemplate=(
-                "%{x|%d %b %Y}<br>"
-                + f"{symbol} %{{y:,.2f}}<extra></extra>"
-            ),
-        ))
-
-    # Default to 1Y, matching the reference design.
-    default_idx = 4
-    fig.data[default_idx].visible = True
-
-    def annotations_for(idx):
-        label, end_value, change, change_pct, line_color, _ = period_meta[idx]
-        arrow = "▲" if change >= 0 else "▼"
-        sign = "+" if change >= 0 else "-"
-        return [
-            dict(
-                x=0, y=1.18, xref="paper", yref="paper",
-                text=f"<b>{symbol}{end_value:,.2f}</b>",
-                showarrow=False, xanchor="left", yanchor="top",
-                font=dict(size=30, color="#f8fafc"),
-            ),
-            dict(
-                x=0, y=1.07, xref="paper", yref="paper",
-                text=(
-                    f"<b>{arrow} {sign}{symbol}{abs(change):,.2f} "
-                    f"({sign}{abs(change_pct):.2f}%) · {label}</b>"
-                ),
-                showarrow=False, xanchor="left", yanchor="top",
-                font=dict(size=15, color=line_color),
-            ),
-        ]
-
-    buttons = []
-    for idx, (label, *_rest) in enumerate(period_meta):
-        visible = [False] * len(period_meta)
-        visible[idx] = True
-        buttons.append(dict(
-            label=f"<b>{label}</b>",
-            method="update",
-            args=[
-                {"visible": visible},
-                {"annotations": annotations_for(idx)},
-            ],
-        ))
-
-    fig.update_layout(
-        height=500,
-        margin=dict(l=8, r=18, t=105, b=78),
-        paper_bgcolor="#050505",
-        plot_bgcolor="#050505",
-        hovermode="x",
-        showlegend=False,
-        dragmode=False,
-        uirevision=uirevision,
-        annotations=annotations_for(default_idx),
-        updatemenus=[dict(
-            type="buttons",
-            direction="right",
-            active=default_idx,
-            x=0.0,
-            xanchor="left",
-            y=-0.14,
-            yanchor="top",
-            pad=dict(r=6, t=4),
-            bgcolor="#111827",
-            bordercolor="#273244",
-            borderwidth=1,
-            font=dict(size=13, color="#22c55e"),
-            buttons=buttons,
-        )],
-        xaxis=dict(
-            showgrid=False,
-            zeroline=False,
-            showticklabels=False,
-            fixedrange=True,
-        ),
-        yaxis=dict(
-            side="right",
-            showgrid=True,
-            gridcolor="rgba(148,163,184,0.22)",
-            griddash="dot",
-            zeroline=False,
-            tickformat="~s",
-            tickfont=dict(color="#a7adb8", size=12),
-            fixedrange=True,
-            rangemode="tozero",
-            nticks=5,
-        ),
-        hoverlabel=dict(
-            bgcolor="#111827",
-            bordercolor="#334155",
-            font=dict(color="#f8fafc"),
-        ),
-    )
-
-    st.plotly_chart(
-        fig,
-        use_container_width=True,
-        config={
-            "displayModeBar": False,
-            "displaylogo": False,
-            "responsive": True,
-        },
-    )
-    return True
-
-
 def stock_app():
     st.title("Stock Portfolio Dashboard")
 
@@ -548,12 +379,16 @@ def stock_app():
     selected_index = currency_labels.index(selected_label)
     selected_currency = CURRENCY_OPTIONS[selected_index]
     currency_code = selected_currency["code"]
+    rate = suggested_new_currency_rate(currency_code, currency_index, selected_index, rate)
 
     rate = st.sidebar.number_input(
         f"USD → {currency_code}",
         value=float(rate),
         step=0.1
     )
+
+    if currency_code in NEW_CURRENCY_INITIAL_RATES:
+        st.sidebar.caption("FX rate is manually editable. Initial suggested rate is indicative, not live; verify before saving.")
 
     invested = st.sidebar.number_input(
         f"Total Invested ({currency_code})",
@@ -727,14 +562,31 @@ def stock_app():
 
     st.subheader("Portfolio Trend")
 
-    if not render_performance_trend(
-        history,
-        total_value,
-        selected_currency,
-        currency_code,
-        "stock_portfolio_trend",
-    ):
-        st.caption("Portfolio trend will appear after at least two snapshots.")
+    if len(history) >= 2:
+        fig = go.Figure()
+
+        fig.add_trace(go.Scatter(
+            x=history["timestamp"],
+            y=history["value_ghs"],
+            mode="lines",
+            fill="tozeroy",
+            line=dict(shape="spline", smoothing=1.2, width=3),
+            hovertemplate=f'{selected_currency["symbol"]} %{{y:,.2f}}<extra></extra>'
+        ))
+
+        fig.update_layout(
+            margin=dict(l=10, r=10, t=10, b=10),
+            hovermode="x unified",
+            yaxis_title=f"Value ({currency_code})",
+            dragmode="pan",
+            uirevision="stock_portfolio_trend"
+        )
+
+        st.plotly_chart(
+            fig,
+            use_container_width=True,
+            config=PLOTLY_CHART_CONFIG
+        )
 
     st.subheader("All-Time PnL Curve")
 
