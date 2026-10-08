@@ -5,7 +5,6 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from PIL import Image
 import requests
 
 import streamlit as st
@@ -14,12 +13,9 @@ import streamlit.components.v1 as components
 from auth import ensure_auth, login_ui, logout
 
 
-APP_ICON_PATH = Path(__file__).parent / "static" / "icon-192.png"
-APP_PAGE_ICON = Image.open(APP_ICON_PATH) if APP_ICON_PATH.exists() else "📈"
-
 st.set_page_config(
-    page_title="InvesTrack Pro | Unified Investment Portfolio Tracker",
-    page_icon=APP_PAGE_ICON,
+    page_title="InvesTrack Pro",
+    page_icon="📈",
     layout="wide",
 )
 
@@ -452,92 +448,7 @@ def get_user_initials(email):
 # -----------------------------------------
 # SEO + SHAREABLE PUBLIC URL ROUTING
 # -----------------------------------------
-# Canonical public website.
-# Render already redirects the bare domain to www, so all public SEO signals
-# should point to the final, indexable www host instead of creating duplicate
-# canonical signals for the bare domain or app subdomain.
-SITE_URL = "https://www.investrackpro.com"
-
-SEO_TITLE = "InvesTrack Pro | Unified Investment Portfolio Tracker"
-SEO_DESCRIPTION = (
-    "Track stocks, ETFs, bonds, cryptocurrency and cash in one unified "
-    "multi-currency portfolio dashboard."
-)
-SEO_SITE_NAME = "InvesTrack Pro"
-SEO_ICON_URL = f"{SITE_URL}/app/static/icon-192.png"
-
-
-def inject_site_identity():
-    """
-    Reinforce InvesTrack Pro's public identity in the browser document.
-    Google can still choose its own search-result presentation after recrawling.
-    """
-    website_schema = """
-    {
-      "@context": "https://schema.org",
-      "@type": "WebSite",
-      "name": "InvesTrack Pro",
-      "alternateName": "InvesTrackPro",
-      "url": "https://www.investrackpro.com/"
-    }
-    """.strip()
-
-    js = """
-    <script>
-    (function() {
-      const doc = window.parent.document;
-      if (!doc) return;
-
-      doc.title = %s;
-
-      function upsertMeta(name, content) {
-        let el = doc.head.querySelector('meta[name="' + name + '"]');
-        if (!el) {
-          el = doc.createElement('meta');
-          el.setAttribute('name', name);
-          doc.head.appendChild(el);
-        }
-        el.setAttribute('content', content);
-      }
-
-      function upsertLink(rel, href) {
-        let el = doc.head.querySelector('link[rel="' + rel + '"]');
-        if (!el) {
-          el = doc.createElement('link');
-          el.setAttribute('rel', rel);
-          doc.head.appendChild(el);
-        }
-        el.setAttribute('href', href);
-      }
-
-      upsertMeta('description', %s);
-      upsertMeta('application-name', %s);
-      upsertLink('canonical', %s);
-      upsertLink('icon', %s);
-      upsertLink('shortcut icon', %s);
-
-      let ld = doc.head.querySelector('script[data-investrack-website-schema]');
-      if (!ld) {
-        ld = doc.createElement('script');
-        ld.type = 'application/ld+json';
-        ld.setAttribute('data-investrack-website-schema', 'true');
-        doc.head.appendChild(ld);
-      }
-      ld.textContent = %s;
-    })();
-    </script>
-    """ % (
-        repr(SEO_TITLE),
-        repr(SEO_DESCRIPTION),
-        repr(SEO_SITE_NAME),
-        repr(f"{SITE_URL}/"),
-        repr(SEO_ICON_URL),
-        repr(SEO_ICON_URL),
-        repr(website_schema),
-    )
-
-    components.html(js, height=0, width=0)
-
+SITE_URL = "https://investrackpro.com"
 
 PAGE_QUERY_MAP = {
     "Home": "home",
@@ -578,8 +489,6 @@ def write_route_to_url(page_name, article_slug=None):
         page_key = PAGE_QUERY_MAP.get(page_name)
         if page_key:
             st.query_params["page"] = page_key
-
-inject_site_identity()
 
 # -----------------------------------------
 # COMMON SITE NAVIGATION
