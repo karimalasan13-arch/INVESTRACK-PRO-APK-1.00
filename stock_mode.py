@@ -1,3 +1,4 @@
+from portfolio_charts import render_portfolio_charts
 import streamlit as st
 import pandas as pd
 from datetime import datetime
@@ -560,62 +561,10 @@ def stock_app():
             use_container_width=True
         )
 
-    st.subheader("Portfolio Trend")
-
-    if len(history) >= 2:
-        fig = go.Figure()
-
-        fig.add_trace(go.Scatter(
-            x=history["timestamp"],
-            y=history["value_ghs"],
-            mode="lines",
-            fill="tozeroy",
-            line=dict(shape="spline", smoothing=1.2, width=3),
-            hovertemplate=f'{selected_currency["symbol"]} %{{y:,.2f}}<extra></extra>'
-        ))
-
-        fig.update_layout(
-            margin=dict(l=10, r=10, t=10, b=10),
-            hovermode="x unified",
-            yaxis_title=f"Value ({currency_code})",
-            dragmode="pan",
-            uirevision="stock_portfolio_trend"
-        )
-
-        st.plotly_chart(
-            fig,
-            use_container_width=True,
-            config=PLOTLY_CHART_CONFIG
-        )
-
-    st.subheader("All-Time PnL Curve")
-
-    pnl_df = build_pnl(history, invested)
-
-    if len(pnl_df) >= 2:
-        fig = go.Figure()
-
-        fig.add_trace(go.Scatter(
-            x=pnl_df["timestamp"],
-            y=pnl_df["pnl"],
-            mode="lines",
-            line=dict(shape="spline", smoothing=1.2, width=3),
-            hovertemplate=f'{selected_currency["symbol"]} %{{y:,.2f}}<extra></extra>'
-        ))
-
-        fig.update_layout(
-            margin=dict(l=10, r=10, b=10, t=10),
-            hovermode="x unified",
-            yaxis_title=f"PnL ({currency_code})",
-            dragmode="pan",
-            uirevision="stock_pnl_curve"
-        )
-
-        st.plotly_chart(
-            fig,
-            use_container_width=True,
-            config=PLOTLY_CHART_CONFIG
-        )
+    st.subheader("Portfolio Performance")
+    render_portfolio_charts(history, mode="stock", currency_symbol=selected_currency["symbol"],
+                            currency_code=currency_code, invested=invested,
+                            pnl_title="Cumulative Return" if "stock" == "bond" else "Cumulative P&L")
 
     st.markdown("---")
 
