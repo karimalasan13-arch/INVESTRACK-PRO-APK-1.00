@@ -1,3 +1,4 @@
+from hourly_history import hourly_history
 from portfolio_charts import render_portfolio_charts
 from datetime import datetime
 
@@ -761,6 +762,12 @@ def overview_app():
     st.markdown("---")
     st.subheader("Unified Portfolio Performance")
     history = clean_history(load_overview_history(user_id))
+    try:
+        scheduled_history = hourly_history(user_id, "overview", master_rate)
+        if not scheduled_history.empty:
+            history = scheduled_history
+    except Exception:
+        pass  # SQL migration not yet applied; legacy charts remain available.
     render_portfolio_charts(history, mode="overview", currency_symbol=master_currency["symbol"],
                             currency_code=master_code, invested=total_invested)
 
