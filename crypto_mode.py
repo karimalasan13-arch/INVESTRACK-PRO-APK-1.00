@@ -1,3 +1,4 @@
+from portfolio_charts import render_portfolio_charts
 import streamlit as st
 import pandas as pd
 from datetime import datetime
@@ -579,71 +580,9 @@ def crypto_app():
     if total_value > 0 and not data_degraded:
         autosave_portfolio_value(user_id, total_value, "crypto")
 
-    st.subheader("📈 Portfolio Trend")
-
-    if len(history) >= 2:
-        h = pd.DataFrame(history)
-        h["timestamp"] = pd.to_datetime(h["timestamp"], errors="coerce")
-        h["value_ghs"] = pd.to_numeric(h["value_ghs"], errors="coerce")
-        h = h.dropna()
-
-        fig = go.Figure()
-
-        fig.add_trace(go.Scatter(
-            x=h["timestamp"],
-            y=h["value_ghs"],
-            mode="lines",
-            line=dict(shape="spline", smoothing=1.1, width=3),
-            fill="tozeroy",
-            hovertemplate=f'{selected_currency["symbol"]} %{{y:,.2f}}<extra></extra>'
-        ))
-
-        fig.update_layout(
-            yaxis_title=f"Value ({currency_code})",
-            hovermode="x unified",
-            dragmode="pan",
-            uirevision="crypto_portfolio_trend"
-        )
-
-        st.plotly_chart(
-            fig,
-            use_container_width=True,
-            config=PLOTLY_CHART_CONFIG
-        )
-
-    else:
-        st.info("Waiting for more history data...")
-
-    st.subheader("📊 All-Time PnL Curve")
-
-    pnl_df = build_pnl_history(history, invested)
-
-    if len(pnl_df) >= 2:
-        fig = go.Figure()
-
-        fig.add_trace(go.Scatter(
-            x=pnl_df["timestamp"],
-            y=pnl_df["pnl"],
-            mode="lines",
-            line=dict(shape="spline", smoothing=1.1, width=3),
-            hovertemplate=f'{selected_currency["symbol"]} %{{y:,.2f}}<extra></extra>'
-        ))
-
-        fig.update_layout(
-            yaxis_title=f"PnL ({currency_code})",
-            hovermode="x unified",
-            dragmode="pan",
-            uirevision="crypto_pnl_curve"
-        )
-
-        st.plotly_chart(
-            fig,
-            use_container_width=True,
-            config=PLOTLY_CHART_CONFIG
-        )
-
-    else:
-        st.info("PnL history will appear soon.")
+    st.subheader("Portfolio Performance")
+    render_portfolio_charts(history, mode="crypto", currency_symbol=selected_currency["symbol"],
+                            currency_code=currency_code, invested=invested)
 
     st.subheader("Allocation")
 
