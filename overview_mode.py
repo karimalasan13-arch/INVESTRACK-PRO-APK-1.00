@@ -1,3 +1,4 @@
+from portfolio_charts import render_portfolio_charts
 from datetime import datetime
 
 import pandas as pd
@@ -758,48 +759,10 @@ def overview_app():
     # that may have been recorded in different display currencies.
     # ---------------------------------------------------------
     st.markdown("---")
-    st.subheader("Unified Portfolio Trend")
-
+    st.subheader("Unified Portfolio Performance")
     history = clean_history(load_overview_history(user_id))
-
-    if len(history) >= 2:
-        fig = go.Figure()
-        fig.add_trace(
-            go.Scatter(
-                x=history["timestamp"],
-                y=history["value_ghs"],
-                mode="lines",
-                fill="tozeroy",
-                line=dict(
-                    shape="spline",
-                    smoothing=1.15,
-                    width=3,
-                ),
-                hovertemplate=(
-                    f'{master_currency["symbol"]} '
-                    "%{y:,.2f}<extra></extra>"
-                ),
-            )
-        )
-        fig.update_layout(
-            margin=dict(l=10, r=10, t=10, b=10),
-            hovermode="x unified",
-            yaxis_title=f"Value ({master_code})",
-            dragmode="pan",
-            uirevision="unified_portfolio_trend",
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-        )
-        st.plotly_chart(
-            fig,
-            use_container_width=True,
-            config=PLOTLY_CHART_CONFIG,
-        )
-    else:
-        st.caption(
-            "The unified trend will appear after at least two Overview "
-            "snapshots. Existing asset-class histories remain untouched."
-        )
+    render_portfolio_charts(history, mode="overview", currency_symbol=master_currency["symbol"],
+                            currency_code=master_code, invested=total_invested)
 
     snap_col, note_col = st.columns([1, 3])
 
