@@ -1,3 +1,4 @@
+from hourly_history import hourly_history
 from portfolio_charts import render_portfolio_charts
 import streamlit as st
 import pandas as pd
@@ -562,6 +563,12 @@ def stock_app():
         )
 
     st.subheader("Portfolio Performance")
+    try:
+        scheduled_history = hourly_history(user_id, "stock", rate)
+        if not scheduled_history.empty:
+            history = scheduled_history
+    except Exception:
+        pass  # SQL migration not yet applied; legacy charts remain available.
     render_portfolio_charts(history, mode="stock", currency_symbol=selected_currency["symbol"],
                             currency_code=currency_code, invested=invested,
                             pnl_title="Cumulative Return" if "stock" == "bond" else "Cumulative P&L")
