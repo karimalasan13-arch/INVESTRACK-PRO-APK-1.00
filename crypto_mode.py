@@ -1,3 +1,4 @@
+from hourly_history import hourly_history
 from portfolio_charts import render_portfolio_charts
 import streamlit as st
 import pandas as pd
@@ -581,6 +582,12 @@ def crypto_app():
         autosave_portfolio_value(user_id, total_value, "crypto")
 
     st.subheader("Portfolio Performance")
+    try:
+        scheduled_history = hourly_history(user_id, "crypto", rate)
+        if not scheduled_history.empty:
+            history = scheduled_history
+    except Exception:
+        pass  # SQL migration not yet applied; legacy charts remain available.
     render_portfolio_charts(history, mode="crypto", currency_symbol=selected_currency["symbol"],
                             currency_code=currency_code, invested=invested)
 
