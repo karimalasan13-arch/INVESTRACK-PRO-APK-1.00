@@ -1,3 +1,4 @@
+from hourly_history import hourly_history
 from portfolio_charts import render_portfolio_charts
 import uuid
 from datetime import date, datetime
@@ -906,6 +907,12 @@ def bond_app():
     history = clean_history(load_portfolio_history(user_id))
 
     st.subheader("Portfolio Performance")
+    try:
+        scheduled_history = hourly_history(user_id, "bond", usd_to_display_rate)
+        if not scheduled_history.empty:
+            history = scheduled_history
+    except Exception:
+        pass  # SQL migration not yet applied; legacy charts remain available.
     render_portfolio_charts(history, mode="bond", currency_symbol=selected_currency["symbol"],
                             currency_code=currency_code, invested=total_invested,
                             pnl_title="Cumulative Return" if "bond" == "bond" else "Cumulative P&L")
