@@ -62,8 +62,16 @@ def render_portfolio_charts(history, *, mode, currency_symbol, currency_code,
         st.plotly_chart(fig, use_container_width=True, config=CHART_CONFIG,
                         key=f"iv_chart_{mode}_{'value' if fill else 'pnl'}")
     draw("Portfolio Value", visible["value_ghs"], "#2DD4BF", fill=True)
-    if invested is not None:
+    if "pnl" in visible.columns and visible["pnl"].notna().all():
+        pnl = visible["pnl"]
+    elif invested is not None:
         pnl = visible["value_ghs"] - float(invested)
+    else:
+        pnl = None
+    if pnl is not None:
         draw(pnl_title, pnl, "#34D399" if pnl.iloc[-1] >= 0 else "#FB7185")
-        st.caption("Historical P&L is indicative: it uses the current invested amount. Deposits, withdrawals and cost-basis changes are not reconstructed.")
+        if "pnl" not in visible.columns:
+            st.caption("Historical P&L is indicative: it uses the current invested amount. Deposits, withdrawals and cost-basis changes are not reconstructed.")
+        else:
+            st.caption("Hourly P&L uses invested capital recorded at each snapshot; past currency rates are not reconstructed.")
     st.caption(f"{len(visible):,} actual snapshots • {period} • {currency_code}. Curves smooth the display only; no values are generated between observations.")
