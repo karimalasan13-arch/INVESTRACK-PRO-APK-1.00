@@ -1,3 +1,4 @@
+from portfolio_charts import render_portfolio_charts
 import uuid
 from datetime import date, datetime
 
@@ -904,84 +905,10 @@ def bond_app():
 
     history = clean_history(load_portfolio_history(user_id))
 
-    st.subheader("Portfolio Trend")
-
-    if len(history) >= 2:
-        fig = go.Figure()
-
-        fig.add_trace(
-            go.Scatter(
-                x=history["timestamp"],
-                y=history["value_ghs"],
-                mode="lines",
-                fill="tozeroy",
-                line=dict(
-                    shape="spline",
-                    smoothing=1.2,
-                    width=3,
-                ),
-                hovertemplate=(
-                    f'{selected_currency["symbol"]} '
-                    "%{y:,.2f}<extra></extra>"
-                ),
-            )
-        )
-
-        fig.update_layout(
-            margin=dict(l=10, r=10, t=10, b=10),
-            hovermode="x unified",
-            yaxis_title=f"Value ({currency_code})",
-            dragmode="pan",
-            uirevision="bond_portfolio_trend",
-        )
-
-        st.plotly_chart(
-            fig,
-            use_container_width=True,
-            config=PLOTLY_CHART_CONFIG,
-        )
-    else:
-        st.caption(
-            "Portfolio trend will appear after at least two bond snapshots."
-        )
-
-    st.subheader("All-Time Return Curve")
-
-    pnl_df = build_pnl(history, total_invested)
-
-    if len(pnl_df) >= 2:
-        fig = go.Figure()
-
-        fig.add_trace(
-            go.Scatter(
-                x=pnl_df["timestamp"],
-                y=pnl_df["pnl"],
-                mode="lines",
-                line=dict(
-                    shape="spline",
-                    smoothing=1.2,
-                    width=3,
-                ),
-                hovertemplate=(
-                    f'{selected_currency["symbol"]} '
-                    "%{y:,.2f}<extra></extra>"
-                ),
-            )
-        )
-
-        fig.update_layout(
-            margin=dict(l=10, r=10, b=10, t=10),
-            hovermode="x unified",
-            yaxis_title=f"Return ({currency_code})",
-            dragmode="pan",
-            uirevision="bond_return_curve",
-        )
-
-        st.plotly_chart(
-            fig,
-            use_container_width=True,
-            config=PLOTLY_CHART_CONFIG,
-        )
+    st.subheader("Portfolio Performance")
+    render_portfolio_charts(history, mode="bond", currency_symbol=selected_currency["symbol"],
+                            currency_code=currency_code, invested=total_invested,
+                            pnl_title="Cumulative Return" if "bond" == "bond" else "Cumulative P&L")
 
     st.markdown("---")
     st.subheader("Allocation")
