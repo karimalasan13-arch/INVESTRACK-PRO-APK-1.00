@@ -4,7 +4,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-PERIODS = ("24H", "7D", "30D", "90D", "1Y", "ALL")
+PERIODS = ("1H", "4H", "24H", "7D", "30D", "90D", "1Y", "ALL")
 CHART_CONFIG = {"displaylogo": False, "scrollZoom": False, "responsive": True,
                 "modeBarButtonsToRemove": ["select2d", "lasso2d"]}
 
@@ -22,7 +22,7 @@ def _history_frame(history):
 def _filter(df, period):
     if period == "ALL" or df.empty:
         return df
-    hours = {"24H":24, "7D":168, "30D":720, "90D":2160, "1Y":8760}[period]
+    hours = {"1H":1, "4H":4, "24H":24, "7D":168, "30D":720, "90D":2160, "1Y":8760}[period]
     now = pd.Timestamp.now(tz="UTC")
     return df.loc[df["timestamp"] >= now - pd.Timedelta(hours=hours)]
 
