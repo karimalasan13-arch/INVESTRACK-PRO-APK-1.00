@@ -2258,52 +2258,9 @@ def render_partner_cta():
     )
 
 
-# -----------------------------------------
-# ANDROID AD TIMER
-# Only active after authentication.
-# -----------------------------------------
-def render_android_ad_timer():
-    components.html(
-        f"""
-        <script>
-            (function() {{
-                if (window.__investrackAdTimerStarted) {{
-                    return;
-                }}
-
-                window.__investrackAdTimerStarted = true;
-
-                function triggerAndroidAd() {{
-                    var now = Math.floor(Date.now() / 1000);
-
-                    var intentUrl =
-                        "intent://show-ad?reason=active_usage&t=" + now +
-                        "#Intent;" +
-                        "scheme=investrackpro;" +
-                        "package=com.investrackpro.app;" +
-                        "end";
-
-                    try {{
-                        window.top.location.href = intentUrl;
-                    }} catch (e) {{
-                        try {{
-                            window.parent.location.href = intentUrl;
-                        }} catch (e2) {{
-                            window.location.href = intentUrl;
-                        }}
-                    }}
-                }}
-
-                setInterval(
-                    triggerAndroidAd,
-                    {ANDROID_AD_TIMER_SECONDS * 1000}
-                );
-            }})();
-        </script>
-        """,
-        height=0,
-    )
-
+# Android WebView reads the selected mode from the page URL.
+# Streamlit remains the source of truth for the actual selected mode.
+# This does not display ads in a regular web browser.
 
 # -----------------------------------------
 # AUTHENTICATED DASHBOARD
@@ -2333,7 +2290,6 @@ def render_dashboard():
 
     user = st.session_state.user
 
-    render_android_ad_timer()
 
     refresh_interval = 60
     current_time = time.time()
@@ -2356,11 +2312,18 @@ def render_dashboard():
     if st.session_state.selected_mode not in mode_options:
         st.session_state.selected_mode = "Overview"
 
+    # Expose the current dashboard mode in the URL for the Android WebView.
+    # Set an initial value before the user changes modes.
+    if str(st.query_params.get("iv_mode", "")).lower() not in {"overview", "crypto", "stocks", "etfs", "bonds"}:
+        st.query_params["iv_mode"] = st.session_state.selected_mode.lower()
+
     def on_mode_change():
         new_mode = st.session_state.mode_radio
 
-        if new_mode in mode_options:
+        if new_mode in mode_options and new_mode != st.session_state.selected_mode:
             st.session_state.selected_mode = new_mode
+            # Native Android observes this query parameter; no automatic timer.
+            st.query_params["iv_mode"] = new_mode.lower()
 
 
     st.sidebar.radio(
