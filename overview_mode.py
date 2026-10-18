@@ -261,6 +261,31 @@ def build_asset_class_donut(class_df, currency):
 
 
 def overview_app():
+    # Keep complete currency amounts visible in narrow Streamlit metric columns.
+    # This is presentation-only; all calculations and stored values are unchanged.
+    st.markdown(
+        """
+        <style>
+        [data-testid="stMetricValue"] {
+            width: 100%;
+            min-width: 0;
+        }
+        [data-testid="stMetricValue"] > div {
+            font-size: clamp(1rem, 1.85vw, 2rem) !important;
+            line-height: 1.25 !important;
+            white-space: normal !important;
+            overflow: visible !important;
+            text-overflow: clip !important;
+            overflow-wrap: anywhere !important;
+            word-break: normal !important;
+        }
+        [data-testid="stMetric"] {
+            min-width: 0;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
     st.title("Unified Portfolio Overview")
     st.caption(
         "One view across Crypto, Stocks, ETFs and Bonds / Fixed Income."
