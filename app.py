@@ -462,6 +462,8 @@ PAGE_QUERY_MAP = {
     "Contact": "contact",
     "Login": "login",
     "Dashboard": "dashboard",
+    "Cash Flow": "cashflow",
+    "Investments": "investments",
 }
 QUERY_PAGE_MAP = {value: key for key, value in PAGE_QUERY_MAP.items()}
 
@@ -588,9 +590,21 @@ def render_profile_section(user):
 
 def render_public_navigation():
     authenticated = ensure_auth()
-    navigation_items = PUBLIC_PAGES.copy()
     if authenticated:
-        navigation_items.append(("Dashboard", "📈"))
+        navigation_items = [
+            ("Dashboard", "🏠"),
+            ("Cash Flow", "💳"),
+            ("Investments", "📈"),
+            ("Markets & Economy", "🌐"),
+            ("Investor Tools", "🧮"),
+            ("Learn", "📚"),
+            ("About", "ℹ️"),
+            ("Privacy", "🔒"),
+            ("Terms", "📜"),
+            ("Contact", "✉️"),
+        ]
+    else:
+        navigation_items = PUBLIC_PAGES.copy()
     valid_pages = [name for name, _ in navigation_items]
     apply_pending_navigation(valid_pages, authenticated)
     default_page = "Dashboard" if authenticated else "Home"
@@ -598,16 +612,24 @@ def render_public_navigation():
     if selected_page not in valid_pages:
         selected_page = default_page
         st.session_state.public_navigation = selected_page
-    render_sidebar_brand()
-    render_navigation_buttons(navigation_items, selected_page)
+
+    # Signed-in account controls are now above navigation.
     if authenticated:
         user = st.session_state.get("user")
         if user:
             render_profile_section(user)
-    else:
         st.sidebar.markdown("---")
-        st.sidebar.caption("Create a free account to track your portfolio.")
-        if st.sidebar.button("✨  Start Free", key="sidebar_start_free", type="primary", use_container_width=True):
+        st.sidebar.markdown("**InvesTrack Pro**")
+        st.sidebar.caption("Cash flow • Investments • Insights")
+    else:
+        render_sidebar_brand()
+
+    render_navigation_buttons(navigation_items, selected_page)
+    if not authenticated:
+        st.sidebar.markdown("---")
+        st.sidebar.caption("Create a free account to manage your finances.")
+        if st.sidebar.button("✨  Start Free", key="sidebar_start_free",
+                             type="primary", use_container_width=True):
             navigate("Login")
     return selected_page, authenticated
 
@@ -669,187 +691,47 @@ def render_home_page(authenticated):
     st.markdown(
         """
         <div class="iv-hero">
-            <div class="iv-hero-badge">ONE PORTFOLIO • EVERY ASSET</div>
-            <h1>Know where your money stands.</h1>
-            <p>
-                Track stocks, ETFs, bonds, cryptocurrency and cash holdings from one polished dashboard —
-                and use InvesTrack Pro's public market education, investor tools and economic
-                insights to understand the forces moving markets.
-            </p>
+          <h1>Take control of your money.</h1>
+          <p>InvesTrack Pro brings personal and business cash flow,
+          investment tracking and financial insights into one place.</p>
         </div>
-        """,
-        unsafe_allow_html=True,
+        """, unsafe_allow_html=True,
     )
+    st.markdown("## Your financial hub")
+    left, right = st.columns([1.2, 1])
+    with left:
+        st.markdown(
+            """<div class="iv-card"><h3>💳 Cash Flow Management</h3>
+            <p>Designed for personal and business finances: income, expenses,
+            balances and clearer money decisions.</p>
+            <strong>In development</strong></div>""",
+            unsafe_allow_html=True,
+        )
+        if st.button("Explore Cash Flow", key="home_cashflow", type="primary",
+                     use_container_width=True):
+            navigate("Cash Flow" if authenticated else "Login")
+    with right:
+        st.markdown(
+            """<div class="iv-card"><h3>📈 Investment Tracking</h3>
+            <p>Track stocks, ETFs, bonds and cryptocurrency from a unified
+            portfolio dashboard.</p></div>""",
+            unsafe_allow_html=True,
+        )
+        if st.button("Open Investments", key="home_investments",
+                     use_container_width=True):
+            navigate("Investments" if authenticated else "Login")
 
-    first_button, second_button, third_button = st.columns([1, 1, 1])
-    with first_button:
-        if authenticated:
-            if st.button("Open Dashboard", key="home_open_dashboard", type="primary", use_container_width=True):
-                navigate("Dashboard")
-        else:
-            if st.button("Start Tracking Free", key="home_start_tracking", type="primary", use_container_width=True):
-                navigate("Login")
-    with second_button:
-        if st.button("Markets & Economy", key="home_markets", use_container_width=True):
+    st.markdown("### Explore more")
+    market_col, tool_col = st.columns(2)
+    with market_col:
+        if st.button("🌐 Markets & Economy", key="home_markets",
+                     use_container_width=True):
             navigate("Markets & Economy")
-    with third_button:
-        if st.button("Investor Tools", key="home_tools", use_container_width=True):
+    with tool_col:
+        if st.button("🧮 Investor Tools", key="home_tools",
+                     use_container_width=True):
             navigate("Investor Tools")
-
-    store_left, store_button, store_right = st.columns([1, 1.25, 1])
-    with store_button:
-        if PLAY_STORE_BADGE.exists():
-            st.image(str(PLAY_STORE_BADGE), width=240, link=PLAY_STORE_URL)
-        else:
-            st.link_button("Get InvesTrack Pro on Google Play", PLAY_STORE_URL, use_container_width=True)
-
-    st.markdown(
-        """
-        <div class="iv-trust-strip">
-            <strong>Independent portfolio tools + original investor education.</strong>
-            InvesTrack Pro combines personal portfolio tracking, practical calculators,
-            educational market guides and clearly attributed third-party headlines.
-            Educational content is separate from advertising and is not personalised investment advice.
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    st.markdown("## Your public market companion")
-    st.markdown(
-        """
-        <div class="iv-info-grid">
-            <div class="iv-info-card"><div class="iv-kicker">Markets & Economy</div><h4>Understand what moves markets</h4><p>Learn how inflation, employment, GDP, central-bank policy, bond yields and currencies can influence stocks, crypto, gold and the wider economy.</p></div>
-            <div class="iv-info-card"><div class="iv-kicker">Investor Tools</div><h4>Turn numbers into decisions</h4><p>Calculate investment returns, compound growth, dollar-cost averaging outcomes and profit or loss without leaving the site.</p></div>
-            <div class="iv-info-card"><div class="iv-kicker">Learn</div><h4>Build financial understanding</h4><p>Explore clear guides to portfolio allocation, stocks, crypto, risk, diversification and macroeconomic indicators.</p></div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    render_ad_slot(ADSENSE_TOP_SLOT, height=130)
-
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        if st.button("Explore Markets & Economy →", key="home_go_markets", use_container_width=True): navigate("Markets & Economy")
-    with c2:
-        if st.button("Open Investor Tools →", key="home_go_tools", use_container_width=True): navigate("Investor Tools")
-    with c3:
-        if st.button("Visit Learning Centre →", key="home_go_learn", use_container_width=True): navigate("Learn")
-
-    st.markdown("## Browse by topic")
-    st.markdown(
-        """
-        <div class="iv-info-grid">
-            <div class="iv-info-card"><div class="iv-kicker">Portfolio</div><h4>Performance & diversification</h4><p>Understand returns, allocation, concentration, realized and unrealized results, and currency effects.</p></div>
-            <div class="iv-info-card"><div class="iv-kicker">Economy</div><h4>Rates, inflation & growth</h4><p>Learn how central-bank decisions, inflation, employment and economic activity feed into financial markets.</p></div>
-            <div class="iv-info-card"><div class="iv-kicker">Markets</div><h4>Stocks, ETFs, bonds & crypto</h4><p>Build a clearer picture of what different assets represent, what drives them and how their risks differ.</p></div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    st.markdown("## Everything you need to monitor your portfolio")
-    feature_one, feature_two, feature_three = st.columns(3)
-    with feature_one:
-        st.markdown("""<div class="iv-card"><h3>📊 Unified portfolio</h3>Track stocks, ETFs, bonds, cryptocurrency and cash holdings from one secure account.</div>""", unsafe_allow_html=True)
-    with feature_two:
-        st.markdown("""<div class="iv-card"><h3>📈 Performance insights</h3>Review portfolio value, gains, losses and historical performance over time.</div>""", unsafe_allow_html=True)
-    with feature_three:
-        st.markdown("""<div class="iv-card"><h3>🌍 Multi-currency view</h3>View your investment portfolio in a currency that is meaningful to you.</div>""", unsafe_allow_html=True)
-
     render_live_market_news(compact=True)
-
-    render_ad_slot(ADSENSE_MID_SLOT, height=130)
-
-    st.markdown("## What investors should watch each week")
-    st.markdown(
-        """
-        <div class="iv-section-shell">
-            <div class="iv-kicker">Economic Calendar Guide</div>
-            <h3 style="margin-top:.2rem;">The releases that often shape the trading week</h3>
-            <p>Market attention tends to cluster around a small number of recurring economic releases. Understanding them helps investors interpret market moves instead of reacting to headlines alone.</p>
-            <div class="iv-info-grid">
-                <div class="iv-info-card"><span class="iv-impact-high">HIGH IMPACT</span><h4>Inflation & central banks</h4><p>CPI, PCE inflation, interest-rate decisions and policy statements can alter rate expectations across global markets.</p></div>
-                <div class="iv-info-card"><span class="iv-impact-high">HIGH IMPACT</span><h4>Employment</h4><p>Payrolls, unemployment and wage growth offer clues about demand, inflation pressure and the likely policy path.</p></div>
-                <div class="iv-info-card"><span class="iv-impact-medium">MEDIUM / HIGH</span><h4>Growth & activity</h4><p>GDP, PMI, retail sales and industrial data help investors judge whether economic momentum is strengthening or weakening.</p></div>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    if st.button("See the full Markets & Economy guide", key="home_calendar_guide", use_container_width=True): navigate("Markets & Economy")
-
-    st.markdown("## Popular Investment Guides")
-
-    featured_guides = [
-        "portfolio-performance",
-        "interest-rates",
-        "economic-calendar",
-    ]
-
-    guide_columns = st.columns(3)
-
-    for column, slug in zip(guide_columns, featured_guides):
-        article = LEARN_ARTICLES[slug]
-
-        with column:
-            st.markdown(
-                f"""
-                <div class="iv-info-card">
-                    <div class="iv-kicker">{article["category"]}</div>
-                    <h4>{article["title"]}</h4>
-                    <p>{article["summary"]}</p>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-            if st.button(
-                "Read guide →",
-                key=f"home_guide_{slug}",
-                use_container_width=True,
-            ):
-                open_learn_article(slug)
-
-
-    st.markdown("## Multi-Asset Investing Guides")
-    st.caption(
-        "Original guides for investors managing assets across more than one platform or asset class."
-    )
-
-    multi_asset_guides = [
-        "etf-investing-basics",
-        "bonds-treasury-bills",
-        "multi-asset-allocation",
-        "why-unified-portfolio-tracking",
-    ]
-
-    ma_cols = st.columns(2)
-
-    for index, slug in enumerate(multi_asset_guides):
-        article = LEARN_ARTICLES[slug]
-        with ma_cols[index % 2]:
-            st.markdown(
-                f"""
-                <div class="iv-info-card">
-                    <div class="iv-kicker">{article["category"]}</div>
-                    <h4>{article["title"]}</h4>
-                    <p>{article["summary"]}</p>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-            if st.button(
-                "Read guide →",
-                key=f"home_multi_asset_{slug}",
-                use_container_width=True,
-            ):
-                open_learn_article(slug)
-
-    st.markdown("## Built for investors who value clarity")
-    st.write("""Whether you are tracking your first investment or managing a portfolio spread across stocks, ETFs, bonds, cryptocurrency and cash, InvesTrack Pro combines multi-asset tracking with practical financial education so you can understand both your holdings and the wider market environment.""")
-    render_ad_slot(ADSENSE_BOTTOM_SLOT, height=130)
     render_public_footer()
 
 
@@ -2380,6 +2262,62 @@ def render_dashboard():
 
 
 # -----------------------------------------
+# FINANCIAL HUB: PHASE 1 NAVIGATION
+# No financial transactions are saved until the Supabase schema is installed.
+# -----------------------------------------
+def render_financial_hub():
+    st.title("Your Financial Hub")
+    st.caption("Manage money today. Track investments for tomorrow.")
+    cash, invest = st.columns([1.2, 1])
+    with cash:
+        st.subheader("💳 Cash Flow")
+        st.write("Personal and business financial management.")
+        st.caption("Transaction tracking and reports are being developed.")
+        if st.button("Open Cash Flow →", key="hub_cash", type="primary",
+                     use_container_width=True):
+            navigate("Cash Flow")
+    with invest:
+        st.subheader("📈 Investments")
+        st.write("Your existing multi-asset portfolio dashboard.")
+        if st.button("Open Investments →", key="hub_invest",
+                     use_container_width=True):
+            navigate("Investments")
+    st.divider()
+    a, b = st.columns(2)
+    with a:
+        if st.button("🌐 Markets & Economy", key="hub_markets",
+                     use_container_width=True):
+            navigate("Markets & Economy")
+    with b:
+        if st.button("🧮 Investor Tools", key="hub_tools",
+                     use_container_width=True):
+            navigate("Investor Tools")
+
+
+def render_cashflow_workspace():
+    if not ensure_auth():
+        navigate("Login")
+        return
+    st.title("Cash Flow Management")
+    st.caption("Personal and business workspaces")
+    workspace = st.radio(
+        "Workspace", ["Personal", "Business"],
+        horizontal=True, key="cashflow_workspace_type",
+    )
+    st.info(
+        f"{workspace} cash flow is in development. "
+        "No transactions are recorded yet."
+    )
+    st.subheader("Planned features")
+    if workspace == "Personal":
+        st.write("Income and expenses • Accounts and transfers • Budgets • Savings goals")
+    else:
+        st.write("Business income and costs • Accounts and transfers • "
+                 "Receivables and payables • Cash flow reports")
+    st.caption("The next phase will add Supabase-backed accounts and transactions.")
+
+
+# -----------------------------------------
 # MAIN ROUTER
 # -----------------------------------------
 sync_route_from_url()
@@ -2434,6 +2372,12 @@ elif selected_page == "Login":
     render_public_footer()
 
 elif selected_page == "Dashboard":
+    render_financial_hub() if user_is_authenticated else render_dashboard()
+
+elif selected_page == "Cash Flow":
+    render_cashflow_workspace()
+
+elif selected_page == "Investments":
     render_dashboard()
 
 else:
