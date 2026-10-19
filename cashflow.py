@@ -190,6 +190,37 @@ def render_cashflow():
                     _rerun()
                 except Exception as exc: st.error(f'Could not create account: {exc}')
 
+        if accounts:
+            st.divider()
+            st.subheader('Remove an account')
+            st.caption('Accounts with recorded income, expenses or transfers cannot be deleted. '
+                       'This protects your transaction history and financial reports.')
+            account_by_id = {a['id']: a for a in accounts}
+            remove_id = st.selectbox('Account to remove', list(account_by_id),
+                                     format_func=lambda aid: account_by_id[aid]['name'],
+                                     key=f'cf_remove_account_{kind}')
+            linked = [t for t in transactions if t.get('account_id') == remove_id
+                      or t.get('to_account_id') == remove_id]
+            if linked:
+                st.warning(f'This account has {len(linked)} linked transaction(s). '
+                           'It cannot be deleted until those records are handled.')
+            else:
+                confirm_remove = st.checkbox(
+                    'I understand this will permanently remove the account and its opening balance.',
+                    key=f'cf_remove_confirm_{kind}_{remove_id}')
+                if st.button('Delete selected account', type='secondary',
+                             disabled=not confirm_remove,
+                             key=f'cf_remove_button_{kind}_{remove_id}'):
+                    try:
+                        # FK constraints also prevent deletion if any linked transaction
+                        # was created since the page loaded.
+                        _db().table('cf_accounts').delete().eq('id', remove_id).eq(
+                            'workspace_id', ws['id']).eq('user_id', user_id).execute()
+                        st.success('Account removed.')
+                        _rerun()
+                    except Exception:
+                        st.error('Could not remove the account. Check for linked transactions.')
+
     with tabs[3]:
         st.subheader('Cash flow reports')
         if not transactions:
