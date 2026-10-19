@@ -38,6 +38,64 @@ def _workspace(kind, user_id):
     return db.table('cf_workspaces').insert({'user_id': user_id, 'kind': kind, 'name': 'Personal' if kind == 'personal' else 'My Business', 'currency': 'GHS'}).execute().data[0]
 
 
+
+def _responsive_cashflow_styles():
+    """Keep cash-flow KPIs legible when the application sidebar is expanded."""
+    st.markdown("""
+    <style>
+    /* Scope the rules to cash-flow KPI cards, not other dashboard pages. */
+    .cf-kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 0.75rem;
+        margin: 1rem 0 0.5rem;
+        width: 100%;
+    }
+    .cf-kpi-card {
+        min-width: 0;
+        border: 1px solid rgba(128,128,128,0.22);
+        border-radius: 0.65rem;
+        padding: 0.85rem 0.75rem;
+        overflow-wrap: anywhere;
+    }
+    .cf-kpi-label { font-size: 0.82rem; opacity: 0.78; margin-bottom: 0.35rem; }
+    .cf-kpi-value {
+        font-size: clamp(0.94rem, 1.45vw, 1.42rem);
+        font-weight: 650;
+        line-height: 1.3;
+        font-variant-numeric: tabular-nums;
+        overflow-wrap: anywhere;
+    }
+    @container (max-width: 850px) {
+        .cf-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @container (max-width: 430px) {
+        .cf-kpi-grid { grid-template-columns: minmax(0, 1fr); }
+    }
+    /* Streamlit's main block acts as the sizing container. */
+    [data-testid="stMainBlockContainer"] { container-type: inline-size; }
+    </style>
+    """, unsafe_allow_html=True)
+
+
+def _cashflow_kpis(currency, balances, income, expenses):
+    from html import escape
+    cards = [
+        ('Account balances', balances),
+        ('Income recorded', income),
+        ('Expenses recorded', expenses),
+        ('Net cash flow', income - expenses),
+    ]
+    content = ''.join(
+        '<div class="cf-kpi-card">'
+        f'<div class="cf-kpi-label">{escape(label)}</div>'
+        f'<div class="cf-kpi-value">{escape(_money(amount, currency))}</div>'
+        '</div>'
+        for label, amount in cards
+    )
+    st.markdown(f'<div class="cf-kpi-grid">{content}</div>', unsafe_allow_html=True)
+
+
 def render_cashflow():
     user_id = st.session_state.get('user_id')
     if not user_id:
@@ -73,11 +131,8 @@ def render_cashflow():
             movements[t['account_id']] = movements.get(t['account_id'], Decimal('0')) - amount
             movements[t['to_account_id']] = movements.get(t['to_account_id'], Decimal('0')) + amount
 
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric('Account balances', _money(sum(movements.values()), currency))
-    c2.metric('Income recorded', _money(total_income, currency))
-    c3.metric('Expenses recorded', _money(total_expense, currency))
-    c4.metric('Net cash flow', _money(total_income - total_expense, currency))
+    _responsive_cashflow_styles()
+    _cashflow_kpis(currency, sum(movements.values()), total_income, total_expense)
     st.caption('Figures are for all recorded dates in this workspace. Transfers do not count as income or expenses.')
 
     tabs = st.tabs(['➕ Record transaction', '📜 Transaction history', '🏦 Accounts', '📊 Reports', '⚙️ Workspace'])
