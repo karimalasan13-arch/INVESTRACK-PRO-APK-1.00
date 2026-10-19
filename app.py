@@ -2208,14 +2208,15 @@ def render_dashboard():
             st.query_params["iv_mode"] = new_mode.lower()
 
 
-    st.sidebar.radio(
-        "Select Mode",
+    st.radio(
+        "Investment mode",
         mode_options,
         index=mode_options.index(
             st.session_state.selected_mode
         ),
         key="mode_radio",
         on_change=on_mode_change,
+        horizontal=True,
     )
 
     mode = st.session_state.selected_mode
@@ -2298,23 +2299,8 @@ def render_cashflow_workspace():
     if not ensure_auth():
         navigate("Login")
         return
-    st.title("Cash Flow Management")
-    st.caption("Personal and business workspaces")
-    workspace = st.radio(
-        "Workspace", ["Personal", "Business"],
-        horizontal=True, key="cashflow_workspace_type",
-    )
-    st.info(
-        f"{workspace} cash flow is in development. "
-        "No transactions are recorded yet."
-    )
-    st.subheader("Planned features")
-    if workspace == "Personal":
-        st.write("Income and expenses • Accounts and transfers • Budgets • Savings goals")
-    else:
-        st.write("Business income and costs • Accounts and transfers • "
-                 "Receivables and payables • Cash flow reports")
-    st.caption("The next phase will add Supabase-backed accounts and transactions.")
+    from cashflow import render_cashflow
+    render_cashflow()
 
 
 # -----------------------------------------
