@@ -2173,18 +2173,8 @@ def render_dashboard():
     user = st.session_state.user
 
 
-    refresh_interval = 60
-    current_time = time.time()
-
-    if "last_refresh" not in st.session_state:
-        st.session_state.last_refresh = current_time
-
-    elif (
-        current_time - st.session_state.last_refresh
-        > refresh_interval
-    ):
-        st.session_state.last_refresh = current_time
-        st.rerun()
+    # Do not force a full app rerun every 60 seconds. It reloads heavy
+    # portfolio modes and can interrupt navigation and Android ad returns.
 
     mode_options = ["Overview", "Crypto", "Stocks", "ETFs", "Bonds"]
 
@@ -2208,6 +2198,7 @@ def render_dashboard():
             st.query_params["iv_mode"] = new_mode.lower()
 
 
+    st.markdown("### 📊 Investment Mode")
     st.radio(
         "Investment mode",
         mode_options,
@@ -2217,6 +2208,7 @@ def render_dashboard():
         key="mode_radio",
         on_change=on_mode_change,
         horizontal=True,
+        label_visibility="collapsed",
     )
 
     mode = st.session_state.selected_mode
