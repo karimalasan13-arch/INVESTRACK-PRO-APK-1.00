@@ -2151,6 +2151,12 @@ def render_partner_cta():
 # -----------------------------------------
 # AUTHENTICATED DASHBOARD
 # -----------------------------------------
+def open_android_premium():
+    """Signal the native Android WebView to display Google Play premium options."""
+    import uuid
+    st.query_params["iv_premium"] = uuid.uuid4().hex
+
+
 def render_dashboard():
     if not ensure_auth():
         st.warning(
@@ -2201,6 +2207,9 @@ def render_dashboard():
             # Native Android observes this query parameter; no automatic timer.
             st.query_params["iv_mode"] = new_mode.lower()
 
+
+    if st.button("✨ Premium Upgrade", key="premium_investments", use_container_width=True):
+        open_android_premium()
 
     st.markdown("### 📊 Investment Mode")
     st.radio(
@@ -2263,6 +2272,8 @@ def render_dashboard():
 # -----------------------------------------
 def render_financial_hub():
     st.title("Your Financial Hub")
+    if st.button("✨ Premium Upgrade", key="premium_hub", use_container_width=True):
+        open_android_premium()
     st.caption("Manage money today. Track investments for tomorrow.")
     cash, invest = st.columns([1.2, 1])
     with cash:
