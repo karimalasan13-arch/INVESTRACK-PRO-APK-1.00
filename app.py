@@ -538,7 +538,7 @@ def render_sidebar_brand():
         <div class="iv-sidebar-brand">
             {logo_html}
             <p class="iv-sidebar-title">InvesTrack Pro</p>
-            <p class="iv-sidebar-subtitle">Smart portfolio tracking</p>
+            <p class="iv-sidebar-subtitle">Cash flow & investment tracking</p>
         </div>
         """,
         unsafe_allow_html=True,
@@ -642,7 +642,7 @@ def render_public_footer():
         """
         <div class="iv-footer">
             <strong>InvesTrack Pro</strong><br>
-            Portfolio tracking for stocks, ETFs, bonds, cryptocurrency and cash holdings.<br><br>
+            Cash flow management and investment tracking in one place.<br><br>
         </div>
         """,
         unsafe_allow_html=True,
@@ -704,7 +704,7 @@ def render_home_page(authenticated):
             """<div class="iv-card"><h3>💳 Cash Flow Management</h3>
             <p>Designed for personal and business finances: income, expenses,
             balances and clearer money decisions.</p>
-            <strong>In development</strong></div>""",
+            </div>""",
             unsafe_allow_html=True,
         )
         if st.button("Explore Cash Flow", key="home_cashflow", type="primary",
@@ -1720,10 +1720,11 @@ def render_about_page():
     st.markdown(
         """
         <div class="iv-legal">
-        InvesTrack Pro is a portfolio management platform created to make
-        investment tracking simpler, clearer and more accessible.
+        InvesTrack Pro is a financial management platform designed to make
+        personal and business cash flow management and investment tracking simpler.
 
-        The platform allows users to monitor cryptocurrency, stock, ETF, bond and cash
+        The platform helps users record income and expenses, manage financial accounts,
+        review cash flow reports and monitor cryptocurrency, stock, ETF, bond and cash
         holdings through a unified dashboard. Users can review portfolio
         values, performance history and asset allocation without maintaining
         separate spreadsheets or switching between multiple applications.
@@ -1735,6 +1736,9 @@ def render_about_page():
 
         ### What InvesTrack Pro provides
 
+        - Personal and business cash flow management
+        - Income and expense tracking
+        - Account balances and cash flow reports
         - Cryptocurrency portfolio tracking
         - Stock portfolio tracking
         - ETF portfolio tracking
@@ -2130,10 +2134,10 @@ def render_partner_cta():
             'background:linear-gradient(135deg,#0f172a,#1e293b);'
             'color:white;margin:14px 0;">'
             '<h4 style="margin:0 0 8px 0;color:white;">'
-            '🚀 Pro Investor Tools Coming Soon</h4>'
+            '📊 Investment Insights</h4>'
             '<p style="margin:0;color:#d1d5db;line-height:1.6;">'
-            'Advanced analytics, exportable reports, portfolio scoring '
-            'and market insights.</p>'
+            'Monitor your investments across multiple asset classes '
+            'from one convenient dashboard.</p>'
             '</div>'
         ),
         unsafe_allow_html=True,
@@ -2255,8 +2259,7 @@ def render_dashboard():
 
 
 # -----------------------------------------
-# FINANCIAL HUB: PHASE 1 NAVIGATION
-# No financial transactions are saved until the Supabase schema is installed.
+# FINANCIAL HUB NAVIGATION
 # -----------------------------------------
 def render_financial_hub():
     st.title("Your Financial Hub")
@@ -2265,7 +2268,7 @@ def render_financial_hub():
     with cash:
         st.subheader("💳 Cash Flow")
         st.write("Personal and business financial management.")
-        st.caption("Transaction tracking and reports are being developed.")
+        st.caption("Record income and expenses, manage accounts and review cash flow reports.")
         if st.button("Open Cash Flow →", key="hub_cash", type="primary",
                      use_container_width=True):
             navigate("Cash Flow")
