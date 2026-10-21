@@ -139,8 +139,7 @@ def render_cashflow():
         accounts = _query('cf_accounts', ws['id'])
         transactions = _query('cf_transactions', ws['id'], 'occurred_on')
     except Exception as exc:
-        st.error('Cash Flow database is not ready. Run cashflow_supabase_setup.sql in Supabase SQL Editor, then refresh.')
-        st.caption(f'Database detail: {type(exc).__name__}')
+        st.error('We could not load your cash flow information. Please try again shortly. If the problem continues, contact support.')
         return
 
     currency = ws.get('currency') or 'GHS'
@@ -361,4 +360,4 @@ def render_cashflow():
                 _db().table('cf_workspaces').update({'currency': choice}).eq('id', ws['id']).execute()
                 _rerun()
         else:
-            st.info('Currency is locked after accounts or transactions are created to prevent misleading totals. Currency conversion is planned for a later release.')
+            st.info('Reporting currency cannot be changed after an account or transaction has been recorded, to keep your financial reports consistent.')
