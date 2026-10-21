@@ -106,6 +106,25 @@ def _cashflow_kpis(currency, balances, income, expenses):
     st.markdown(f'<div class="cf-kpi-grid">{content}</div>', unsafe_allow_html=True)
 
 
+def _signal_cashflow_navigation(event):
+    """Publish a distinct navigation event for the Android WebView observer."""
+    import uuid
+    nonce = st.session_state.setdefault('_cf_ad_event_nonce', uuid.uuid4().hex[:12])
+    counter = st.session_state.get('_cf_ad_event_counter', 0) + 1
+    st.session_state['_cf_ad_event_counter'] = counter
+    st.query_params['iv_cf_event'] = f'{nonce}_{counter}_{event}'
+
+
+def _cashflow_workspace_changed():
+    # Streamlit callbacks only fire on a user action, not initial rendering.
+    _signal_cashflow_navigation('workspace')
+
+
+def _cashflow_section_changed():
+    if st.session_state.get('cf_section') == '📜 Transaction history':
+        _signal_cashflow_navigation('history')
+
+
 def render_cashflow():
     user_id = st.session_state.get('user_id')
     if not user_id:
@@ -113,7 +132,7 @@ def render_cashflow():
         return
     st.title('💳 Cash Flow Management')
     st.caption('Know exactly where your money comes from and where it goes.')
-    kind_label = st.radio('Financial workspace', ['Personal', 'Business'], horizontal=True, key='cf_kind')
+    kind_label = st.radio('Financial workspace', ['Personal', 'Business'], horizontal=True, key='cf_kind', on_change=_cashflow_workspace_changed)
     kind = kind_label.lower()
     try:
         ws = _workspace(kind, user_id)
@@ -145,8 +164,13 @@ def render_cashflow():
     _cashflow_kpis(currency, sum(movements.values()), total_income, total_expense)
     st.caption('Figures are for all recorded dates in this workspace. Transfers do not count as income or expenses.')
 
-    tabs = st.tabs(['➕ Record transaction', '📜 Transaction history', '🏦 Accounts', '📊 Reports', '⚙️ Workspace'])
-    with tabs[0]:
+    # A selectable section control provides an actual Streamlit navigation callback.
+    # st.tabs renders every tab on each rerun and cannot reliably detect tab clicks
+    # on older Streamlit releases.
+    sections = ['➕ Record transaction', '📜 Transaction history', '🏦 Accounts', '📊 Reports', '⚙️ Workspace']
+    section = st.radio('Cash flow section', sections, horizontal=True, key='cf_section',
+                       on_change=_cashflow_section_changed)
+    if section == sections[0]:
         if not accounts:
             st.info('Create your first account under Accounts before recording transactions.')
         else:
@@ -192,7 +216,7 @@ def render_cashflow():
                     except Exception as exc:
                         st.error(f'Could not save transaction: {exc}')
 
-    with tabs[1]:
+    if section == sections[1]:
         st.subheader('Transaction history')
         if not transactions:
             st.info('Your dated income and expense records will appear here.')
@@ -259,7 +283,7 @@ def render_cashflow():
                             _rerun()
                         except Exception as exc: st.error(f'Delete failed: {exc}')
 
-    with tabs[2]:
+    if section == sections[2]:
         st.subheader('Your accounts')
         if accounts:
             st.dataframe([{'Account': a['name'], 'Type': a['account_type'], 'Balance': _money(movements[a['id']], currency)} for a in accounts], use_container_width=True, hide_index=True)
@@ -307,7 +331,7 @@ def render_cashflow():
                     except Exception:
                         st.error('Could not remove the account. Check for linked transactions.')
 
-    with tabs[3]:
+    if section == sections[3]:
         st.subheader('Cash flow reports')
         if not transactions:
             st.info('Add transactions to see monthly trends and spending categories.')
@@ -326,7 +350,7 @@ def render_cashflow():
                 st.subheader('Where your money went')
                 st.bar_chart(categories.groupby('Category')['Amount'].sum().sort_values(ascending=False))
 
-    with tabs[4]:
+    if section == sections[4]:
         st.subheader('Workspace settings')
         st.write(f'Workspace: **{ws["name"]}** · Type: **{kind_label}**')
         st.caption('Each workspace has its own accounts, transactions and reporting currency.')
