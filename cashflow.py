@@ -131,6 +131,9 @@ def render_cashflow():
         st.warning('Sign in to access Cash Flow.')
         return
     st.title('💳 Cash Flow Management')
+    if st.button('✨ Premium Upgrade', key='premium_cashflow', use_container_width=True):
+        import uuid
+        st.query_params['iv_premium'] = uuid.uuid4().hex
     st.caption('Know exactly where your money comes from and where it goes.')
     kind_label = st.radio('Financial workspace', ['Personal', 'Business'], horizontal=True, key='cf_kind', on_change=_cashflow_workspace_changed)
     kind = kind_label.lower()
