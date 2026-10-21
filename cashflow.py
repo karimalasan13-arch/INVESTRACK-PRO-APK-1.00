@@ -7,8 +7,18 @@ from auth import get_auth_client
 
 PERSONAL_INCOME = ['Salary', 'Freelance', 'Business income', 'Interest', 'Dividends', 'Gift', 'Refund', 'Other']
 PERSONAL_EXPENSE = ['Food & groceries', 'Rent & housing', 'Utilities', 'Transport', 'Healthcare', 'Education', 'Shopping', 'Entertainment', 'Family', 'Subscriptions', 'Other']
-BUSINESS_INCOME = ['Sales', 'Client payment', 'Consulting fees', 'Service revenue', 'Other revenue', 'Refund', 'Other']
-BUSINESS_EXPENSE = ['Materials', 'Labour & payroll', 'Rent', 'Utilities', 'Transport & logistics', 'Equipment', 'Marketing', 'Professional fees', 'Taxes & fees', 'Other']
+BUSINESS_INCOME = ['Sales', 'Client payment', 'Consulting fees', 'Service revenue', 'Rental income', 'Interest', 'Dividends', 'Investment gains', 'Other revenue', 'Refund', 'Other']
+BUSINESS_EXPENSE = ['Materials', 'Labour', 'Payroll', 'Rent', 'Utilities', 'Transport & logistics', 'Equipment', 'Marketing', 'Professional fees', 'Taxes & fees', 'Insurance', 'Subscriptions', 'Other']
+
+
+
+def _categories(workspace_kind, transaction_kind):
+    """Categories are specific to both workspace and transaction type."""
+    if transaction_kind == 'Income':
+        return PERSONAL_INCOME if workspace_kind == 'personal' else BUSINESS_INCOME
+    if transaction_kind == 'Expense':
+        return PERSONAL_EXPENSE if workspace_kind == 'personal' else BUSINESS_EXPENSE
+    return []
 
 
 def _db():
@@ -140,8 +150,10 @@ def render_cashflow():
         if not accounts:
             st.info('Create your first account under Accounts before recording transactions.')
         else:
-            with st.form(f'cf_add_{kind}', clear_on_submit=True):
-                tx_kind = st.radio('Transaction type', ['Expense', 'Income', 'Transfer'], horizontal=True)
+            # Keep this OUTSIDE the form so category choices refresh immediately.
+            tx_kind = st.radio('Transaction type', ['Expense', 'Income', 'Transfer'],
+                               horizontal=True, key=f'cf_tx_kind_{kind}')
+            with st.form(f'cf_add_{kind}_{tx_kind.lower()}', clear_on_submit=True):
                 tx_date = st.date_input('Date money moved', value=date.today(), max_value=date.today())
                 amount = st.number_input(f'Amount ({currency})', min_value=0.01, step=10.0, format='%.2f')
                 account_ids = list(account_names)
@@ -149,12 +161,16 @@ def render_cashflow():
                 target_id = None
                 if tx_kind == 'Transfer':
                     target_id = st.selectbox('To account', account_ids, format_func=lambda x: account_names[x], key=f'cf_target_{kind}')
-                categories = (PERSONAL_INCOME if kind == 'personal' else BUSINESS_INCOME) if tx_kind == 'Income' else (PERSONAL_EXPENSE if kind == 'personal' else BUSINESS_EXPENSE)
                 if tx_kind == 'Transfer':
                     category = 'Transfer'
                 else:
-                    chosen = st.selectbox('Category', categories + ['Custom category…'])
-                    category = st.text_input('Custom category', placeholder='e.g. Building materials') if chosen == 'Custom category…' else chosen
+                    categories = _categories(kind, tx_kind)
+                    chosen = st.selectbox(f'{tx_kind} category', categories + ['Custom category…'],
+                                          key=f'cf_category_{kind}_{tx_kind.lower()}')
+                    category = (st.text_input('Custom category',
+                              placeholder='Enter an income source' if tx_kind == 'Income' else 'Enter an expense category',
+                              key=f'cf_custom_{kind}_{tx_kind.lower()}')
+                              if chosen == 'Custom category…' else chosen)
                 party = st.text_input('Paid to / received from', placeholder='e.g. Supermarket, client, employer, supplier')
                 description = st.text_area('What was this for?', placeholder='Describe exactly what the money was spent on or received for')
                 reference = st.text_input('Receipt / transaction reference (optional)')
@@ -206,7 +222,22 @@ def render_cashflow():
                     with st.form(f'cf_edit_{kind}_{chosen_id}'):
                         edit_date = st.date_input('Transaction date', date.fromisoformat(selected['occurred_on']))
                         edit_amount = st.number_input('Amount', min_value=0.01, value=float(selected['amount']), format='%.2f')
-                        edit_category = st.text_input('Category', value=selected.get('category') or '')
+                        original_category = selected.get('category') or ''
+                        edit_kind = selected['kind'].title()
+                        edit_options = _categories(kind, edit_kind)
+                        if edit_kind == 'Transfer':
+                            edit_category = original_category or 'Transfer'
+                        else:
+                            # Preserve historical/custom values without changing saved records.
+                            if original_category and original_category not in edit_options:
+                                edit_options = edit_options + [original_category]
+                            edit_choice = st.selectbox(f'{edit_kind} category',
+                                edit_options + ['Custom category…'],
+                                index=edit_options.index(original_category) if original_category in edit_options else 0,
+                                key=f'cf_edit_category_{kind}_{chosen_id}')
+                            edit_category = (st.text_input('Custom category',
+                                key=f'cf_edit_custom_{kind}_{chosen_id}')
+                                if edit_choice == 'Custom category…' else edit_choice)
                         edit_party = st.text_input('Paid to / received from', value=selected.get('counterparty') or '')
                         edit_description = st.text_area('Description', value=selected.get('description') or '')
                         edit_reference = st.text_input('Reference', value=selected.get('reference') or '')
