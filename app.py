@@ -588,6 +588,43 @@ def render_profile_section(user):
             st.stop()
 
 
+def issue_premium_auth_code():
+    """Issue a short-lived, single-use authorization code for the signed-in user.
+
+    Server-side only: never log, cache, place in a URL, or render the returned
+    code. The native handoff will call this at verification time.
+    Returns (code, error_message); does not grant any entitlement.
+    """
+    if not ensure_auth():
+        return None, "Sign in before verifying a purchase."
+    access_token = st.session_state.get("access_token")
+    supabase_url = str(get_secret("SUPABASE_URL", "")).rstrip("/")
+    anon_key = str(get_secret("SUPABASE_ANON_KEY", ""))
+    if not access_token or not supabase_url.startswith("https://") or not anon_key:
+        return None, "Authenticated session or Supabase configuration is missing."
+    try:
+        response = requests.post(
+            f"{supabase_url}/rest/v1/rpc/premium_issue_auth_code",
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "apikey": anon_key,
+                "Content-Type": "application/json",
+            },
+            json={},
+            timeout=15,
+            allow_redirects=False,
+        )
+        if response.status_code != 200:
+            return None, f"Authorization-code request failed (HTTP {response.status_code})."
+        code = response.json()
+        if not (isinstance(code, str) and len(code) == 64
+                and all(ch in "0123456789abcdef" for ch in code)):
+            return None, "Authorization-code response was invalid."
+        return code, None
+    except (requests.RequestException, ValueError):
+        return None, "Unable to reach the authorization service."
+
+
 def render_premium_verify_diagnostic():
     """Temporary admin-only authenticated check; never grants entitlements."""
     enabled = str(get_secret("PREMIUM_VERIFY_TEST_ENABLED", "false")).lower() in {"1", "true", "yes"}
@@ -652,27 +689,7 @@ def render_premium_verify_diagnostic():
                 return None, "Redemption request failed or returned invalid JSON."
 
         def issue_test_code():
-            access_token = st.session_state.get("access_token")
-            url = str(get_secret("SUPABASE_URL", "")).rstrip("/")
-            anon = str(get_secret("SUPABASE_ANON_KEY", ""))
-            if not access_token or not url or not anon:
-                return None, "Missing authenticated session or Supabase configuration."
-            try:
-                response = requests.post(
-                    f"{url}/rest/v1/rpc/premium_issue_auth_code",
-                    headers={"Authorization": f"Bearer {access_token}",
-                             "apikey": anon, "Content-Type": "application/json"},
-                    json={}, timeout=15,
-                )
-                if response.status_code != 200:
-                    return None, f"Issuance returned HTTP {response.status_code}."
-                code = response.json()
-                if not (isinstance(code, str) and len(code) == 64
-                        and all(c in "0123456789abcdef" for c in code)):
-                    return None, "Unexpected issuance response."
-                return code, None
-            except (requests.RequestException, ValueError):
-                return None, "Issuance request failed."
+            return issue_premium_auth_code()
 
         if st.button("Test redemption and replay protection", key="premium_redemption_test"):
             if not str(get_secret("SUPABASE_SERVICE_ROLE_KEY", "")):
