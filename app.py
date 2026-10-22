@@ -603,6 +603,34 @@ def render_premium_verify_diagnostic():
 
     with st.sidebar.expander("Premium verification diagnostic", expanded=False):
         st.caption("Authenticated validation test only. No purchase is submitted or granted.")
+        if st.button("Test one-time authorization code", key="premium_auth_code_test"):
+            access_token = st.session_state.get("access_token")
+            supabase_url = str(get_secret("SUPABASE_URL", "")).rstrip("/")
+            anon_key = str(get_secret("SUPABASE_ANON_KEY", ""))
+            if not access_token or not supabase_url or not anon_key:
+                st.error("A signed-in session or Supabase configuration is missing.")
+            else:
+                try:
+                    response = requests.post(
+                        f"{supabase_url}/rest/v1/rpc/premium_issue_auth_code",
+                        headers={
+                            "Authorization": f"Bearer {access_token}",
+                            "apikey": anon_key,
+                            "Content-Type": "application/json",
+                        },
+                        json={},
+                        timeout=15,
+                    )
+                    if response.status_code == 200:
+                        code = response.json()
+                        if isinstance(code, str) and len(code) == 64 and all(ch in "0123456789abcdef" for ch in code):
+                            st.success("Authorization code issued successfully (64 hexadecimal characters). Code hidden for security.")
+                        else:
+                            st.error("Unexpected authorization-code response. Check function configuration.")
+                    else:
+                        st.error(f"Authorization-code issuance failed (HTTP {response.status_code}).")
+                except (requests.RequestException, ValueError):
+                    st.error("Could not complete the authorization-code test. Check connection and server logs.")
         if st.button("Run authentication test", key="premium_verify_diagnostic_run"):
             access_token = st.session_state.get("access_token")
             supabase_url = str(get_secret("SUPABASE_URL", "")).rstrip("/")
