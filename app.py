@@ -625,6 +625,37 @@ def issue_premium_auth_code():
         return None, "Unable to reach the authorization service."
 
 
+
+def render_android_premium_handoff():
+    """One-time code handoff for the trusted Android WebView (not an entitlement)."""
+    if not ensure_auth():
+        return
+    # Native WebView clicks this button on demand. No code is issued on page load.
+    st.markdown("""<style>[class*="st-key-iv_native_auth_request"] {display:none!important}</style>""",
+                unsafe_allow_html=True)
+    if st.button("Native purchase authorization", key="iv_native_auth_request"):
+        code, error = issue_premium_auth_code()
+        if code:
+            st.session_state["iv_native_handoff_code"] = code
+            st.session_state["iv_native_handoff_at"] = time.monotonic()
+        else:
+            st.session_state.pop("iv_native_handoff_code", None)
+            st.session_state["iv_native_handoff_error"] = error or "Authorization unavailable"
+    code = st.session_state.get("iv_native_handoff_code")
+    issued_at = st.session_state.get("iv_native_handoff_at", 0)
+    if code and time.monotonic() - issued_at < 60:
+        # This marker is readable only by the main-frame native evaluateJavascript.
+        # Never include the code in a URL, analytics, or application logs.
+        st.markdown(f'<span id="iv-native-auth-code" hidden>{html.escape(code)}</span>',
+                    unsafe_allow_html=True)
+    else:
+        st.session_state.pop("iv_native_handoff_code", None)
+    if st.session_state.get("iv_native_handoff_error"):
+        st.markdown('<span id="iv-native-auth-error" hidden>unavailable</span>',
+                    unsafe_allow_html=True)
+        st.session_state.pop("iv_native_handoff_error", None)
+
+
 def render_premium_verify_diagnostic():
     """Temporary admin-only authenticated check; never grants entitlements."""
     enabled = str(get_secret("PREMIUM_VERIFY_TEST_ENABLED", "false")).lower() in {"1", "true", "yes"}
@@ -820,6 +851,7 @@ def render_public_navigation():
         render_sidebar_brand()
 
     if authenticated:
+        render_android_premium_handoff()
         render_premium_verify_diagnostic()
 
     render_navigation_buttons(navigation_items, selected_page)
