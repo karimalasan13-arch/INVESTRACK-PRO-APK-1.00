@@ -631,6 +631,100 @@ def render_premium_verify_diagnostic():
                         st.error(f"Authorization-code issuance failed (HTTP {response.status_code}).")
                 except (requests.RequestException, ValueError):
                     st.error("Could not complete the authorization-code test. Check connection and server logs.")
+        # Step 4A.3: server-side redemption diagnostic (admin test account only).
+        # Service-role credentials are read on the server; never rendered to the browser.
+        def redeem_test_code(code):
+            service_key = str(get_secret("SUPABASE_SERVICE_ROLE_KEY", ""))
+            url = str(get_secret("SUPABASE_URL", "")).rstrip("/")
+            if not service_key or not url:
+                return None, "Missing server-side SUPABASE_SERVICE_ROLE_KEY or SUPABASE_URL."
+            try:
+                response = requests.post(
+                    f"{url}/rest/v1/rpc/premium_redeem_auth_code",
+                    headers={"Authorization": f"Bearer {service_key}",
+                             "apikey": service_key, "Content-Type": "application/json"},
+                    json={"p_code": code}, timeout=15,
+                )
+                if response.status_code != 200:
+                    return None, f"Redemption endpoint returned HTTP {response.status_code}."
+                return response.json(), None
+            except (requests.RequestException, ValueError):
+                return None, "Redemption request failed or returned invalid JSON."
+
+        def issue_test_code():
+            access_token = st.session_state.get("access_token")
+            url = str(get_secret("SUPABASE_URL", "")).rstrip("/")
+            anon = str(get_secret("SUPABASE_ANON_KEY", ""))
+            if not access_token or not url or not anon:
+                return None, "Missing authenticated session or Supabase configuration."
+            try:
+                response = requests.post(
+                    f"{url}/rest/v1/rpc/premium_issue_auth_code",
+                    headers={"Authorization": f"Bearer {access_token}",
+                             "apikey": anon, "Content-Type": "application/json"},
+                    json={}, timeout=15,
+                )
+                if response.status_code != 200:
+                    return None, f"Issuance returned HTTP {response.status_code}."
+                code = response.json()
+                if not (isinstance(code, str) and len(code) == 64
+                        and all(c in "0123456789abcdef" for c in code)):
+                    return None, "Unexpected issuance response."
+                return code, None
+            except (requests.RequestException, ValueError):
+                return None, "Issuance request failed."
+
+        if st.button("Test redemption and replay protection", key="premium_redemption_test"):
+            if not str(get_secret("SUPABASE_SERVICE_ROLE_KEY", "")):
+                st.warning("Configure SUPABASE_SERVICE_ROLE_KEY as a private Render environment variable first.")
+            else:
+                code, error = issue_test_code()
+                if error:
+                    st.error(error)
+                else:
+                    redeemed_user, error = redeem_test_code(code)
+                    expected_id = str(st.session_state.get("user_id") or getattr(user, "id", ""))
+                    if error:
+                        st.error(error)
+                    elif isinstance(redeemed_user, str) and redeemed_user == expected_id:
+                        st.success("PASS: first redemption returned the signed-in user ID.")
+                        second_user, replay_error = redeem_test_code(code)
+                        if replay_error:
+                            st.error(replay_error)
+                        elif second_user is None:
+                            st.success("PASS: replay was rejected (null result).")
+                        else:
+                            st.error("FAIL: replay unexpectedly returned a user ID.")
+                    else:
+                        st.error("FAIL: redemption did not match the signed-in account.")
+
+        if st.button("Issue code for expiry test", key="premium_expiry_issue"):
+            code, error = issue_test_code()
+            if error:
+                st.error(error)
+            else:
+                st.session_state["premium_expiry_test_code"] = code
+                st.session_state["premium_expiry_test_time"] = time.monotonic()
+                st.info("Code issued and hidden. Wait at least 95 seconds, then click Check expired code.")
+
+        if st.button("Check expired code", key="premium_expiry_check"):
+            code = st.session_state.get("premium_expiry_test_code")
+            issued_at = st.session_state.get("premium_expiry_test_time")
+            if not code or issued_at is None:
+                st.warning("Issue an expiry-test code first.")
+            elif time.monotonic() - issued_at < 95:
+                st.warning("Wait at least 95 seconds after issuance before testing expiry.")
+            else:
+                result, error = redeem_test_code(code)
+                st.session_state.pop("premium_expiry_test_code", None)
+                st.session_state.pop("premium_expiry_test_time", None)
+                if error:
+                    st.error(error)
+                elif result is None:
+                    st.success("PASS: expired authorization code was rejected.")
+                else:
+                    st.error("FAIL: expired code unexpectedly returned a user ID.")
+
         if st.button("Run authentication test", key="premium_verify_diagnostic_run"):
             access_token = st.session_state.get("access_token")
             supabase_url = str(get_secret("SUPABASE_URL", "")).rstrip("/")
