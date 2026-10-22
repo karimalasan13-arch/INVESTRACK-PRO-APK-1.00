@@ -2456,6 +2456,16 @@ def render_financial_hub():
         if st.button("Open Investments →", key="hub_invest",
                      use_container_width=True):
             navigate("Investments")
+    # Central Premium entry point, available only in an authenticated session.
+    if ensure_auth():
+        st.markdown("---")
+        st.subheader("✨ Upgrade Your Experience")
+        st.caption("Enjoy fewer ads with Premium Lite or go completely ad-free with Premium Plus.")
+        if st.button("✨ Explore Premium Plans →", key="hub_premium_upgrade",
+                     use_container_width=True):
+            import uuid
+            st.query_params["iv_premium"] = uuid.uuid4().hex
+
     st.divider()
     a, b = st.columns(2)
     with a:
