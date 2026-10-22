@@ -814,6 +814,60 @@ def render_premium_verify_diagnostic():
                 st.error("The verification function could not be reached. Check the deployment and connection.")
 
 
+def fetch_my_premium_entitlement():
+    """Read the signed-in account's tier; never use a service-role key here."""
+    if not ensure_auth():
+        return None, "Sign in first."
+    token = st.session_state.get("access_token")
+    url = str(get_secret("SUPABASE_URL", "")).rstrip("/")
+    anon_key = str(get_secret("SUPABASE_ANON_KEY", ""))
+    if not token or not url.startswith("https://") or not anon_key:
+        return None, "Supabase session or configuration is missing."
+    try:
+        response = requests.post(
+            f"{url}/rest/v1/rpc/my_premium_entitlement",
+            headers={"Authorization": f"Bearer {token}",
+                     "apikey": anon_key, "Content-Type": "application/json"},
+            json={}, timeout=15, allow_redirects=False,
+        )
+        if response.status_code != 200:
+            return None, f"Entitlement lookup failed (HTTP {response.status_code})."
+        data = response.json()
+        if not isinstance(data, dict) or data.get("tier") not in ("free", "lite", "plus"):
+            return None, "Unexpected entitlement response."
+        user_id = data.get("user_id")
+        import uuid
+        try:
+            uuid.UUID(str(user_id))
+        except (ValueError, TypeError, AttributeError):
+            return None, "Invalid account identifier returned."
+        return {"tier": data["tier"], "user_id": str(user_id)}, None
+    except (requests.RequestException, ValueError):
+        return None, "Could not contact Supabase."
+
+
+def render_entitlement_lookup_test():
+    """Read-only admin diagnostic. Does not alter Android ads or entitlements."""
+    enabled = str(get_secret("PREMIUM_VERIFY_TEST_ENABLED", "false")).lower() in {"1", "true", "yes"}
+    email = str(get_secret("PREMIUM_VERIFY_TEST_EMAIL", "")).strip().lower()
+    user = st.session_state.get("user") or {}
+    if isinstance(user, dict):
+        current_email = str(user.get("email", "")).strip().lower()
+    else:
+        current_email = str(getattr(user, "email", "")).strip().lower()
+    if not enabled or not email or current_email != email:
+        return
+    with st.sidebar.expander("Premium account lookup test", expanded=False):
+        st.caption("Read-only check against Supabase. Does not change ads or purchases.")
+        if st.button("Check my verified Premium tier", key="iv_entitlement_lookup_test"):
+            result, error = fetch_my_premium_entitlement()
+            if error:
+                st.error(error)
+            else:
+                st.success(f"Account entitlement: {result['tier'].upper()}")
+                st.caption("Authenticated account ID: " + result["user_id"][:8] + "…")
+
+
 def render_public_navigation():
     authenticated = ensure_auth()
     if authenticated:
@@ -853,6 +907,7 @@ def render_public_navigation():
     if authenticated:
         render_android_premium_handoff()
         render_premium_verify_diagnostic()
+        render_entitlement_lookup_test()
 
     render_navigation_buttons(navigation_items, selected_page)
     if not authenticated:
