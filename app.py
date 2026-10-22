@@ -588,6 +588,62 @@ def render_profile_section(user):
             st.stop()
 
 
+def render_premium_verify_diagnostic():
+    """Temporary admin-only authenticated check; never grants entitlements."""
+    enabled = str(get_secret("PREMIUM_VERIFY_TEST_ENABLED", "false")).lower() in {"1", "true", "yes"}
+    if not enabled:
+        return
+
+    # Restrict to an explicitly configured account, not every signed-in user.
+    allowed_email = str(get_secret("PREMIUM_VERIFY_TEST_EMAIL", "")).strip().lower()
+    user = st.session_state.get("user")
+    email = str(getattr(user, "email", "") or "").strip().lower()
+    if not allowed_email or email != allowed_email:
+        return
+
+    with st.sidebar.expander("Premium verification diagnostic", expanded=False):
+        st.caption("Authenticated validation test only. No purchase is submitted or granted.")
+        if st.button("Run authentication test", key="premium_verify_diagnostic_run"):
+            access_token = st.session_state.get("access_token")
+            supabase_url = str(get_secret("SUPABASE_URL", "")).rstrip("/")
+            anon_key = get_secret("SUPABASE_ANON_KEY", "")
+            if not access_token or not supabase_url or not anon_key:
+                st.error("A signed-in session or Supabase configuration is missing.")
+                return
+            try:
+                response = requests.post(
+                    f"{supabase_url}/functions/v1/premium-verify",
+                    headers={
+                        "Authorization": f"Bearer {access_token}",
+                        "apikey": str(anon_key),
+                        "Content-Type": "application/json",
+                    },
+                    json={},
+                    timeout=15,
+                )
+                st.write(f"HTTP status: {response.status_code}")
+                try:
+                    body = response.json()
+                except ValueError:
+                    body = {}
+                # Show only a bounded server message; never echo credentials or response headers.
+                message = body.get("error") or body.get("message") if isinstance(body, dict) else None
+                if isinstance(message, str):
+                    st.write("Response: " + message[:250])
+                else:
+                    st.write("Response received (no displayable error message).")
+                if response.status_code == 401:
+                    st.warning("Authentication was rejected. Check the session and function configuration.")
+                elif response.status_code in (400, 422):
+                    st.success("Authenticated request reached purchase-input validation.")
+                elif 200 <= response.status_code < 300:
+                    st.warning("Unexpected success for an empty purchase payload. Review the Edge Function before proceeding.")
+                else:
+                    st.info("Review the function logs for this status.")
+            except requests.RequestException:
+                st.error("The verification function could not be reached. Check the deployment and connection.")
+
+
 def render_public_navigation():
     authenticated = ensure_auth()
     if authenticated:
@@ -623,6 +679,9 @@ def render_public_navigation():
         st.sidebar.caption("Cash flow • Investments • Insights")
     else:
         render_sidebar_brand()
+
+    if authenticated:
+        render_premium_verify_diagnostic()
 
     render_navigation_buttons(navigation_items, selected_page)
     if not authenticated:
@@ -1720,11 +1779,10 @@ def render_about_page():
     st.markdown(
         """
         <div class="iv-legal">
-        InvesTrack Pro is a financial management platform designed to make
-        personal and business cash flow management and investment tracking simpler.
+        InvesTrack Pro is a portfolio management platform created to make
+        investment tracking simpler, clearer and more accessible.
 
-        The platform helps users record income and expenses, manage financial accounts,
-        review cash flow reports and monitor cryptocurrency, stock, ETF, bond and cash
+        The platform allows users to monitor cryptocurrency, stock, ETF, bond and cash
         holdings through a unified dashboard. Users can review portfolio
         values, performance history and asset allocation without maintaining
         separate spreadsheets or switching between multiple applications.
@@ -1736,9 +1794,6 @@ def render_about_page():
 
         ### What InvesTrack Pro provides
 
-        - Personal and business cash flow management
-        - Income and expense tracking
-        - Account balances and cash flow reports
         - Cryptocurrency portfolio tracking
         - Stock portfolio tracking
         - ETF portfolio tracking
@@ -2151,12 +2206,6 @@ def render_partner_cta():
 # -----------------------------------------
 # AUTHENTICATED DASHBOARD
 # -----------------------------------------
-def open_android_premium():
-    """Signal the native Android WebView to display Google Play premium options."""
-    import uuid
-    st.query_params["iv_premium"] = uuid.uuid4().hex
-
-
 def render_dashboard():
     if not ensure_auth():
         st.warning(
@@ -2207,9 +2256,6 @@ def render_dashboard():
             # Native Android observes this query parameter; no automatic timer.
             st.query_params["iv_mode"] = new_mode.lower()
 
-
-    if st.button("✨ Premium Upgrade", key="premium_investments", use_container_width=True):
-        open_android_premium()
 
     st.markdown("### 📊 Investment Mode")
     st.radio(
@@ -2268,12 +2314,11 @@ def render_dashboard():
 
 
 # -----------------------------------------
-# FINANCIAL HUB NAVIGATION
+# FINANCIAL HUB: PHASE 1 NAVIGATION
+# No financial transactions are saved until the Supabase schema is installed.
 # -----------------------------------------
 def render_financial_hub():
     st.title("Your Financial Hub")
-    if st.button("✨ Premium Upgrade", key="premium_hub", use_container_width=True):
-        open_android_premium()
     st.caption("Manage money today. Track investments for tomorrow.")
     cash, invest = st.columns([1.2, 1])
     with cash:
