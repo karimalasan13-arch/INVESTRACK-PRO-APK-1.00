@@ -2541,7 +2541,10 @@ elif selected_page == "Login":
     render_public_footer()
 
 elif selected_page == "Dashboard":
-    render_financial_hub() if user_is_authenticated else render_dashboard()
+    if user_is_authenticated:
+        render_financial_hub()
+    else:
+        render_dashboard()
 
 elif selected_page == "Cash Flow":
     render_cashflow_workspace()
