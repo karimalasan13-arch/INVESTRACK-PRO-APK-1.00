@@ -2620,6 +2620,37 @@ def render_cashflow_workspace():
 
 
 # -----------------------------------------
+# STEP 4C.1 — LOGIN-FIRST GATE
+# Render no public navigation or dashboard for signed-out visitors.
+# Existing signed-in sessions retain the existing Financial Hub and
+# server-derived Android entitlement synchronization.
+# -----------------------------------------
+if not ensure_auth():
+    st.session_state.pop("iv_entitlement_snapshot", None)
+    # Native Android reads this guest marker to keep advertisements gated.
+    st.markdown(
+        '<span id="iv-native-entitlement" hidden data-tier="guest"></span>',
+        unsafe_allow_html=True,
+    )
+    st.markdown("""
+    <style>
+      [data-testid="stSidebar"], [data-testid="stSidebarCollapsedControl"] {
+          display: none !important;
+      }
+      .block-container { max-width: 560px; padding-top: 3.2rem; }
+    </style>
+    """, unsafe_allow_html=True)
+    st.markdown(
+        '<div style="text-align:center;font-size:1.12rem;font-weight:600;'
+        'margin-bottom:0.75rem">'
+        'Log in to monitor cashflow, track your investments and more.'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+    login_ui()
+    st.stop()
+
+# -----------------------------------------
 # MAIN ROUTER
 # -----------------------------------------
 sync_route_from_url()
