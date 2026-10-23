@@ -4,7 +4,7 @@ import streamlit as st
 
 # Step 4C.3: server-side guard on every Streamlit script execution.
 # A client-side activity heartbeat is still required to measure actual interaction.
-INACTIVITY_TIMEOUT_SECONDS = 15 * 60
+INACTIVITY_TIMEOUT_SECONDS = 5 * 60
 
 def _session_expired():
     last = st.session_state.get("_iv_last_activity_monotonic")
