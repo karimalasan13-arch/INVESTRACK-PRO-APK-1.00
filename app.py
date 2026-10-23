@@ -846,6 +846,30 @@ def fetch_my_premium_entitlement():
         return None, "Could not contact Supabase."
 
 
+
+
+def render_native_entitlement_snapshot():
+    """Account-scoped read-only snapshot for the trusted native WebView.
+
+    Refreshes periodically; never supplies a purchase token or Supabase credential.
+    """
+    import uuid as _uuid
+    now = time.monotonic()
+    snapshot = st.session_state.get("iv_entitlement_snapshot")
+    if snapshot is None or now - snapshot.get("checked_at", 0) > 25:
+        result, error = fetch_my_premium_entitlement()
+        if error or result is None:
+            snapshot = {"checked_at": now, "status": "error"}
+        else:
+            snapshot = {"checked_at": now, "status": "ok", **result}
+        st.session_state["iv_entitlement_snapshot"] = snapshot
+    if snapshot["status"] == "ok":
+        tier = snapshot["tier"]
+        uid = snapshot["user_id"]
+        st.markdown(f'<span id="iv-native-entitlement" hidden data-tier="{tier}" data-user="{uid}"></span>', unsafe_allow_html=True)
+    else:
+        st.markdown('<span id="iv-native-entitlement" hidden data-tier="pending"></span>', unsafe_allow_html=True)
+
 def render_entitlement_lookup_test():
     """Read-only admin diagnostic. Does not alter Android ads or entitlements."""
     enabled = str(get_secret("PREMIUM_VERIFY_TEST_ENABLED", "false")).lower() in {"1", "true", "yes"}
@@ -906,8 +930,13 @@ def render_public_navigation():
 
     if authenticated:
         render_android_premium_handoff()
+        render_native_entitlement_snapshot()
         render_premium_verify_diagnostic()
         render_entitlement_lookup_test()
+
+    if not authenticated:
+        st.session_state.pop("iv_entitlement_snapshot", None)
+        st.markdown('<span id="iv-native-entitlement" hidden data-tier="guest"></span>', unsafe_allow_html=True)
 
     render_navigation_buttons(navigation_items, selected_page)
     if not authenticated:
