@@ -2637,16 +2637,8 @@ if not ensure_auth():
       [data-testid="stSidebar"], [data-testid="stSidebarCollapsedControl"] {
           display: none !important;
       }
-      .block-container { max-width: 560px; padding-top: 3.2rem; }
     </style>
     """, unsafe_allow_html=True)
-    st.markdown(
-        '<div style="text-align:center;font-size:1.12rem;font-weight:600;'
-        'margin-bottom:0.75rem">'
-        'Log in to monitor cashflow, track your investments and more.'
-        '</div>',
-        unsafe_allow_html=True,
-    )
     login_ui()
     st.stop()
 
