@@ -1,6 +1,18 @@
 """Supabase authentication for InvesTrack Pro (per Streamlit session)."""
 import time
 import streamlit as st
+
+# Step 4C.3: server-side guard on every Streamlit script execution.
+# A client-side activity heartbeat is still required to measure actual interaction.
+INACTIVITY_TIMEOUT_SECONDS = 15 * 60
+
+def _session_expired():
+    last = st.session_state.get("_iv_last_activity_monotonic")
+    return last is not None and (time.monotonic() - last) >= INACTIVITY_TIMEOUT_SECONDS
+
+def _mark_session_activity():
+    st.session_state["_iv_last_activity_monotonic"] = time.monotonic()
+
 from db import get_supabase
 
 
@@ -8,7 +20,8 @@ def _clear_auth_identity():
     """Clear account-specific state without discarding unrelated UI preferences."""
     for key in ('access_token', 'refresh_token', '_attached_access_token',
                 'user', 'user_id', '_auth_checked_at', 'iv_entitlement_snapshot',
-                'iv_entitlement_snapshot_at', 'iv_entitlement_user_id'):
+                'iv_entitlement_snapshot_at', 'iv_entitlement_user_id',
+                '_iv_last_activity_monotonic'):
         st.session_state.pop(key, None)
 
 
@@ -34,6 +47,9 @@ def get_auth_client():
 
 
 def ensure_auth() -> bool:
+    if _session_expired():
+        _clear_auth_identity()
+        return False
     if not st.session_state.get('access_token') or not st.session_state.get('refresh_token'):
         return False
     # Never allow an identity cached from another login to remain trusted.
@@ -62,6 +78,12 @@ def ensure_auth() -> bool:
         # Network errors fail closed. Do not delete tokens on transient failures.
         st.session_state.pop('_auth_checked_at', None)
         return False
+
+
+def register_user_activity():
+    """Call only from a verified user-interaction event, not on every rerun."""
+    if st.session_state.get("access_token") and not _session_expired():
+        _mark_session_activity()
 
 
 def logout():
@@ -175,6 +197,7 @@ def login_ui():
                                 st.session_state.user = result.user
                                 st.session_state.user_id = result.user.id
                                 st.session_state._auth_checked_at = time.monotonic()
+                                _mark_session_activity()
                                 st.session_state.pop('iv_entitlement_snapshot', None)
                                 st.session_state.pending_public_page = 'Dashboard'
                                 st.rerun()
@@ -203,6 +226,7 @@ def login_ui():
                                 st.session_state.user = result.user
                                 st.session_state.user_id = result.user.id
                                 st.session_state._auth_checked_at = time.monotonic()
+                                _mark_session_activity()
                                 st.session_state.pop('iv_entitlement_snapshot', None)
                                 st.session_state.pending_public_page = 'Dashboard'
                                 st.rerun()
