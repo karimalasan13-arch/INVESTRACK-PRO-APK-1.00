@@ -4,20 +4,28 @@ import streamlit as st
 from db import get_supabase
 
 
+def _clear_auth_identity():
+    """Clear account-specific state without discarding unrelated UI preferences."""
+    for key in ('access_token', 'refresh_token', '_attached_access_token',
+                'user', 'user_id', '_auth_checked_at', 'iv_entitlement_snapshot',
+                'iv_entitlement_snapshot_at', 'iv_entitlement_user_id'):
+        st.session_state.pop(key, None)
+
+
 def _attach_session():
     client = get_supabase()
     access = st.session_state.get('access_token')
     refresh = st.session_state.get('refresh_token')
     if not access or not refresh:
         return client
-    # Avoid network-based set_session on every widget interaction.
     if st.session_state.get('_attached_access_token') != access:
+        # set_session can rotate an expired access token using the refresh token.
         response = client.auth.set_session(access_token=access, refresh_token=refresh)
-        st.session_state._attached_access_token = access
-        if response and response.session:
-            st.session_state.access_token = response.session.access_token
-            st.session_state.refresh_token = response.session.refresh_token
-            st.session_state._attached_access_token = response.session.access_token
+        if not response or not response.session:
+            raise RuntimeError('Supabase did not return a valid session')
+        st.session_state.access_token = response.session.access_token
+        st.session_state.refresh_token = response.session.refresh_token
+        st.session_state._attached_access_token = response.session.access_token
     return client
 
 
@@ -26,31 +34,34 @@ def get_auth_client():
 
 
 def ensure_auth() -> bool:
-    if not st.session_state.get('access_token'):
+    if not st.session_state.get('access_token') or not st.session_state.get('refresh_token'):
         return False
-    # Avoid redundant get_user requests on each navigation click. Server-side
-    # validation is repeated regularly and every Supabase query still uses RLS.
+    # Never allow an identity cached from another login to remain trusted.
     if (st.session_state.get('user_id') and st.session_state.get('user')
             and time.monotonic() - st.session_state.get('_auth_checked_at', 0) < 30):
         return True
     try:
         client = _attach_session()
         result = client.auth.get_user()
-        if result and result.user:
-            st.session_state.user = result.user
-            st.session_state.user_id = result.user.id
-            session = client.auth.get_session()
-            if session:
-                st.session_state.access_token = session.access_token
-                st.session_state.refresh_token = session.refresh_token
-                st.session_state._attached_access_token = session.access_token
-            st.session_state._auth_checked_at = time.monotonic()
-            return True
+        if not result or not result.user:
+            _clear_auth_identity()
+            return False
+        previous_user_id = st.session_state.get('user_id')
+        if previous_user_id and previous_user_id != result.user.id:
+            st.session_state.pop('iv_entitlement_snapshot', None)
+        st.session_state.user = result.user
+        st.session_state.user_id = result.user.id
+        session = client.auth.get_session()
+        if session:
+            st.session_state.access_token = session.access_token
+            st.session_state.refresh_token = session.refresh_token
+            st.session_state._attached_access_token = session.access_token
+        st.session_state._auth_checked_at = time.monotonic()
+        return True
     except Exception:
-        # A network interruption must not erase the user's stored credentials.
-        # Fail closed until Supabase authentication can be verified again.
+        # Network errors fail closed. Do not delete tokens on transient failures.
+        st.session_state.pop('_auth_checked_at', None)
         return False
-    return False
 
 
 def logout():
@@ -164,6 +175,7 @@ def login_ui():
                                 st.session_state.user = result.user
                                 st.session_state.user_id = result.user.id
                                 st.session_state._auth_checked_at = time.monotonic()
+                                st.session_state.pop('iv_entitlement_snapshot', None)
                                 st.session_state.pending_public_page = 'Dashboard'
                                 st.rerun()
                         except Exception:
@@ -191,6 +203,7 @@ def login_ui():
                                 st.session_state.user = result.user
                                 st.session_state.user_id = result.user.id
                                 st.session_state._auth_checked_at = time.monotonic()
+                                st.session_state.pop('iv_entitlement_snapshot', None)
                                 st.session_state.pending_public_page = 'Dashboard'
                                 st.rerun()
                             else:
