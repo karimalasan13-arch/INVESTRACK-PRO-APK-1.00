@@ -8,7 +8,7 @@ INACTIVITY_TIMEOUT_SECONDS = 5 * 60
 
 def _session_expired():
     last = st.session_state.get("_iv_last_activity_monotonic")
-    return last is not None and (time.monotonic() - last) >= INACTIVITY_TIMEOUT_SECONDS
+    return last is None or (time.monotonic() - last) >= INACTIVITY_TIMEOUT_SECONDS
 
 def _mark_session_activity():
     st.session_state["_iv_last_activity_monotonic"] = time.monotonic()
@@ -194,6 +194,7 @@ def login_ui():
                                 st.session_state.access_token = result.session.access_token
                                 st.session_state.refresh_token = result.session.refresh_token
                                 st.session_state._attached_access_token = result.session.access_token
+                                _mark_session_activity()
                                 st.session_state.user = result.user
                                 st.session_state.user_id = result.user.id
                                 st.session_state._auth_checked_at = time.monotonic()
@@ -223,6 +224,7 @@ def login_ui():
                                 st.session_state.access_token = result.session.access_token
                                 st.session_state.refresh_token = result.session.refresh_token
                                 st.session_state._attached_access_token = result.session.access_token
+                                _mark_session_activity()
                                 st.session_state.user = result.user
                                 st.session_state.user_id = result.user.id
                                 st.session_state._auth_checked_at = time.monotonic()
