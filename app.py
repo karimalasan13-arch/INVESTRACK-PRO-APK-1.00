@@ -2619,6 +2619,18 @@ def render_cashflow_workspace():
     render_cashflow()
 
 
+# STEP 4C.3 — SERVER WATCHDOG (staging only)
+# A fragment re-executes independently of dashboard widget interaction.
+# It never renews the inactivity timestamp.
+@st.fragment(run_every="1s")
+def _iv_inactivity_watchdog():
+    from auth import session_inactivity_expired
+    if session_inactivity_expired():
+        # Force a full rerun so the login-first gate replaces the dashboard.
+        st.rerun(scope="app")
+
+_iv_inactivity_watchdog()
+
 # -----------------------------------------
 # STEP 4C.1 — LOGIN-FIRST GATE
 # Render no public navigation or dashboard for signed-out visitors.
