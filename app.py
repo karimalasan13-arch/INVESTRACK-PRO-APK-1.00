@@ -630,6 +630,18 @@ def render_android_premium_handoff():
     """One-time code handoff for the trusted Android WebView (not an entitlement)."""
     if not ensure_auth():
         return
+    # Keep the navigation request in the DOM across Streamlit reruns. Native
+    # WebView acknowledges it locally by deduplicating the event ID.
+    pending_event = st.session_state.get("iv_premium_pending_event")
+    pending_at = st.session_state.get("iv_premium_pending_at", 0)
+    if pending_event and time.monotonic() - pending_at < 120:
+        st.markdown(
+            f'<span id="iv-native-premium-event" hidden data-event="{html.escape(str(pending_event), quote=True)}"></span>',
+            unsafe_allow_html=True,
+        )
+    elif pending_event:
+        st.session_state.pop("iv_premium_pending_event", None)
+        st.session_state.pop("iv_premium_pending_at", None)
     # Native WebView clicks this button on demand. No code is issued on page load.
     st.markdown("""<style>[class*="st-key-iv_native_auth_request"] {display:none!important}</style>""",
                 unsafe_allow_html=True)
@@ -2597,7 +2609,10 @@ def render_financial_hub():
         if st.button("✨ Explore Premium Plans →", key="hub_premium_upgrade",
                      use_container_width=True):
             import uuid
-            st.query_params["iv_premium"] = uuid.uuid4().hex
+            event_id = uuid.uuid4().hex
+            st.session_state["iv_premium_pending_event"] = event_id
+            st.session_state["iv_premium_pending_at"] = time.monotonic()
+            st.query_params["iv_premium"] = event_id
 
     st.divider()
     a, b = st.columns(2)
