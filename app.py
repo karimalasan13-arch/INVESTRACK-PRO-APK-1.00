@@ -668,13 +668,13 @@ def render_android_premium_handoff():
     if code and time.monotonic() - issued_at < 60:
         # This marker is readable only by the main-frame native evaluateJavascript.
         # Never include the code in a URL, analytics, or application logs.
-        st.markdown(f'<span id="iv-native-auth-code" hidden>{html.escape(code)}</span>',
-                    unsafe_allow_html=True)
+        # st.html renders into the parent Streamlit DOM, not a component iframe.
+        # The native Android WebView reads this exact ID in the main document.
+        st.html(f'<span id="iv-native-auth-code" hidden>{html.escape(code)}</span>')
     else:
         st.session_state.pop("iv_native_handoff_code", None)
     if st.session_state.get("iv_native_handoff_error"):
-        st.markdown('<span id="iv-native-auth-error" hidden>unavailable</span>',
-                    unsafe_allow_html=True)
+        st.html('<span id="iv-native-auth-error" hidden>unavailable</span>')
         st.session_state.pop("iv_native_handoff_error", None)
 
 
@@ -2685,9 +2685,10 @@ sync_route_from_url()
 
 # TEMPORARY DIAGNOSTIC: render directly in the authenticated main flow,
 # independent of navigation/sidebar layout or which dashboard is selected.
-st.warning("PREMIUM AUTH DIAGNOSTIC — BUILD 2 — 25 OCT 2026")
+st.warning("PREMIUM AUTH DIAGNOSTIC — BUILD 3 — 25 OCT 2026")
 st.caption("If you can see this banner, Render is serving the updated diagnostic app.py.")
-render_android_premium_handoff()
+# Handoff is already rendered in render_public_navigation() for signed-in users.
+# Avoid rendering the same keyed button twice in a single Streamlit run.
 
 selected_page, user_is_authenticated = (
     render_public_navigation()
