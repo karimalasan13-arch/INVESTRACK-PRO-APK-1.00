@@ -643,8 +643,19 @@ def render_android_premium_handoff():
         st.session_state.pop("iv_premium_pending_event", None)
         st.session_state.pop("iv_premium_pending_at", None)
     # Native WebView clicks this button on demand. No code is issued on page load.
-    st.markdown("""<style>[class*="st-key-iv_native_auth_request"] {display:none!important}</style>""",
-                unsafe_allow_html=True)
+    st.markdown("""
+<style>
+[class*="st-key-iv_native_auth_request"] {
+    position: absolute !important;
+    left: -9999px !important;
+    width: 1px !important;
+    height: 1px !important;
+    overflow: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+</style>
+""", unsafe_allow_html=True)
     if st.button("Native purchase authorization", key="iv_native_auth_request"):
         code, error = issue_premium_auth_code()
         if code:
