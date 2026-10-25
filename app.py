@@ -642,27 +642,16 @@ def render_android_premium_handoff():
     elif pending_event:
         st.session_state.pop("iv_premium_pending_event", None)
         st.session_state.pop("iv_premium_pending_at", None)
-    # TEMPORARY DIAGNOSTIC: keep the same Streamlit button key and native DOM
-    # selector, but make the control manually clickable in the foreground.
-    # Remove this diagnostic panel after isolating the handoff failure.
-    st.markdown("**Premium authorization diagnostic (temporary)**")
-    st.caption("Tap the button manually while signed in. The authorization code is never displayed.")
+    # Preserve this button key for the Android WebView's native click selector.
     if st.button("Native purchase authorization", key="iv_native_auth_request"):
-        print("PREMIUM_AUTH_DIAG: button callback reached", flush=True)
         code, error = issue_premium_auth_code()
-        print("PREMIUM_AUTH_DIAG: issue result=" + ("issued" if code else "failed") + ("; error=" + str(error) if error else ""), flush=True)
-        st.session_state["iv_native_diag_status"] = (
-            "SUCCESS: Streamlit received the click and Supabase issued a code."
-            if code else f"FAILED: Streamlit received the click, but issuance failed: {error or 'Unknown error'}"
-        )
         if code:
             st.session_state["iv_native_handoff_code"] = code
             st.session_state["iv_native_handoff_at"] = time.monotonic()
+            st.session_state.pop("iv_native_handoff_error", None)
         else:
             st.session_state.pop("iv_native_handoff_code", None)
             st.session_state["iv_native_handoff_error"] = error or "Authorization unavailable"
-    if st.session_state.get("iv_native_diag_status"):
-        st.info(st.session_state["iv_native_diag_status"])
     code = st.session_state.get("iv_native_handoff_code")
     issued_at = st.session_state.get("iv_native_handoff_at", 0)
     if code and time.monotonic() - issued_at < 60:
@@ -678,162 +667,6 @@ def render_android_premium_handoff():
         st.session_state.pop("iv_native_handoff_error", None)
 
 
-def render_premium_verify_diagnostic():
-    """Temporary admin-only authenticated check; never grants entitlements."""
-    enabled = str(get_secret("PREMIUM_VERIFY_TEST_ENABLED", "false")).lower() in {"1", "true", "yes"}
-    if not enabled:
-        return
-
-    # Restrict to an explicitly configured account, not every signed-in user.
-    allowed_email = str(get_secret("PREMIUM_VERIFY_TEST_EMAIL", "")).strip().lower()
-    user = st.session_state.get("user")
-    email = str(getattr(user, "email", "") or "").strip().lower()
-    if not allowed_email or email != allowed_email:
-        return
-
-    with st.sidebar.expander("Premium verification diagnostic", expanded=False):
-        st.caption("Authenticated validation test only. No purchase is submitted or granted.")
-        if st.button("Test one-time authorization code", key="premium_auth_code_test"):
-            access_token = st.session_state.get("access_token")
-            supabase_url = str(get_secret("SUPABASE_URL", "")).rstrip("/")
-            anon_key = str(get_secret("SUPABASE_ANON_KEY", ""))
-            if not access_token or not supabase_url or not anon_key:
-                st.error("A signed-in session or Supabase configuration is missing.")
-            else:
-                try:
-                    response = requests.post(
-                        f"{supabase_url}/rest/v1/rpc/premium_issue_auth_code",
-                        headers={
-                            "Authorization": f"Bearer {access_token}",
-                            "apikey": anon_key,
-                            "Content-Type": "application/json",
-                        },
-                        json={},
-                        timeout=15,
-                    )
-                    if response.status_code == 200:
-                        code = response.json()
-                        if isinstance(code, str) and len(code) == 64 and all(ch in "0123456789abcdef" for ch in code):
-                            st.success("Authorization code issued successfully (64 hexadecimal characters). Code hidden for security.")
-                        else:
-                            st.error("Unexpected authorization-code response. Check function configuration.")
-                    else:
-                        st.error(f"Authorization-code issuance failed (HTTP {response.status_code}).")
-                except (requests.RequestException, ValueError):
-                    st.error("Could not complete the authorization-code test. Check connection and server logs.")
-        # Step 4A.3: server-side redemption diagnostic (admin test account only).
-        # Service-role credentials are read on the server; never rendered to the browser.
-        def redeem_test_code(code):
-            service_key = str(get_secret("SUPABASE_SERVICE_ROLE_KEY", ""))
-            url = str(get_secret("SUPABASE_URL", "")).rstrip("/")
-            if not service_key or not url:
-                return None, "Missing server-side SUPABASE_SERVICE_ROLE_KEY or SUPABASE_URL."
-            try:
-                response = requests.post(
-                    f"{url}/rest/v1/rpc/premium_redeem_auth_code",
-                    headers={"Authorization": f"Bearer {service_key}",
-                             "apikey": service_key, "Content-Type": "application/json"},
-                    json={"p_code": code}, timeout=15,
-                )
-                if response.status_code != 200:
-                    return None, f"Redemption endpoint returned HTTP {response.status_code}."
-                return response.json(), None
-            except (requests.RequestException, ValueError):
-                return None, "Redemption request failed or returned invalid JSON."
-
-        def issue_test_code():
-            return issue_premium_auth_code()
-
-        if st.button("Test redemption and replay protection", key="premium_redemption_test"):
-            if not str(get_secret("SUPABASE_SERVICE_ROLE_KEY", "")):
-                st.warning("Configure SUPABASE_SERVICE_ROLE_KEY as a private Render environment variable first.")
-            else:
-                code, error = issue_test_code()
-                if error:
-                    st.error(error)
-                else:
-                    redeemed_user, error = redeem_test_code(code)
-                    expected_id = str(st.session_state.get("user_id") or getattr(user, "id", ""))
-                    if error:
-                        st.error(error)
-                    elif isinstance(redeemed_user, str) and redeemed_user == expected_id:
-                        st.success("PASS: first redemption returned the signed-in user ID.")
-                        second_user, replay_error = redeem_test_code(code)
-                        if replay_error:
-                            st.error(replay_error)
-                        elif second_user is None:
-                            st.success("PASS: replay was rejected (null result).")
-                        else:
-                            st.error("FAIL: replay unexpectedly returned a user ID.")
-                    else:
-                        st.error("FAIL: redemption did not match the signed-in account.")
-
-        if st.button("Issue code for expiry test", key="premium_expiry_issue"):
-            code, error = issue_test_code()
-            if error:
-                st.error(error)
-            else:
-                st.session_state["premium_expiry_test_code"] = code
-                st.session_state["premium_expiry_test_time"] = time.monotonic()
-                st.info("Code issued and hidden. Wait at least 95 seconds, then click Check expired code.")
-
-        if st.button("Check expired code", key="premium_expiry_check"):
-            code = st.session_state.get("premium_expiry_test_code")
-            issued_at = st.session_state.get("premium_expiry_test_time")
-            if not code or issued_at is None:
-                st.warning("Issue an expiry-test code first.")
-            elif time.monotonic() - issued_at < 95:
-                st.warning("Wait at least 95 seconds after issuance before testing expiry.")
-            else:
-                result, error = redeem_test_code(code)
-                st.session_state.pop("premium_expiry_test_code", None)
-                st.session_state.pop("premium_expiry_test_time", None)
-                if error:
-                    st.error(error)
-                elif result is None:
-                    st.success("PASS: expired authorization code was rejected.")
-                else:
-                    st.error("FAIL: expired code unexpectedly returned a user ID.")
-
-        if st.button("Run authentication test", key="premium_verify_diagnostic_run"):
-            access_token = st.session_state.get("access_token")
-            supabase_url = str(get_secret("SUPABASE_URL", "")).rstrip("/")
-            anon_key = get_secret("SUPABASE_ANON_KEY", "")
-            if not access_token or not supabase_url or not anon_key:
-                st.error("A signed-in session or Supabase configuration is missing.")
-                return
-            try:
-                response = requests.post(
-                    f"{supabase_url}/functions/v1/premium-verify",
-                    headers={
-                        "Authorization": f"Bearer {access_token}",
-                        "apikey": str(anon_key),
-                        "Content-Type": "application/json",
-                    },
-                    json={},
-                    timeout=15,
-                )
-                st.write(f"HTTP status: {response.status_code}")
-                try:
-                    body = response.json()
-                except ValueError:
-                    body = {}
-                # Show only a bounded server message; never echo credentials or response headers.
-                message = body.get("error") or body.get("message") if isinstance(body, dict) else None
-                if isinstance(message, str):
-                    st.write("Response: " + message[:250])
-                else:
-                    st.write("Response received (no displayable error message).")
-                if response.status_code == 401:
-                    st.warning("Authentication was rejected. Check the session and function configuration.")
-                elif response.status_code in (400, 422):
-                    st.success("Authenticated request reached purchase-input validation.")
-                elif 200 <= response.status_code < 300:
-                    st.warning("Unexpected success for an empty purchase payload. Review the Edge Function before proceeding.")
-                else:
-                    st.info("Review the function logs for this status.")
-            except requests.RequestException:
-                st.error("The verification function could not be reached. Check the deployment and connection.")
 
 
 def fetch_my_premium_entitlement():
@@ -892,26 +725,6 @@ def render_native_entitlement_snapshot():
     else:
         st.markdown('<span id="iv-native-entitlement" hidden data-tier="pending"></span>', unsafe_allow_html=True)
 
-def render_entitlement_lookup_test():
-    """Read-only admin diagnostic. Does not alter Android ads or entitlements."""
-    enabled = str(get_secret("PREMIUM_VERIFY_TEST_ENABLED", "false")).lower() in {"1", "true", "yes"}
-    email = str(get_secret("PREMIUM_VERIFY_TEST_EMAIL", "")).strip().lower()
-    user = st.session_state.get("user") or {}
-    if isinstance(user, dict):
-        current_email = str(user.get("email", "")).strip().lower()
-    else:
-        current_email = str(getattr(user, "email", "")).strip().lower()
-    if not enabled or not email or current_email != email:
-        return
-    with st.sidebar.expander("Premium account lookup test", expanded=False):
-        st.caption("Read-only check against Supabase. Does not change ads or purchases.")
-        if st.button("Check my verified Premium tier", key="iv_entitlement_lookup_test"):
-            result, error = fetch_my_premium_entitlement()
-            if error:
-                st.error(error)
-            else:
-                st.success(f"Account entitlement: {result['tier'].upper()}")
-                st.caption("Authenticated account ID: " + result["user_id"][:8] + "…")
 
 
 def render_public_navigation():
@@ -953,8 +766,6 @@ def render_public_navigation():
     if authenticated:
         render_android_premium_handoff()
         render_native_entitlement_snapshot()
-        render_premium_verify_diagnostic()
-        render_entitlement_lookup_test()
 
     if not authenticated:
         st.session_state.pop("iv_entitlement_snapshot", None)
@@ -2644,7 +2455,7 @@ def render_cashflow_workspace():
     render_cashflow()
 
 
-# STEP 4C.3 — SERVER WATCHDOG (staging only)
+# STEP 4C.3 — SERVER SESSION INACTIVITY WATCHDOG
 # A fragment re-executes independently of dashboard widget interaction.
 # It never renews the inactivity timestamp.
 @st.fragment(run_every="1s")
@@ -2684,12 +2495,6 @@ if not ensure_auth():
 # -----------------------------------------
 sync_route_from_url()
 
-# TEMPORARY DIAGNOSTIC: render directly in the authenticated main flow,
-# independent of navigation/sidebar layout or which dashboard is selected.
-st.warning("PREMIUM AUTH DIAGNOSTIC — BUILD 3 — 25 OCT 2026")
-st.caption("If you can see this banner, Render is serving the updated diagnostic app.py.")
-# Handoff is already rendered in render_public_navigation() for signed-in users.
-# Avoid rendering the same keyed button twice in a single Streamlit run.
 
 selected_page, user_is_authenticated = (
     render_public_navigation()
