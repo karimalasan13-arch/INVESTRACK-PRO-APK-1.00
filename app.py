@@ -951,6 +951,7 @@ def render_public_navigation():
         render_sidebar_brand()
 
     if authenticated:
+        render_android_premium_handoff()
         render_native_entitlement_snapshot()
         render_premium_verify_diagnostic()
         render_entitlement_lookup_test()
