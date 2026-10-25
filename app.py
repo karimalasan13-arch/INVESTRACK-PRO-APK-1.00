@@ -951,7 +951,6 @@ def render_public_navigation():
         render_sidebar_brand()
 
     if authenticated:
-        render_android_premium_handoff()
         render_native_entitlement_snapshot()
         render_premium_verify_diagnostic()
         render_entitlement_lookup_test()
@@ -2683,6 +2682,12 @@ if not ensure_auth():
 # MAIN ROUTER
 # -----------------------------------------
 sync_route_from_url()
+
+# TEMPORARY DIAGNOSTIC: render directly in the authenticated main flow,
+# independent of navigation/sidebar layout or which dashboard is selected.
+st.warning("PREMIUM AUTH DIAGNOSTIC — BUILD 2 — 25 OCT 2026")
+st.caption("If you can see this banner, Render is serving the updated diagnostic app.py.")
+render_android_premium_handoff()
 
 selected_page, user_is_authenticated = (
     render_public_navigation()
