@@ -642,30 +642,27 @@ def render_android_premium_handoff():
     elif pending_event:
         st.session_state.pop("iv_premium_pending_event", None)
         st.session_state.pop("iv_premium_pending_at", None)
-    # Native WebView clicks this button on demand. No code is issued on page load.
-    st.markdown("""
-<style>
-[class*="st-key-iv_native_auth_request"] {
-    position: absolute !important;
-    left: -9999px !important;
-    width: 1px !important;
-    height: 1px !important;
-    overflow: hidden !important;
-    opacity: 0 !important;
-    pointer-events: none !important;
-}
-</style>
-""", unsafe_allow_html=True)
+    # TEMPORARY DIAGNOSTIC: keep the same Streamlit button key and native DOM
+    # selector, but make the control manually clickable in the foreground.
+    # Remove this diagnostic panel after isolating the handoff failure.
+    st.markdown("**Premium authorization diagnostic (temporary)**")
+    st.caption("Tap the button manually while signed in. The authorization code is never displayed.")
     if st.button("Native purchase authorization", key="iv_native_auth_request"):
         print("PREMIUM_AUTH_DIAG: button callback reached", flush=True)
         code, error = issue_premium_auth_code()
         print("PREMIUM_AUTH_DIAG: issue result=" + ("issued" if code else "failed") + ("; error=" + str(error) if error else ""), flush=True)
+        st.session_state["iv_native_diag_status"] = (
+            "SUCCESS: Streamlit received the click and Supabase issued a code."
+            if code else f"FAILED: Streamlit received the click, but issuance failed: {error or 'Unknown error'}"
+        )
         if code:
             st.session_state["iv_native_handoff_code"] = code
             st.session_state["iv_native_handoff_at"] = time.monotonic()
         else:
             st.session_state.pop("iv_native_handoff_code", None)
             st.session_state["iv_native_handoff_error"] = error or "Authorization unavailable"
+    if st.session_state.get("iv_native_diag_status"):
+        st.info(st.session_state["iv_native_diag_status"])
     code = st.session_state.get("iv_native_handoff_code")
     issued_at = st.session_state.get("iv_native_handoff_at", 0)
     if code and time.monotonic() - issued_at < 60:
