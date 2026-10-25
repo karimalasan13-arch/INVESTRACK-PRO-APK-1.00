@@ -657,7 +657,9 @@ def render_android_premium_handoff():
 </style>
 """, unsafe_allow_html=True)
     if st.button("Native purchase authorization", key="iv_native_auth_request"):
+        print("PREMIUM_AUTH_DIAG: button callback reached", flush=True)
         code, error = issue_premium_auth_code()
+        print("PREMIUM_AUTH_DIAG: issue result=" + ("issued" if code else "failed") + ("; error=" + str(error) if error else ""), flush=True)
         if code:
             st.session_state["iv_native_handoff_code"] = code
             st.session_state["iv_native_handoff_at"] = time.monotonic()
