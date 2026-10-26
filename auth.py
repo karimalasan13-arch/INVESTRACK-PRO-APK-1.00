@@ -48,6 +48,70 @@ def _attach_session():
     return client
 
 
+def restore_verified_session(access_token: str, refresh_token: str) -> bool:
+    """Restore a Supabase login from a trusted SERVER-SIDE credential handoff.
+
+    This function must NOT be exposed directly to browser JavaScript, untrusted
+    Streamlit widget values, URL query parameters, or arbitrary HTTP requests.
+    Only invoke it once an authenticated, single-use native-to-server exchange
+    has been implemented and its credentials delivered privately to the server.
+
+    Supabase is the authority: successfully unlocking an Android device alone
+    never authorizes access to the Streamlit dashboard or Premium entitlements.
+    """
+    # Always discard the old account, cached Premium status and activity clock
+    # before trying to restore anything. Failure therefore remains signed out.
+    _clear_auth_identity()
+    st.session_state.pop('iv_premium_pending_event', None)
+    st.session_state.pop('iv_premium_pending_at', None)
+
+    def _valid_token(value: str) -> bool:
+        return (isinstance(value, str)
+                and 0 < len(value) <= 8192
+                and value.isascii()
+                and not any(ch.isspace() or ord(ch) < 33 or ord(ch) == 127
+                            for ch in value))
+
+    if not _valid_token(access_token) or not _valid_token(refresh_token):
+        return False
+
+    restored_successfully = False
+    try:
+        client = get_supabase()
+        response = client.auth.set_session(
+            access_token=access_token, refresh_token=refresh_token
+        )
+        if not response or not response.session:
+            return False
+
+        restored = response.session
+        if not _valid_token(restored.access_token) or not _valid_token(restored.refresh_token):
+            return False
+
+        # A fresh Supabase Auth server verification is required. Do not accept
+        # a locally decoded JWT or an account ID supplied by the native caller.
+        verified = client.auth.get_user(restored.access_token)
+        if not verified or not verified.user or not getattr(verified.user, 'id', None):
+            return False
+
+        st.session_state.access_token = restored.access_token
+        st.session_state.refresh_token = restored.refresh_token
+        st.session_state._attached_access_token = restored.access_token
+        st.session_state.user = verified.user
+        st.session_state.user_id = verified.user.id
+        st.session_state._auth_checked_at = time.monotonic()
+        _mark_session_activity()  # starts a NEW 5-minute window after validation
+        st.session_state.pending_public_page = 'Dashboard'
+        restored_successfully = True
+        return True
+    except Exception:
+        # Fail closed; never log credentials or leave a partially restored user.
+        return False
+    finally:
+        if not restored_successfully:
+            _clear_auth_identity()
+
+
 def get_auth_client():
     return _attach_session()
 
