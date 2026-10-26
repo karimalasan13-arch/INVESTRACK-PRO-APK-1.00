@@ -11,7 +11,11 @@ SECURITY:
 - The original /verify endpoint is retained.
 """
 
+import hmac
 import json
+import secrets
+import threading
+import time
 import os
 import uuid
 from urllib.error import HTTPError, URLError
@@ -190,6 +194,131 @@ async def refresh_session(request: FastAPIRequest):
         'access_token': access,
         'refresh_token': rotated,
         'expires_in': expires,
+    })
+
+
+
+# ---------------------------------------------------------------------------
+# Step 4C: SHORT-LIVED, SINGLE-USE HANDOFF (STAGING ONLY)
+# ---------------------------------------------------------------------------
+# Supabase credentials never cross into Streamlit's browser document. A native
+# client may obtain a bearer *ticket*, not an access token. Only Streamlit's
+# backend can redeem it over the private loopback connection.
+#
+# This is intentionally in-memory: FastAPI and Streamlit run as two processes
+# in ONE supervised Render staging container. This configuration MUST use one
+# uvicorn worker, and does not support multiple replica containers. A restart
+# invalidates unused tickets safely. The existing /refresh endpoint is kept.
+_TICKET_TTL = 30.0
+_MAX_PENDING_TICKETS = 256
+_pending_tickets: dict[str, tuple[float, str, str, str]] = {}
+_pending_tickets_lock = threading.Lock()
+
+
+def _bridge_secret() -> str:
+    value = os.environ.get('IV_QUICKLOGIN_BRIDGE_SECRET', '')
+    if len(value) < 40 or not value.isascii():
+        raise HTTPException(503, 'Quick Login handoff not configured')
+    return value
+
+
+def _remove_expired_locked(now: float):
+    for ticket, record in tuple(_pending_tickets.items()):
+        if record[0] <= now:
+            del _pending_tickets[ticket]
+
+
+@app.post('/api/session/quick-login/start')
+async def start_quick_login(request: FastAPIRequest):
+    """Android native HTTPS request AFTER a successful Keystore unlock.
+
+    Accepts exactly the existing /refresh payload:
+       {"refresh_token": "...", "expected_user_id": "UUID"}
+    Returns ONLY a short-lived one-time ticket and the rotated refresh token
+    for the Android secure vault. The Supabase access token is retained within
+    this private Python process, NEVER returned to the Android WebView.
+
+    The native client MUST securely update its vault with the rotated token
+    before proceeding with ticket delivery; otherwise require password login.
+    """
+    _bridge_secret()  # Fail before rotating Supabase token when unconfigured.
+    with _pending_tickets_lock:
+        _remove_expired_locked(time.monotonic())
+        if len(_pending_tickets) >= _MAX_PENDING_TICKETS:
+            raise HTTPException(429, 'Quick Login temporarily busy')
+
+    # Reuse the already-tested refresh validation and Supabase identity check.
+    refreshed = await refresh_session(request)
+    data = json.loads(refreshed.body)
+    account = data['user_id']
+    access = data['access_token']
+    rotated = data['refresh_token']
+
+    with _pending_tickets_lock:
+        now = time.monotonic()
+        _remove_expired_locked(now)
+        if len(_pending_tickets) >= _MAX_PENDING_TICKETS:
+            # Refresh token was rotated but the ticket could not be issued;
+            # return no credentials and require normal password login.
+            raise HTTPException(429, 'Quick Login temporarily busy')
+        ticket = secrets.token_urlsafe(32)  # 256 bits, URL-safe but NEVER put in URL.
+        _pending_tickets[ticket] = (now + _TICKET_TTL, account, access, rotated)
+
+    return JSONResponse(content={
+        'ticket': ticket,
+        'user_id': account,
+        'rotated_refresh_token': rotated,
+        'ticket_expires_in': int(_TICKET_TTL),
+    })
+
+
+@app.post('/api/session/quick-login/claim')
+async def claim_quick_login(request: FastAPIRequest):
+    """STREAMLIT SERVER-ONLY via http://127.0.0.1:8502. Not a WebView API.
+
+    Requires a Render environment secret and rejects requests forwarded by
+    the nginx public proxy. The nonce is single-use, expires in 30 seconds,
+    and returns credentials only to the trusted server-side Streamlit code.
+    A successful claim does NOT by itself sign anybody into Streamlit: the
+    caller MUST invoke auth.restore_verified_session and verify the user ID.
+    """
+    secret = _bridge_secret()
+    # The existing nginx staging proxy always appends X-Forwarded-For on
+    # publicly routed requests. Private Streamlit -> FastAPI calls do not.
+    if 'x-forwarded-for' in request.headers or 'forwarded' in request.headers:
+        raise HTTPException(404, 'Not found')
+    supplied = request.headers.get('x-iv-quicklogin-bridge', '')
+    if not supplied or not hmac.compare_digest(supplied, secret):
+        raise HTTPException(404, 'Not found')
+    if request.headers.get('content-type', '').split(';', 1)[0].strip().lower() != 'application/json':
+        raise HTTPException(415, 'JSON body required')
+
+    body = await request.body()
+    if len(body) > 512:
+        raise HTTPException(413, 'Request too large')
+    try:
+        data = json.loads(body)
+    except (ValueError, UnicodeError):
+        raise HTTPException(400, 'Invalid request') from None
+    if not isinstance(data, dict) or set(data) != {'ticket'}:
+        raise HTTPException(400, 'Invalid request')
+    ticket = data['ticket']
+    if not (isinstance(ticket, str) and len(ticket) == 43
+            and all(c.isalnum() or c in '-_' for c in ticket)):
+        raise HTTPException(400, 'Invalid request')
+
+    with _pending_tickets_lock:
+        now = time.monotonic()
+        record = _pending_tickets.pop(ticket, None)  # Consume atomically.
+        _remove_expired_locked(now)
+    if record is None or now >= record[0]:
+        raise HTTPException(401, 'Quick Login ticket invalid or expired')
+    _, account, access, rotated = record
+    return JSONResponse(content={
+        'valid': True,
+        'user_id': account,
+        'access_token': access,
+        'refresh_token': rotated,
     })
 
 
