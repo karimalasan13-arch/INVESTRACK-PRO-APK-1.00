@@ -642,13 +642,6 @@ def render_android_premium_handoff():
     elif pending_event:
         st.session_state.pop("iv_premium_pending_event", None)
         st.session_state.pop("iv_premium_pending_at", None)
-    # Hide the native-only control visually, but keep its Streamlit widget and
-    # DOM button mounted: Android uses this exact key to click it via JavaScript.
-    # Do not use disabled=True or conditional rendering here.
-    st.markdown(
-        '<style>[class*="st-key-iv_native_auth_request"]{display:none!important;}</style>',
-        unsafe_allow_html=True,
-    )
     # Preserve this button key for the Android WebView's native click selector.
     if st.button("Native purchase authorization", key="iv_native_auth_request"):
         code, error = issue_premium_auth_code()
@@ -2496,6 +2489,12 @@ if not ensure_auth():
     """, unsafe_allow_html=True)
     login_ui()
     st.stop()
+
+# Only the authenticated page mounts the trusted interaction listener.
+# This reports actual mouse, touch, keyboard and scroll input to the server.
+# It does NOT renew the clock on page load, Streamlit reruns, or timer ticks.
+from activity_watch import render_authenticated_activity_watch
+render_authenticated_activity_watch()
 
 # -----------------------------------------
 # MAIN ROUTER
