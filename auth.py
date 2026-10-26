@@ -7,8 +7,14 @@ import streamlit as st
 INACTIVITY_TIMEOUT_SECONDS = 5 * 60
 
 def _session_expired():
+    # A session without a server-side activity clock is NOT authenticated.
+    # The clock is initialized only following a successful Supabase login.
     last = st.session_state.get("_iv_last_activity_monotonic")
-    return last is not None and (time.monotonic() - last) >= INACTIVITY_TIMEOUT_SECONDS
+    if not isinstance(last, (int, float)) or isinstance(last, bool):
+        return True
+    elapsed = time.monotonic() - last
+    # Unexpected backward clock movement should never prolong authentication.
+    return elapsed < 0 or elapsed >= INACTIVITY_TIMEOUT_SECONDS
 
 def _mark_session_activity():
     st.session_state["_iv_last_activity_monotonic"] = time.monotonic()
