@@ -35,6 +35,18 @@ st.markdown(
         --iv-border: rgba(148, 163, 184, 0.25);
     }
 
+    /* Native Android purchase authorization is a programmatic-only
+       Streamlit widget. Keep it mounted in the DOM for WebView .click(),
+       but never render it visibly or reserve layout space for it. */
+    [class*="st-key-iv_native_auth_request"] {
+        display: none !important;
+        visibility: hidden !important;
+        height: 0 !important;
+        min-height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
     footer { display: none !important; visibility: hidden !important; }
     #MainMenu { visibility: visible !important; }
 
@@ -642,7 +654,11 @@ def render_android_premium_handoff():
     elif pending_event:
         st.session_state.pop("iv_premium_pending_event", None)
         st.session_state.pop("iv_premium_pending_at", None)
-    # Preserve this button key for the Android WebView's native click selector.
+    # Keep the actual Streamlit button mounted and clickable by Android's
+    # evaluateJavascript(), while hiding its whole widget container.
+    # The global style above prevents rerun-time flashes; this local rule is a
+    # safeguard when Streamlit remounts the handoff section.
+    st.html('<style>[class*="st-key-iv_native_auth_request"]{display:none!important;visibility:hidden!important;}</style>')
     if st.button("Native purchase authorization", key="iv_native_auth_request"):
         code, error = issue_premium_auth_code()
         if code:
