@@ -322,6 +322,141 @@ async def claim_quick_login(request: FastAPIRequest):
     })
 
 
+# ---------------------------------------------------------------------------
+# Step 4F: STAGING-ONLY PAIRING FOUNDATION (not wired to Android/Streamlit yet)
+# ---------------------------------------------------------------------------
+# Streamlit server creates a random challenge for its own session and renders
+# ONLY that challenge in the trusted login page. Android reads the challenge,
+# obtains a ticket using the existing biometric/native flow, and sends both
+# directly to /pair/attach over HTTPS (never through JavaScript). Streamlit
+# polls /pair/consume using its private server-side challenge. The challenge
+# alone never grants access: a valid native ticket must also be attached.
+#
+# This in-memory pairing store requires a single FastAPI worker/replica.
+_PAIR_TTL = 45.0
+_MAX_PAIRS = 256
+_pairings: dict[str, dict] = {}
+_pair_lock = threading.Lock()
+
+
+def _private_bridge(request: FastAPIRequest):
+    secret = _bridge_secret()
+    # Defense in depth: the bridge is only available on loopback, and public
+    # reverse-proxy requests are rejected even if they know the bridge secret.
+    if request.client is None or request.client.host not in ('127.0.0.1', '::1'):
+        raise HTTPException(404, 'Not found')
+    if 'x-forwarded-for' in request.headers or 'forwarded' in request.headers:
+        raise HTTPException(404, 'Not found')
+    supplied = request.headers.get('x-iv-quicklogin-bridge', '')
+    if not supplied or not hmac.compare_digest(supplied, secret):
+        raise HTTPException(404, 'Not found')
+
+
+def _pair_cleanup(now):
+    for challenge, record in tuple(_pairings.items()):
+        if record['expires'] <= now:
+            del _pairings[challenge]
+
+
+def _valid_pair_challenge(value):
+    return isinstance(value, str) and len(value) == 43 and all(
+        c.isalnum() or c in '-_' for c in value)
+
+
+async def _bounded_pair_json(request: FastAPIRequest):
+    if request.headers.get('content-type', '').split(';', 1)[0].strip().lower() != 'application/json':
+        raise HTTPException(415, 'JSON body required')
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > 512:
+            raise HTTPException(413, 'Request too large')
+        body.extend(chunk)
+    try:
+        data = json.loads(body)
+    except (ValueError, UnicodeError):
+        raise HTTPException(400, 'Invalid request') from None
+    finally:
+        body.clear()
+    if not isinstance(data, dict):
+        raise HTTPException(400, 'Invalid request')
+    return data
+
+
+@app.post('/api/session/quick-login/pair/create')
+async def create_quick_login_pair(request: FastAPIRequest):
+    """Streamlit server ONLY. Keep challenge in that Streamlit session_state."""
+    _private_bridge(request)
+    data = await _bounded_pair_json(request)
+    if data != {}:
+        raise HTTPException(400, 'Invalid request')
+    with _pair_lock:
+        now = time.monotonic()
+        _pair_cleanup(now)
+        if len(_pairings) >= _MAX_PAIRS:
+            raise HTTPException(429, 'Quick Login temporarily busy')
+        challenge = secrets.token_urlsafe(32)
+        _pairings[challenge] = {'expires': now + _PAIR_TTL, 'ticket': None}
+    return JSONResponse({'challenge': challenge, 'expires_in': int(_PAIR_TTL)})
+
+
+@app.post('/api/session/quick-login/pair/attach')
+async def attach_quick_login_pair(request: FastAPIRequest):
+    """Android native HTTPS ONLY; no credentials in JS, URL or Intents.
+
+    A ticket is accepted only once and only for an existing pending challenge.
+    The ticket is not consumed until the owning Streamlit server claims it.
+    """
+    _bridge_secret()
+    data = await _bounded_pair_json(request)
+    if set(data) != {'challenge', 'ticket'}:
+        raise HTTPException(400, 'Invalid request')
+    challenge, ticket = data['challenge'], data['ticket']
+    if not _valid_pair_challenge(challenge) or not _valid_pair_challenge(ticket):
+        raise HTTPException(400, 'Invalid request')
+    # Serialize both stores to prevent two pairings claiming the same ticket.
+    with _pair_lock:
+        with _pending_tickets_lock:
+            now = time.monotonic()
+            _pair_cleanup(now)
+            _remove_expired_locked(now)
+            record = _pairings.get(challenge)
+            if record is None or record['ticket'] is not None:
+                raise HTTPException(401, 'Pairing invalid or unavailable')
+            if ticket not in _pending_tickets:
+                raise HTTPException(401, 'Ticket invalid or expired')
+            if any(p['ticket'] == ticket for p in _pairings.values()):
+                raise HTTPException(401, 'Ticket already attached')
+            record['ticket'] = ticket
+    return JSONResponse({'attached': True})
+
+
+@app.post('/api/session/quick-login/pair/consume')
+async def consume_quick_login_pair(request: FastAPIRequest):
+    """Streamlit server ONLY. Caller must restore and verify user identity."""
+    _private_bridge(request)
+    data = await _bounded_pair_json(request)
+    if set(data) != {'challenge'} or not _valid_pair_challenge(data['challenge']):
+        raise HTTPException(400, 'Invalid request')
+    with _pair_lock:
+        with _pending_tickets_lock:
+            now = time.monotonic()
+            _pair_cleanup(now)
+            record = _pairings.get(data['challenge'])
+            if record is None:
+                raise HTTPException(401, 'Pairing expired or invalid')
+            ticket = record['ticket']
+            if ticket is None:
+                return JSONResponse({'status': 'pending'}, status_code=202)
+            del _pairings[data['challenge']]
+            credentials = _pending_tickets.pop(ticket, None)
+            _remove_expired_locked(now)
+    if credentials is None or credentials[0] <= now:
+        raise HTTPException(401, 'Ticket expired or invalid')
+    _, account, access, rotated = credentials
+    return JSONResponse({'valid': True, 'user_id': account,
+                         'access_token': access, 'refresh_token': rotated})
+
+
 @app.api_route('/api/session/{path:path}', methods=['GET', 'POST', 'PUT', 'PATCH', 'DELETE'])
 def unavailable(path: str):
     return JSONResponse(status_code=501, content={
