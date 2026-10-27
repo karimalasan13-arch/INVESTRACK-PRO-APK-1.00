@@ -572,107 +572,73 @@ def render_navigation_buttons(items, selected_page):
 
 
 # STEP 4H.4 — authenticated, opt-in biometric enrollment (staging only).
-# Public challenge only in the URL/DOM; never put credentials there.
-_IV_ENROLL_CHALLENGE = re.compile(r"^[A-Za-z0-9_-]{43}$")
+# Streamlit creates a one-use enrollment intent on the server; the browser
+# exposes ONLY the public intent for Android to consume automatically.
+_IV_ENROLL_INTENT = re.compile(r"^[A-Za-z0-9_-]{43}$")
 
 
-def _iv_authorize_native_enrollment(challenge):
-    """Authorize enrollment; log only safe diagnostic stages, never secrets."""
+def _iv_create_enrollment_intent():
+    """Create a short-lived, authenticated intent; never expose session tokens."""
     logger = logging.getLogger("investrack.quicklogin.enrollment")
-    if not isinstance(challenge, str) or not _IV_ENROLL_CHALLENGE.fullmatch(challenge):
-        logger.warning("IV_ENROLL_DIAG invalid_challenge")
-        return False
     try:
-        authenticated = ensure_auth()
-    except Exception as exc:
-        logger.warning("IV_ENROLL_DIAG auth_check_exception type=%s", type(exc).__name__)
-        return False
-    if not authenticated:
-        logger.warning("IV_ENROLL_DIAG auth_check_failed")
-        return False
-    access = st.session_state.get("access_token")
-    refresh = st.session_state.get("refresh_token")
-    user_id = st.session_state.get("user_id")
-    missing = [name for name, value in (("access_token", access),
-                                        ("refresh_token", refresh),
-                                        ("user_id", user_id))
-               if not isinstance(value, str) or not value]
-    if missing:
-        logger.warning("IV_ENROLL_DIAG session_fields_missing fields=%s", ",".join(missing))
-        return False
-    try:
+        if not ensure_auth():
+            logger.warning("IV_ENROLL_DIAG auth_check_failed")
+            return None
+        access = st.session_state.get("access_token")
+        refresh = st.session_state.get("refresh_token")
+        user_id = st.session_state.get("user_id")
+        if not all(isinstance(v, str) and v for v in (access, refresh, user_id)):
+            logger.warning("IV_ENROLL_DIAG session_fields_missing")
+            return None
         from quick_login_pair import _post
-        response = _post("/api/session/quick-login/enroll/authorize", {
-            "challenge": challenge,
+        response = _post("/api/session/quick-login/enroll/intent", {
             "access_token": access,
             "refresh_token": refresh,
             "expected_user_id": user_id,
         })
-        logger.warning("IV_ENROLL_DIAG bridge_response status=%d", response.status_code)
+        logger.warning("IV_ENROLL_DIAG intent_response status=%d", response.status_code)
         if response.status_code != 200:
-            return False
-        authorized = response.json().get("authorized") is True
-        logger.warning("IV_ENROLL_DIAG authorization_result authorized=%s", authorized)
-        return authorized
+            return None
+        intent = response.json().get("intent")
+        return intent if isinstance(intent, str) and _IV_ENROLL_INTENT.fullmatch(intent) else None
     except (requests.RequestException, ValueError, RuntimeError, TypeError) as exc:
-        logger.warning("IV_ENROLL_DIAG bridge_exception type=%s", type(exc).__name__)
-        return False
+        logger.warning("IV_ENROLL_DIAG intent_exception type=%s", type(exc).__name__)
+        return None
 
 
 def render_biometric_enrollment_control():
-    """Opt-in only. Native Android must prepare/claim and save to Keystore."""
+    """User opt-in; Android uses the one-use intent to complete enrollment."""
     now = time.monotonic()
     pending_at = st.session_state.get("_iv_enroll_requested_at", 0)
-    pending = bool(pending_at and now - pending_at < 90)
+    intent = st.session_state.get("_iv_enroll_intent")
+    pending = bool(pending_at and now - pending_at < 90
+                   and isinstance(intent, str) and _IV_ENROLL_INTENT.fullmatch(intent))
     if pending_at and not pending:
         st.session_state.pop("_iv_enroll_requested_at", None)
-        st.session_state.pop("_iv_enroll_result", None)
-
-    # A Streamlit widget event (not a browser URL change) is required to carry
-    # the public native challenge into this *same* authenticated server session.
-    # The native WebView fills this hidden input and clicks the hidden submit.
-    # Only the public challenge enters the browser; tokens remain server-side.
-    if pending:
-        st.html('''<style>
-        [class*="st-key-iv_enroll_native_challenge"],
-        [class*="st-key-iv_enroll_native_submit"] {
-            display:none!important;visibility:hidden!important;height:0!important;
-            min-height:0!important;margin:0!important;padding:0!important;
-        }</style>''')
-        challenge = st.text_input("Native enrollment challenge",
-                                  key="iv_enroll_native_challenge",
-                                  label_visibility="collapsed")
-        if st.button("Native enrollment submit", key="iv_enroll_native_submit"):
-            # Safe diagnostics: log only callback receipt and challenge shape.
-            # Never log the challenge, credentials, user identity or bridge secret.
-            logging.getLogger("investrack.quicklogin.enrollment").warning(
-                "IV_ENROLL_DIAG submit_received challenge_valid=%s",
-                isinstance(challenge, str) and bool(_IV_ENROLL_CHALLENGE.fullmatch(challenge)))
-            ok = _iv_authorize_native_enrollment(challenge)
-            st.session_state["_iv_enroll_result"] = "authorized" if ok else "failed"
-            st.session_state.pop("_iv_enroll_requested_at", None)
-            pending = False
+        st.session_state.pop("_iv_enroll_intent", None)
 
     if pending:
-        st.markdown('<span id="iv-biometric-enroll-request" hidden data-request="1"></span>',
-                    unsafe_allow_html=True)
+        # The intent is a public, random, single-use capability, NOT a token.
+        # Android reads this marker and sends it to /enroll/prepare along with
+        # its native-generated challenge and SHA256 secret verifier.
+        st.markdown(
+            f'<span id="iv-biometric-enroll-request" hidden data-intent="{intent}"></span>',
+            unsafe_allow_html=True,
+        )
         st.sidebar.caption("Waiting for Android biometric setup (up to 90 seconds)…")
         if st.sidebar.button("Cancel biometric setup", key="iv_enroll_cancel"):
             st.session_state.pop("_iv_enroll_requested_at", None)
+            st.session_state.pop("_iv_enroll_intent", None)
             st.rerun()
-    else:
-        if st.sidebar.button("🔐  Enable Biometric Login", key="iv_enroll_opt_in",
-                             use_container_width=True):
-            st.session_state["iv_enroll_native_challenge"] = ""
+    elif st.sidebar.button("🔐  Enable Biometric Login", key="iv_enroll_opt_in",
+                           use_container_width=True):
+        new_intent = _iv_create_enrollment_intent()
+        if new_intent:
+            st.session_state["_iv_enroll_intent"] = new_intent
             st.session_state["_iv_enroll_requested_at"] = time.monotonic()
-            st.session_state.pop("_iv_enroll_result", None)
             st.rerun()
-
-    result = st.session_state.pop("_iv_enroll_result", None)
-    if result == "authorized":
-        st.sidebar.info("Enrollment authorized. Complete fingerprint setup on Android.")
-    elif result == "failed":
-        st.sidebar.warning("Biometric setup could not be authorized. Please retry.")
+        else:
+            st.sidebar.warning("Biometric setup could not be authorized. Please retry.")
 
 
 def render_profile_section(user):
