@@ -643,8 +643,12 @@ def render_biometric_enrollment_control():
                                   key="iv_enroll_native_challenge",
                                   label_visibility="collapsed")
         if st.button("Native enrollment submit", key="iv_enroll_native_submit"):
-            ok = _iv_authorize_native_enrollment(challenge) if (
-                _IV_ENROLL_CHALLENGE.fullmatch(challenge or "")) else False
+            # Safe diagnostics: log only callback receipt and challenge shape.
+            # Never log the challenge, credentials, user identity or bridge secret.
+            logging.getLogger("investrack.quicklogin.enrollment").warning(
+                "IV_ENROLL_DIAG submit_received challenge_valid=%s",
+                isinstance(challenge, str) and bool(_IV_ENROLL_CHALLENGE.fullmatch(challenge)))
+            ok = _iv_authorize_native_enrollment(challenge)
             st.session_state["_iv_enroll_result"] = "authorized" if ok else "failed"
             st.session_state.pop("_iv_enroll_requested_at", None)
             pending = False
