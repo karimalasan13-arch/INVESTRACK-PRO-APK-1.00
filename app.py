@@ -606,16 +606,26 @@ def render_biometric_enrollment_control():
         st.session_state.pop("_iv_enroll_requested_at", None)
         st.session_state.pop("_iv_enroll_result", None)
 
-    challenge = str(st.query_params.get("iv_enroll_challenge", "") or "")
-    if challenge:
-        # Native app sends only a public challenge, after the opt-in request.
-        # Always remove it from the URL after processing.
-        if pending and _IV_ENROLL_CHALLENGE.fullmatch(challenge):
-            ok = _iv_authorize_native_enrollment(challenge)
+    # A Streamlit widget event (not a browser URL change) is required to carry
+    # the public native challenge into this *same* authenticated server session.
+    # The native WebView fills this hidden input and clicks the hidden submit.
+    # Only the public challenge enters the browser; tokens remain server-side.
+    if pending:
+        st.html('''<style>
+        [class*="st-key-iv_enroll_native_challenge"],
+        [class*="st-key-iv_enroll_native_submit"] {
+            display:none!important;visibility:hidden!important;height:0!important;
+            min-height:0!important;margin:0!important;padding:0!important;
+        }</style>''')
+        challenge = st.text_input("Native enrollment challenge",
+                                  key="iv_enroll_native_challenge",
+                                  label_visibility="collapsed")
+        if st.button("Native enrollment submit", key="iv_enroll_native_submit"):
+            ok = _iv_authorize_native_enrollment(challenge) if (
+                _IV_ENROLL_CHALLENGE.fullmatch(challenge or "")) else False
             st.session_state["_iv_enroll_result"] = "authorized" if ok else "failed"
-        st.query_params.pop("iv_enroll_challenge", None)
-        st.session_state.pop("_iv_enroll_requested_at", None)
-        pending = False
+            st.session_state.pop("_iv_enroll_requested_at", None)
+            pending = False
 
     if pending:
         st.markdown('<span id="iv-biometric-enroll-request" hidden data-request="1"></span>',
@@ -627,6 +637,7 @@ def render_biometric_enrollment_control():
     else:
         if st.sidebar.button("🔐  Enable Biometric Login", key="iv_enroll_opt_in",
                              use_container_width=True):
+            st.session_state["iv_enroll_native_challenge"] = ""
             st.session_state["_iv_enroll_requested_at"] = time.monotonic()
             st.session_state.pop("_iv_enroll_result", None)
             st.rerun()
