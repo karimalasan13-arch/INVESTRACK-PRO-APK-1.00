@@ -10,7 +10,7 @@ import time
 
 import requests
 
-_BASE = 'http://127.0.0.1:8000'
+_BASE = 'http://127.0.0.1:8502'
 _TIMEOUT = 3
 _CHALLENGE = re.compile(r'^[A-Za-z0-9_-]{43}$')
 
