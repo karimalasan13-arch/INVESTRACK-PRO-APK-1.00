@@ -569,6 +569,74 @@ def render_navigation_buttons(items, selected_page):
             navigate(page_name)
 
 
+# STEP 4H.4 — authenticated, opt-in biometric enrollment (staging only).
+# Public challenge only in the URL/DOM; never put credentials there.
+_IV_ENROLL_CHALLENGE = re.compile(r"^[A-Za-z0-9_-]{43}$")
+
+
+def _iv_authorize_native_enrollment(challenge):
+    """Authorize the native challenge via the private server-side bridge."""
+    if not ensure_auth() or not _IV_ENROLL_CHALLENGE.fullmatch(challenge):
+        return False
+    access = st.session_state.get("access_token")
+    refresh = st.session_state.get("refresh_token")
+    user_id = st.session_state.get("user_id")
+    if not all(isinstance(x, str) and x for x in (access, refresh, user_id)):
+        return False
+    try:
+        from quick_login_pair import _post
+        response = _post("/api/session/quick-login/enroll/authorize", {
+            "challenge": challenge,
+            "access_token": access,
+            "refresh_token": refresh,
+            "expected_user_id": user_id,
+        })
+        return response.status_code == 200 and response.json().get("authorized") is True
+    except (requests.RequestException, ValueError, RuntimeError, TypeError):
+        return False
+
+
+def render_biometric_enrollment_control():
+    """Opt-in only. Native Android must prepare/claim and save to Keystore."""
+    now = time.monotonic()
+    pending_at = st.session_state.get("_iv_enroll_requested_at", 0)
+    pending = bool(pending_at and now - pending_at < 90)
+    if pending_at and not pending:
+        st.session_state.pop("_iv_enroll_requested_at", None)
+        st.session_state.pop("_iv_enroll_result", None)
+
+    challenge = str(st.query_params.get("iv_enroll_challenge", "") or "")
+    if challenge:
+        # Native app sends only a public challenge, after the opt-in request.
+        # Always remove it from the URL after processing.
+        if pending and _IV_ENROLL_CHALLENGE.fullmatch(challenge):
+            ok = _iv_authorize_native_enrollment(challenge)
+            st.session_state["_iv_enroll_result"] = "authorized" if ok else "failed"
+        st.query_params.pop("iv_enroll_challenge", None)
+        st.session_state.pop("_iv_enroll_requested_at", None)
+        pending = False
+
+    if pending:
+        st.markdown('<span id="iv-biometric-enroll-request" hidden data-request="1"></span>',
+                    unsafe_allow_html=True)
+        st.sidebar.caption("Waiting for Android biometric setup (up to 90 seconds)…")
+        if st.sidebar.button("Cancel biometric setup", key="iv_enroll_cancel"):
+            st.session_state.pop("_iv_enroll_requested_at", None)
+            st.rerun()
+    else:
+        if st.sidebar.button("🔐  Enable Biometric Login", key="iv_enroll_opt_in",
+                             use_container_width=True):
+            st.session_state["_iv_enroll_requested_at"] = time.monotonic()
+            st.session_state.pop("_iv_enroll_result", None)
+            st.rerun()
+
+    result = st.session_state.pop("_iv_enroll_result", None)
+    if result == "authorized":
+        st.sidebar.info("Enrollment authorized. Complete fingerprint setup on Android.")
+    elif result == "failed":
+        st.sidebar.warning("Biometric setup could not be authorized. Please retry.")
+
+
 def render_profile_section(user):
     email = getattr(user, "email", "") or ""
     initials = get_user_initials(email)
@@ -593,6 +661,7 @@ def render_profile_section(user):
             f'<div class="iv-profile-panel"><strong>Signed in</strong><br><small>{email}</small></div>',
             unsafe_allow_html=True,
         )
+        render_biometric_enrollment_control()
         if st.sidebar.button("📈  Open Dashboard", key="profile_open_dashboard", use_container_width=True):
             navigate("Dashboard")
         if st.sidebar.button("🚪  Logout", key="profile_logout", use_container_width=True):
