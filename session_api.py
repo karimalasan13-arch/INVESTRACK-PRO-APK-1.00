@@ -457,6 +457,141 @@ async def consume_quick_login_pair(request: FastAPIRequest):
                          'access_token': access, 'refresh_token': rotated})
 
 
+# ---------------------------------------------------------------------------
+# Step 4H.3: BIOMETRIC ENROLLMENT HANDOFF (STAGING ONLY)
+# ---------------------------------------------------------------------------
+# Native Android generates BOTH a public challenge and a private secret.
+# Only the public challenge may be rendered in the WebView. The native secret
+# never enters JavaScript, query parameters, logs or the Streamlit document.
+# A verified Streamlit backend authorizes enrollment through the private bridge.
+# The native app then claims the refresh token directly over HTTPS, proving
+# possession of its private secret. Nothing here enrolls a device automatically.
+_ENROLL_TTL = 90.0
+_MAX_ENROLLMENTS = 128
+_enrollments: dict[str, dict] = {}
+_enroll_lock = threading.Lock()
+
+
+def _enroll_cleanup(now: float):
+    for challenge, record in tuple(_enrollments.items()):
+        if record['expires'] <= now:
+            del _enrollments[challenge]
+
+
+@app.post('/api/session/quick-login/enroll/prepare')
+async def prepare_biometric_enrollment(request: FastAPIRequest):
+    """Native HTTPS only. Supply a random public challenge and secret verifier.
+
+    Body: {"challenge": "43-char random", "verifier": "64-char SHA256 hex"}
+    The secret itself stays in native memory; only its SHA256 digest is sent.
+    """
+    _bridge_secret()
+    data = await _bounded_pair_json(request)
+    if set(data) != {'challenge', 'verifier'}:
+        raise HTTPException(400, 'Invalid request')
+    challenge, verifier = data['challenge'], data['verifier']
+    if not _valid_pair_challenge(challenge) or not (isinstance(verifier, str)
+            and len(verifier) == 64 and all(c in '0123456789abcdef' for c in verifier)):
+        raise HTTPException(400, 'Invalid request')
+    with _enroll_lock:
+        now = time.monotonic()
+        _enroll_cleanup(now)
+        if len(_enrollments) >= _MAX_ENROLLMENTS:
+            raise HTTPException(429, 'Enrollment temporarily busy')
+        if challenge in _enrollments:
+            raise HTTPException(409, 'Enrollment already pending')
+        _enrollments[challenge] = {'expires': now + _ENROLL_TTL,
+                                   'verifier': verifier, 'credentials': None}
+    return JSONResponse({'prepared': True, 'expires_in': int(_ENROLL_TTL)})
+
+
+@app.post('/api/session/quick-login/enroll/authorize')
+async def authorize_biometric_enrollment(request: FastAPIRequest):
+    """Private Streamlit backend ONLY, after explicit authenticated opt-in.
+
+    The caller MUST obtain credentials from its own authenticated session,
+    not from browser input. This endpoint independently verifies the access
+    token with Supabase and checks the expected user ID before authorization.
+    """
+    _private_bridge(request)
+    # Larger bounded body than pairing: this private request carries tokens.
+    if request.headers.get('content-type', '').split(';', 1)[0].strip().lower() != 'application/json':
+        raise HTTPException(415, 'JSON body required')
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > _MAX_BODY_BYTES:
+            raise HTTPException(413, 'Request too large')
+        body.extend(chunk)
+    try:
+        data = json.loads(body)
+    except (ValueError, UnicodeError):
+        raise HTTPException(400, 'Invalid request') from None
+    finally:
+        body.clear()
+    if not isinstance(data, dict) or set(data) != {
+            'challenge', 'access_token', 'refresh_token', 'expected_user_id'}:
+        raise HTTPException(400, 'Invalid request')
+    challenge = data['challenge']
+    access, refresh = data['access_token'], data['refresh_token']
+    if not _valid_pair_challenge(challenge) or not _safe_token(access) or not _safe_token(refresh):
+        raise HTTPException(400, 'Invalid request')
+    try:
+        expected = str(uuid.UUID(data['expected_user_id']))
+    except (TypeError, ValueError, AttributeError):
+        raise HTTPException(400, 'Invalid request') from None
+    with _enroll_lock:
+        now = time.monotonic()
+        _enroll_cleanup(now)
+        record = _enrollments.get(challenge)
+        if record is None or record['credentials'] is not None:
+            raise HTTPException(401, 'Enrollment unavailable')
+    base, key = _configuration()
+    check = Request(base + '/auth/v1/user', headers={
+        'apikey': key, 'Authorization': 'Bearer ' + access,
+        'Accept': 'application/json'}, method='GET')
+    user = _supabase_json(check)
+    try:
+        actual = str(uuid.UUID(user.get('id')))
+    except (TypeError, ValueError, AttributeError):
+        raise HTTPException(401, 'Session not valid') from None
+    if actual != expected:
+        raise HTTPException(401, 'Account does not match')
+    with _enroll_lock:
+        now = time.monotonic()
+        _enroll_cleanup(now)
+        record = _enrollments.get(challenge)
+        if record is None or record['credentials'] is not None:
+            raise HTTPException(401, 'Enrollment unavailable')
+        record['credentials'] = (actual, refresh)
+    return JSONResponse({'authorized': True})
+
+
+@app.post('/api/session/quick-login/enroll/claim')
+async def claim_biometric_enrollment(request: FastAPIRequest):
+    """Native HTTPS only; single-use claim using the native private secret."""
+    _bridge_secret()
+    data = await _bounded_pair_json(request)
+    if set(data) != {'challenge', 'secret'}:
+        raise HTTPException(400, 'Invalid request')
+    challenge, secret = data['challenge'], data['secret']
+    if not _valid_pair_challenge(challenge) or not _valid_pair_challenge(secret):
+        raise HTTPException(400, 'Invalid request')
+    import hashlib
+    verifier = hashlib.sha256(secret.encode('ascii')).hexdigest()
+    with _enroll_lock:
+        now = time.monotonic()
+        _enroll_cleanup(now)
+        record = _enrollments.get(challenge)
+        if record is None or not hmac.compare_digest(record['verifier'], verifier):
+            raise HTTPException(401, 'Enrollment unavailable')
+        if record['credentials'] is None:
+            return JSONResponse({'status': 'pending'}, status_code=202)
+        account, refresh = record['credentials']
+        del _enrollments[challenge]
+    return JSONResponse({'valid': True, 'user_id': account,
+                         'refresh_token': refresh})
+
+
 @app.api_route('/api/session/{path:path}', methods=['GET', 'POST', 'PUT', 'PATCH', 'DELETE'])
 def unavailable(path: str):
     return JSONResponse(status_code=501, content={
