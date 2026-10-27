@@ -470,27 +470,95 @@ _ENROLL_TTL = 90.0
 _MAX_ENROLLMENTS = 128
 _enrollments: dict[str, dict] = {}
 _enroll_lock = threading.Lock()
+# A one-use intent is created by the authenticated Streamlit backend.
+# Android reads ONLY this random public intent from the Profile DOM.
+_enroll_intents: dict[str, dict] = {}
+
+
+def _enroll_auth_payload(request_data):
+    """Validate session tokens with Supabase; return (verified user id, refresh)."""
+    if not isinstance(request_data, dict) or set(request_data) != {
+            'access_token', 'refresh_token', 'expected_user_id'}:
+        raise HTTPException(400, 'Invalid request')
+    access = request_data['access_token']
+    refresh = request_data['refresh_token']
+    if not _safe_token(access) or not _safe_token(refresh):
+        raise HTTPException(400, 'Invalid request')
+    try:
+        expected = str(uuid.UUID(request_data['expected_user_id']))
+    except (TypeError, ValueError, AttributeError):
+        raise HTTPException(400, 'Invalid request') from None
+    base, key = _configuration()
+    check = Request(base + '/auth/v1/user', headers={
+        'apikey': key, 'Authorization': 'Bearer ' + access,
+        'Accept': 'application/json'}, method='GET')
+    user = _supabase_json(check)
+    try:
+        actual = str(uuid.UUID(user.get('id')))
+    except (TypeError, ValueError, AttributeError):
+        raise HTTPException(401, 'Session not valid') from None
+    if actual != expected:
+        raise HTTPException(401, 'Account does not match')
+    return actual, refresh
+
+
+@app.post('/api/session/quick-login/enroll/intent')
+async def create_biometric_enrollment_intent(request: FastAPIRequest):
+    """Private Streamlit-only authorization after an explicit Profile opt-in.
+
+    The response contains only a random one-use intent, NEVER credentials.
+    """
+    _private_bridge(request)
+    if request.headers.get('content-type', '').split(';', 1)[0].strip().lower() != 'application/json':
+        raise HTTPException(415, 'JSON body required')
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > _MAX_BODY_BYTES:
+            raise HTTPException(413, 'Request too large')
+        body.extend(chunk)
+    try:
+        data = json.loads(body)
+    except (ValueError, UnicodeError):
+        raise HTTPException(400, 'Invalid request') from None
+    finally:
+        body.clear()
+    account, refresh = _enroll_auth_payload(data)
+    with _enroll_lock:
+        now = time.monotonic()
+        _enroll_cleanup(now)
+        if len(_enroll_intents) + len(_enrollments) >= _MAX_ENROLLMENTS:
+            raise HTTPException(429, 'Enrollment temporarily busy')
+        intent = secrets.token_urlsafe(32)
+        _enroll_intents[intent] = {
+            'expires': now + _ENROLL_TTL, 'credentials': (account, refresh)}
+    return JSONResponse({'intent': intent, 'expires_in': int(_ENROLL_TTL)})
+
+
 
 
 def _enroll_cleanup(now: float):
     for challenge, record in tuple(_enrollments.items()):
         if record['expires'] <= now:
             del _enrollments[challenge]
+    for intent, record in tuple(_enroll_intents.items()):
+        if record['expires'] <= now:
+            del _enroll_intents[intent]
 
 
 @app.post('/api/session/quick-login/enroll/prepare')
 async def prepare_biometric_enrollment(request: FastAPIRequest):
     """Native HTTPS only. Supply a random public challenge and secret verifier.
 
-    Body: {"challenge": "43-char random", "verifier": "64-char SHA256 hex"}
+    Body: {"challenge": "43-char random", "verifier": "64-char SHA256 hex",
+           "intent": "43-char one-use intent from authenticated Profile"}
     The secret itself stays in native memory; only its SHA256 digest is sent.
     """
     _bridge_secret()
     data = await _bounded_pair_json(request)
-    if set(data) != {'challenge', 'verifier'}:
+    if set(data) != {'challenge', 'verifier', 'intent'}:
         raise HTTPException(400, 'Invalid request')
-    challenge, verifier = data['challenge'], data['verifier']
-    if not _valid_pair_challenge(challenge) or not (isinstance(verifier, str)
+    challenge, verifier, intent = data['challenge'], data['verifier'], data['intent']
+    if not _valid_pair_challenge(challenge) or not _valid_pair_challenge(intent) or not (isinstance(verifier, str)
             and len(verifier) == 64 and all(c in '0123456789abcdef' for c in verifier)):
         raise HTTPException(400, 'Invalid request')
     with _enroll_lock:
@@ -500,8 +568,11 @@ async def prepare_biometric_enrollment(request: FastAPIRequest):
             raise HTTPException(429, 'Enrollment temporarily busy')
         if challenge in _enrollments:
             raise HTTPException(409, 'Enrollment already pending')
-        _enrollments[challenge] = {'expires': now + _ENROLL_TTL,
-                                   'verifier': verifier, 'credentials': None}
+        authorized_intent = _enroll_intents.pop(intent, None)
+        if authorized_intent is None:
+            raise HTTPException(401, 'Enrollment intent unavailable')
+        _enrollments[challenge] = {'expires': min(now + _ENROLL_TTL, authorized_intent['expires']),
+                                   'verifier': verifier, 'credentials': authorized_intent['credentials']}
     return JSONResponse({'prepared': True, 'expires_in': int(_ENROLL_TTL)})
 
 
