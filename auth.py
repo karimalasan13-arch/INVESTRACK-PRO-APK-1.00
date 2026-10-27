@@ -112,6 +112,32 @@ def restore_verified_session(access_token: str, refresh_token: str) -> bool:
             _clear_auth_identity()
 
 
+
+def restore_quick_login_ticket_server_side(ticket: str) -> bool:
+    """Private staging-only entry point for a trusted Streamlit server handoff.
+
+    Never invoke from a URL, query parameter, public widget value, or JS bridge.
+    This function is intentionally NOT wired into the login page until the
+    native-to-current-Streamlit-session binding has been implemented and tested.
+    """
+    from quick_login_claim import redeem_ticket
+
+    # Reject an attempt to replace an already authenticated identity.
+    if ensure_auth():
+        return False
+    claimed = redeem_ticket(ticket)
+    if claimed is None:
+        return False
+    access, refresh, expected_user_id = claimed
+    if not restore_verified_session(access, refresh):
+        return False
+    # Supabase-verified account must match the backend claim.
+    if str(st.session_state.get('user_id', '')).lower() != expected_user_id.lower():
+        _clear_auth_identity()
+        return False
+    return True
+
+
 def get_auth_client():
     return _attach_session()
 
