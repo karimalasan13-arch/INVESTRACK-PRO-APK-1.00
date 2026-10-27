@@ -202,6 +202,74 @@ def logout():
     st.rerun()
 
 
+def render_password_recovery():
+    """Verify a one-time recovery token hash, then update the password.
+
+    Recovery is isolated from normal dashboard authentication and native quick login.
+    The Supabase recovery email template must link to
+    https://app.investrackpro.com/?recovery_token={{ .TokenHash }}
+    """
+    token = str(st.query_params.get("recovery_token", "") or "").strip()
+    if token:
+        # Remove the one-time token from the address bar before rendering a form.
+        st.query_params.pop("recovery_token", None)
+        st.session_state.pop("_iv_recovery_session", None)
+        _clear_auth_identity()
+        try:
+            result = get_supabase().auth.verify_otp({
+                "token_hash": token, "type": "recovery"
+            })
+            if result and result.session and result.user:
+                st.session_state["_iv_recovery_session"] = (
+                    result.session.access_token,
+                    result.session.refresh_token,
+                    result.user.id,
+                )
+            else:
+                st.session_state["_iv_recovery_error"] = "The reset link is invalid or expired. Request a new one."
+        except Exception:
+            st.session_state["_iv_recovery_error"] = "The reset link is invalid or expired. Request a new one."
+
+    recovery = st.session_state.get("_iv_recovery_session")
+    error = st.session_state.pop("_iv_recovery_error", None)
+    if not recovery and not error:
+        return False
+
+    st.title("Reset your password")
+    if error:
+        st.error(error)
+        if st.button("Return to login", key="iv_recovery_error_back"):
+            st.rerun()
+        return True
+
+    with st.form("iv_set_new_password"):
+        password = st.text_input("New password", type="password")
+        confirm = st.text_input("Confirm new password", type="password")
+        submit = st.form_submit_button("Save new password", type="primary", use_container_width=True)
+    if submit:
+        if len(password) < 8 or password != confirm:
+            st.warning("Use matching passwords of at least 8 characters.")
+        else:
+            try:
+                access, refresh, expected_id = recovery
+                client = get_supabase()
+                session = client.auth.set_session(access_token=access, refresh_token=refresh)
+                verified = client.auth.get_user(session.session.access_token)
+                if not verified or not verified.user or verified.user.id != expected_id:
+                    raise RuntimeError("Recovery identity verification failed")
+                client.auth.update_user({"password": password})
+                st.session_state.pop("_iv_recovery_session", None)
+                try:
+                    client.auth.sign_out()
+                except Exception:
+                    pass
+                _clear_auth_identity()
+                st.success("Password updated. Return to login and sign in with your new password.")
+            except Exception:
+                st.error("Could not update the password. Request a fresh reset link and try again.")
+    return True
+
+
 def login_ui():
     """Login-first authentication with sign-up and password recovery."""
     st.markdown("""
