@@ -1,5 +1,6 @@
 import base64
 import html
+import logging
 import os
 import re
 import time
@@ -576,13 +577,28 @@ _IV_ENROLL_CHALLENGE = re.compile(r"^[A-Za-z0-9_-]{43}$")
 
 
 def _iv_authorize_native_enrollment(challenge):
-    """Authorize the native challenge via the private server-side bridge."""
-    if not ensure_auth() or not _IV_ENROLL_CHALLENGE.fullmatch(challenge):
+    """Authorize enrollment; log only safe diagnostic stages, never secrets."""
+    logger = logging.getLogger("investrack.quicklogin.enrollment")
+    if not isinstance(challenge, str) or not _IV_ENROLL_CHALLENGE.fullmatch(challenge):
+        logger.warning("IV_ENROLL_DIAG invalid_challenge")
+        return False
+    try:
+        authenticated = ensure_auth()
+    except Exception as exc:
+        logger.warning("IV_ENROLL_DIAG auth_check_exception type=%s", type(exc).__name__)
+        return False
+    if not authenticated:
+        logger.warning("IV_ENROLL_DIAG auth_check_failed")
         return False
     access = st.session_state.get("access_token")
     refresh = st.session_state.get("refresh_token")
     user_id = st.session_state.get("user_id")
-    if not all(isinstance(x, str) and x for x in (access, refresh, user_id)):
+    missing = [name for name, value in (("access_token", access),
+                                        ("refresh_token", refresh),
+                                        ("user_id", user_id))
+               if not isinstance(value, str) or not value]
+    if missing:
+        logger.warning("IV_ENROLL_DIAG session_fields_missing fields=%s", ",".join(missing))
         return False
     try:
         from quick_login_pair import _post
@@ -592,8 +608,14 @@ def _iv_authorize_native_enrollment(challenge):
             "refresh_token": refresh,
             "expected_user_id": user_id,
         })
-        return response.status_code == 200 and response.json().get("authorized") is True
-    except (requests.RequestException, ValueError, RuntimeError, TypeError):
+        logger.warning("IV_ENROLL_DIAG bridge_response status=%d", response.status_code)
+        if response.status_code != 200:
+            return False
+        authorized = response.json().get("authorized") is True
+        logger.warning("IV_ENROLL_DIAG authorization_result authorized=%s", authorized)
+        return authorized
+    except (requests.RequestException, ValueError, RuntimeError, TypeError) as exc:
+        logger.warning("IV_ENROLL_DIAG bridge_exception type=%s", type(exc).__name__)
         return False
 
 
