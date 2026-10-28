@@ -22,15 +22,27 @@ st.set_page_config(
 )
 
 
-# Handle Supabase recovery links before styling, navigation or login routing.
-# The recovery flow stops this run and never opens the normal dashboard.
+# Capture recovery links before styling, routing, or the normal login gate.
+# On some initial Streamlit runs, URL query parameters arrive after the first
+# Python execution. Prefer the browser URL available through st.context.url,
+# then give the client one rerun to synchronize st.query_params if necessary.
+from urllib.parse import urlsplit, parse_qs
 from auth import render_password_recovery
-# Temporary diagnostic: log only token presence, never the token value.
-print(
-    "RECOVERY DEBUG: token_present=",
-    bool(st.query_params.get("recovery_token")),
-    flush=True,
-)
+
+if not st.query_params.get("recovery_token"):
+    try:
+        _url = str(getattr(st.context, "url", "") or "")
+        _url_token = parse_qs(urlsplit(_url).query).get("recovery_token", [""])[0]
+        if _url_token:
+            st.query_params["recovery_token"] = _url_token
+    except (AttributeError, ValueError, TypeError):
+        pass
+
+if not st.query_params.get("recovery_token") and not st.session_state.get("_iv_recovery_active"):
+    if not st.session_state.get("_iv_recovery_url_sync_attempted"):
+        st.session_state["_iv_recovery_url_sync_attempted"] = True
+        st.rerun()
+
 if render_password_recovery():
     st.stop()
 
