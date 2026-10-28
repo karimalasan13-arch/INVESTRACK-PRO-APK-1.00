@@ -22,27 +22,9 @@ st.set_page_config(
 )
 
 
-# Capture recovery links before styling, routing, or the normal login gate.
-# On some initial Streamlit runs, URL query parameters arrive after the first
-# Python execution. Prefer the browser URL available through st.context.url,
-# then give the client one rerun to synchronize st.query_params if necessary.
-from urllib.parse import urlsplit, parse_qs
+# Handle Supabase recovery links before styling, navigation or login routing.
+# The recovery flow stops this run and never opens the normal dashboard.
 from auth import render_password_recovery
-
-if not st.query_params.get("recovery_token"):
-    try:
-        _url = str(getattr(st.context, "url", "") or "")
-        _url_token = parse_qs(urlsplit(_url).query).get("recovery_token", [""])[0]
-        if _url_token:
-            st.query_params["recovery_token"] = _url_token
-    except (AttributeError, ValueError, TypeError):
-        pass
-
-if not st.query_params.get("recovery_token") and not st.session_state.get("_iv_recovery_active"):
-    if not st.session_state.get("_iv_recovery_url_sync_attempted"):
-        st.session_state["_iv_recovery_url_sync_attempted"] = True
-        st.rerun()
-
 if render_password_recovery():
     st.stop()
 
@@ -599,7 +581,7 @@ def render_navigation_buttons(items, selected_page):
             navigate(page_name)
 
 
-# STEP 4H.4 — authenticated, opt-in biometric enrollment (staging only).
+# Authenticated, opt-in biometric enrollment.
 # Streamlit creates a one-use enrollment intent on the server; the browser
 # exposes ONLY the public intent for Android to consume automatically.
 _IV_ENROLL_INTENT = re.compile(r"^[A-Za-z0-9_-]{43}$")
@@ -607,16 +589,13 @@ _IV_ENROLL_INTENT = re.compile(r"^[A-Za-z0-9_-]{43}$")
 
 def _iv_create_enrollment_intent():
     """Create a short-lived, authenticated intent; never expose session tokens."""
-    logger = logging.getLogger("investrack.quicklogin.enrollment")
     try:
         if not ensure_auth():
-            logger.warning("IV_ENROLL_DIAG auth_check_failed")
             return None
         access = st.session_state.get("access_token")
         refresh = st.session_state.get("refresh_token")
         user_id = st.session_state.get("user_id")
         if not all(isinstance(v, str) and v for v in (access, refresh, user_id)):
-            logger.warning("IV_ENROLL_DIAG session_fields_missing")
             return None
         from quick_login_pair import _post
         response = _post("/api/session/quick-login/enroll/intent", {
@@ -624,27 +603,16 @@ def _iv_create_enrollment_intent():
             "refresh_token": refresh,
             "expected_user_id": user_id,
         })
-        logger.warning("IV_ENROLL_DIAG intent_response status=%d", response.status_code)
         if response.status_code != 200:
             return None
         intent = response.json().get("intent")
         return intent if isinstance(intent, str) and _IV_ENROLL_INTENT.fullmatch(intent) else None
-    except (requests.RequestException, ValueError, RuntimeError, TypeError) as exc:
-        logger.warning("IV_ENROLL_DIAG intent_exception type=%s", type(exc).__name__)
+    except (requests.RequestException, ValueError, RuntimeError, TypeError):
         return None
 
 
-def render_biometric_enrollment_control(show_controls=True):
+def render_biometric_enrollment_control():
     """User opt-in; Android uses the one-use intent to complete enrollment."""
-    # A successful password login may request opt-in enrollment once.
-    # Only the server-side one-use intent reaches the Android WebView.
-    if st.session_state.pop('_iv_remember_enroll_pending', False):
-        new_intent = _iv_create_enrollment_intent()
-        if new_intent:
-            st.session_state['_iv_enroll_intent'] = new_intent
-            st.session_state['_iv_enroll_requested_at'] = time.monotonic()
-        else:
-            st.session_state['_iv_remember_enroll_failed'] = True
     now = time.monotonic()
     pending_at = st.session_state.get("_iv_enroll_requested_at", 0)
     intent = st.session_state.get("_iv_enroll_intent")
@@ -662,13 +630,12 @@ def render_biometric_enrollment_control(show_controls=True):
             f'<span id="iv-biometric-enroll-request" hidden data-intent="{intent}"></span>',
             unsafe_allow_html=True,
         )
-        if show_controls:
-            st.sidebar.caption("Waiting for Android secure login setup (up to 90 seconds)…")
-        if show_controls and st.sidebar.button("Cancel biometric setup", key="iv_enroll_cancel"):
+        st.sidebar.caption("Waiting for Android biometric setup (up to 90 seconds)…")
+        if st.sidebar.button("Cancel biometric setup", key="iv_enroll_cancel"):
             st.session_state.pop("_iv_enroll_requested_at", None)
             st.session_state.pop("_iv_enroll_intent", None)
             st.rerun()
-    elif show_controls and st.sidebar.button("🔐  Enable Biometric Login", key="iv_enroll_opt_in",
+    elif st.sidebar.button("🔐  Enable Biometric Login", key="iv_enroll_opt_in",
                            use_container_width=True):
         new_intent = _iv_create_enrollment_intent()
         if new_intent:
@@ -703,12 +670,12 @@ def render_profile_section(user):
             f'<div class="iv-profile-panel"><strong>Signed in</strong><br><small>{email}</small></div>',
             unsafe_allow_html=True,
         )
+        render_biometric_enrollment_control()
         if st.sidebar.button("📈  Open Dashboard", key="profile_open_dashboard", use_container_width=True):
             navigate("Dashboard")
         if st.sidebar.button("🚪  Logout", key="profile_logout", use_container_width=True):
             logout()
             st.stop()
-    render_biometric_enrollment_control(show_controls=st.session_state.profile_panel_open)
 
 
 def issue_premium_auth_code():
@@ -2513,15 +2480,11 @@ def render_dashboard():
 
             bond_app()
 
-    except Exception as error:
+    except Exception:
         st.error(
             "Something went wrong. Please refresh the app."
         )
-        print(
-            "APP ERROR:",
-            type(error).__name__,
-            error,
-        )
+        logging.getLogger("investrack.app").error("Dashboard rendering failed", exc_info=True)
 
     st.markdown("---")
 
@@ -2614,7 +2577,7 @@ if not ensure_auth():
       }
     </style>
     """, unsafe_allow_html=True)
-    # Step 4G.2 — staging-only, session-local native pairing metadata.
+    # Session-local native Quick Login pairing metadata.
     # The challenge is not a credential; only Android native may attach a ticket.
     from quick_login_pair import create_pair, consume_pair
     import html as _iv_html
