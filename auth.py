@@ -373,6 +373,7 @@ def login_ui():
                 with st.form('iv_login_form'):
                     email = st.text_input('Email address', placeholder='Email address', label_visibility='collapsed', key='login_email')
                     password = st.text_input('Password', type='password', placeholder='Password', label_visibility='collapsed', key='login_pass')
+                    remember_me = st.checkbox('Remember me on this device (secure quick login)', key='iv_remember_me')
                     submit = st.form_submit_button('Log In', type='primary', use_container_width=True)
                 if submit:
                     if not email.strip() or not password:
@@ -392,6 +393,8 @@ def login_ui():
                                 _mark_session_activity()
                                 st.session_state.pop('iv_entitlement_snapshot', None)
                                 st.session_state.pending_public_page = 'Dashboard'
+                                if remember_me:
+                                    st.session_state['_iv_remember_enroll_pending'] = True
                                 st.rerun()
                         except Exception:
                             st.error('Could not sign in. Check your credentials and connection.')
