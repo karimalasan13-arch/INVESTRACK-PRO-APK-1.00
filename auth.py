@@ -294,6 +294,31 @@ def login_ui():
     button:focus-visible,input:focus-visible {outline:2px solid #2563eb !important;outline-offset:2px !important;}
     @media (prefers-reduced-motion:no-preference) { [data-testid="stMainBlockContainer"] {animation:ivAuthFade .22s ease-out both;} @keyframes ivAuthFade {from {opacity:.6;transform:translateY(5px);} to {opacity:1;transform:translateY(0);}} }
     @media(max-width:480px) {[data-testid="stMainBlockContainer"],.block-container {padding-left:.85rem !important;padding-right:.85rem !important;} }
+    /* Compact only the login page's vertical rhythm; leave scrolling available
+       when the keyboard opens or the device uses larger accessibility text. */
+    [data-testid="stMainBlockContainer"] [data-testid="stVerticalBlock"] {gap:.38rem !important;}
+    [data-testid="stMainBlockContainer"] [data-testid="stForm"] [data-testid="stVerticalBlock"] {gap:.42rem !important;}
+    [data-testid="stMainBlockContainer"] [data-testid="stVerticalBlockBorderWrapper"] {padding:4px !important;}
+    [data-testid="stMainBlockContainer"] [data-testid="stTextInput"] input {min-height:38px !important;}
+    [data-testid="stMainBlockContainer"] [data-testid="stFormSubmitButton"] button {min-height:42px !important;}
+    [data-testid="stMainBlockContainer"] button[kind="secondary"] {min-height:38px !important;}
+    /* Login viewport fit: preserve the approved layout and controls. */
+    @media (max-height:900px) {
+      [data-testid="stMainBlockContainer"], .block-container {padding-top:0 !important;padding-bottom:0 !important;}
+      [data-testid="stMainBlockContainer"] [data-testid="stVerticalBlock"] {gap:.18rem !important;}
+      [data-testid="stMainBlockContainer"] [data-testid="stForm"] [data-testid="stVerticalBlock"] {gap:.24rem !important;}
+      [data-testid="stMainBlockContainer"] [data-testid="stVerticalBlockBorderWrapper"] {padding:3px !important;}
+      [data-testid="stMainBlockContainer"] img[alt="InvesTrack Pro official app icon"] {width:72px !important;height:72px !important;}
+      [data-testid="stMainBlockContainer"] [data-testid="stTextInput"] input {min-height:36px !important;}
+      [data-testid="stMainBlockContainer"] [data-testid="stFormSubmitButton"] button {min-height:40px !important;}
+      [data-testid="stMainBlockContainer"] button[kind="secondary"] {min-height:36px !important;}
+    }
+    @media (max-height:800px) {
+      [data-testid="stMainBlockContainer"] img[alt="InvesTrack Pro official app icon"] {width:76px !important;height:76px !important;}
+      [data-testid="stMainBlockContainer"] [data-testid="stVerticalBlock"] {gap:.24rem !important;}
+      [data-testid="stMainBlockContainer"] [data-testid="stForm"] [data-testid="stVerticalBlock"] {gap:.3rem !important;}
+    }
+
     </style>
     """, unsafe_allow_html=True)
 
