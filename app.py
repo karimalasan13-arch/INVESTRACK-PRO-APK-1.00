@@ -25,6 +25,12 @@ st.set_page_config(
 # Handle Supabase recovery links before styling, navigation or login routing.
 # The recovery flow stops this run and never opens the normal dashboard.
 from auth import render_password_recovery
+# Temporary diagnostic: log only token presence, never the token value.
+print(
+    "RECOVERY DEBUG: token_present=",
+    bool(st.query_params.get("recovery_token")),
+    flush=True,
+)
 if render_password_recovery():
     st.stop()
 
