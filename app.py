@@ -2633,7 +2633,11 @@ render_authenticated_activity_watch()
 # -----------------------------------------
 # MAIN ROUTER
 # -----------------------------------------
-sync_route_from_url()
+# A button-triggered route is authoritative for this rerun. URL history
+# updates can arrive later in the Android WebView; do not let an older
+# ?page= value override a newer Streamlit navigation request.
+if not st.session_state.get("pending_public_page"):
+    sync_route_from_url()
 
 
 selected_page, user_is_authenticated = (
