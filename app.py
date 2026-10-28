@@ -634,8 +634,17 @@ def _iv_create_enrollment_intent():
         return None
 
 
-def render_biometric_enrollment_control():
+def render_biometric_enrollment_control(show_controls=True):
     """User opt-in; Android uses the one-use intent to complete enrollment."""
+    # A successful password login may request opt-in enrollment once.
+    # Only the server-side one-use intent reaches the Android WebView.
+    if st.session_state.pop('_iv_remember_enroll_pending', False):
+        new_intent = _iv_create_enrollment_intent()
+        if new_intent:
+            st.session_state['_iv_enroll_intent'] = new_intent
+            st.session_state['_iv_enroll_requested_at'] = time.monotonic()
+        else:
+            st.session_state['_iv_remember_enroll_failed'] = True
     now = time.monotonic()
     pending_at = st.session_state.get("_iv_enroll_requested_at", 0)
     intent = st.session_state.get("_iv_enroll_intent")
@@ -653,12 +662,13 @@ def render_biometric_enrollment_control():
             f'<span id="iv-biometric-enroll-request" hidden data-intent="{intent}"></span>',
             unsafe_allow_html=True,
         )
-        st.sidebar.caption("Waiting for Android biometric setup (up to 90 seconds)…")
-        if st.sidebar.button("Cancel biometric setup", key="iv_enroll_cancel"):
+        if show_controls:
+            st.sidebar.caption("Waiting for Android secure login setup (up to 90 seconds)…")
+        if show_controls and st.sidebar.button("Cancel biometric setup", key="iv_enroll_cancel"):
             st.session_state.pop("_iv_enroll_requested_at", None)
             st.session_state.pop("_iv_enroll_intent", None)
             st.rerun()
-    elif st.sidebar.button("🔐  Enable Biometric Login", key="iv_enroll_opt_in",
+    elif show_controls and st.sidebar.button("🔐  Enable Biometric Login", key="iv_enroll_opt_in",
                            use_container_width=True):
         new_intent = _iv_create_enrollment_intent()
         if new_intent:
@@ -693,12 +703,12 @@ def render_profile_section(user):
             f'<div class="iv-profile-panel"><strong>Signed in</strong><br><small>{email}</small></div>',
             unsafe_allow_html=True,
         )
-        render_biometric_enrollment_control()
         if st.sidebar.button("📈  Open Dashboard", key="profile_open_dashboard", use_container_width=True):
             navigate("Dashboard")
         if st.sidebar.button("🚪  Logout", key="profile_logout", use_container_width=True):
             logout()
             st.stop()
+    render_biometric_enrollment_control(show_controls=st.session_state.profile_panel_open)
 
 
 def issue_premium_auth_code():
