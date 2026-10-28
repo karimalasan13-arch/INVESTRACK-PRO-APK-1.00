@@ -506,19 +506,15 @@ def write_route_to_url(page_name, article_slug=None):
     """Keep the browser URL shareable without changing the Streamlit app structure."""
     # Preserve Supabase's one-time recovery token if a navigation event fires.
     recovery_token = st.query_params.get("recovery_token")
-    # Update query parameters in one operation to avoid an intermediate
-    # empty URL/history state that can visibly flash in Android WebView.
-    params = {}
+    st.query_params.clear()
     if recovery_token:
-        params["recovery_token"] = recovery_token
+        st.query_params["recovery_token"] = recovery_token
     if article_slug:
-        params["article"] = article_slug
+        st.query_params["article"] = article_slug
     elif page_name != "Home":
         page_key = PAGE_QUERY_MAP.get(page_name)
         if page_key:
-            params["page"] = page_key
-    if st.query_params.to_dict() != params:
-        st.query_params.from_dict(params)
+            st.query_params["page"] = page_key
 
 # -----------------------------------------
 # COMMON SITE NAVIGATION
@@ -537,17 +533,12 @@ PUBLIC_PAGES = [
 ]
 
 
-def _set_navigation_before_rerun(page_name):
-    """Run as a button callback so Streamlit needs only its normal rerun."""
+def navigate(page_name):
     if page_name != "Learn":
         st.session_state.pop("learn_article_slug", None)
-    st.session_state.pending_public_page = page_name
-    st.session_state.public_navigation = page_name
+
     write_route_to_url(page_name)
-
-
-def navigate(page_name):
-    _set_navigation_before_rerun(page_name)
+    st.session_state.pending_public_page = page_name
     st.rerun()
 
 
@@ -581,17 +572,16 @@ def render_sidebar_brand():
 def render_navigation_buttons(items, selected_page):
     st.sidebar.markdown('<div class="iv-section-label">Navigation</div>', unsafe_allow_html=True)
     for page_name, icon in items:
-        st.sidebar.button(
+        if st.sidebar.button(
             f"{icon}  {page_name}",
             key=f"nav_{page_name.lower()}",
             type="primary" if page_name == selected_page else "secondary",
             use_container_width=True,
-            on_click=_set_navigation_before_rerun,
-            args=(page_name,),
-        )
+        ):
+            navigate(page_name)
 
 
-# Authenticated, opt-in biometric enrollment.
+# STEP 4H.4 — authenticated, opt-in biometric enrollment (staging only).
 # Streamlit creates a one-use enrollment intent on the server; the browser
 # exposes ONLY the public intent for Android to consume automatically.
 _IV_ENROLL_INTENT = re.compile(r"^[A-Za-z0-9_-]{43}$")
@@ -599,13 +589,16 @@ _IV_ENROLL_INTENT = re.compile(r"^[A-Za-z0-9_-]{43}$")
 
 def _iv_create_enrollment_intent():
     """Create a short-lived, authenticated intent; never expose session tokens."""
+    logger = logging.getLogger("investrack.quicklogin.enrollment")
     try:
         if not ensure_auth():
+            logger.warning("IV_ENROLL_DIAG auth_check_failed")
             return None
         access = st.session_state.get("access_token")
         refresh = st.session_state.get("refresh_token")
         user_id = st.session_state.get("user_id")
         if not all(isinstance(v, str) and v for v in (access, refresh, user_id)):
+            logger.warning("IV_ENROLL_DIAG session_fields_missing")
             return None
         from quick_login_pair import _post
         response = _post("/api/session/quick-login/enroll/intent", {
@@ -613,11 +606,13 @@ def _iv_create_enrollment_intent():
             "refresh_token": refresh,
             "expected_user_id": user_id,
         })
+        logger.warning("IV_ENROLL_DIAG intent_response status=%d", response.status_code)
         if response.status_code != 200:
             return None
         intent = response.json().get("intent")
         return intent if isinstance(intent, str) and _IV_ENROLL_INTENT.fullmatch(intent) else None
-    except (requests.RequestException, ValueError, RuntimeError, TypeError):
+    except (requests.RequestException, ValueError, RuntimeError, TypeError) as exc:
+        logger.warning("IV_ENROLL_DIAG intent_exception type=%s", type(exc).__name__)
         return None
 
 
@@ -855,10 +850,6 @@ def render_public_navigation():
     if selected_page not in valid_pages:
         selected_page = default_page
         st.session_state.public_navigation = selected_page
-        # After login the previous public URL can still say ?page=login.
-        # Replace it once, avoiding a second navigation/rebuild cycle.
-        if authenticated and selected_page == "Dashboard":
-            write_route_to_url("Dashboard")
 
     # Signed-in account controls are now above navigation.
     if authenticated:
@@ -2494,11 +2485,15 @@ def render_dashboard():
 
             bond_app()
 
-    except Exception:
+    except Exception as error:
         st.error(
             "Something went wrong. Please refresh the app."
         )
-        logging.getLogger("investrack.app").error("Dashboard rendering failed", exc_info=True)
+        print(
+            "APP ERROR:",
+            type(error).__name__,
+            error,
+        )
 
     st.markdown("---")
 
@@ -2591,7 +2586,7 @@ if not ensure_auth():
       }
     </style>
     """, unsafe_allow_html=True)
-    # Session-local native Quick Login pairing metadata.
+    # Step 4G.2 — staging-only, session-local native pairing metadata.
     # The challenge is not a credential; only Android native may attach a ticket.
     from quick_login_pair import create_pair, consume_pair
     import html as _iv_html
@@ -2647,11 +2642,7 @@ render_authenticated_activity_watch()
 # -----------------------------------------
 # MAIN ROUTER
 # -----------------------------------------
-# A button-triggered route is authoritative for this rerun. URL history
-# updates can arrive later in the Android WebView; do not let an older
-# ?page= value override a newer Streamlit navigation request.
-if not st.session_state.get("pending_public_page"):
-    sync_route_from_url()
+sync_route_from_url()
 
 
 selected_page, user_is_authenticated = (
