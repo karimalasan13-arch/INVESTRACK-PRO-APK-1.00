@@ -2544,6 +2544,12 @@ def render_cashflow_workspace():
     render_cashflow()
 
 
+# Password recovery must run before the login-first gate and quick-login pairing.
+# The handler returns True only for a recovery URL or active recovery flow.
+from auth import render_password_recovery
+if render_password_recovery():
+    st.stop()
+
 # STEP 4C.3 — SERVER SESSION INACTIVITY WATCHDOG
 # A fragment re-executes independently of dashboard widget interaction.
 # It never renews the inactivity timestamp.
