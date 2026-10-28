@@ -506,15 +506,19 @@ def write_route_to_url(page_name, article_slug=None):
     """Keep the browser URL shareable without changing the Streamlit app structure."""
     # Preserve Supabase's one-time recovery token if a navigation event fires.
     recovery_token = st.query_params.get("recovery_token")
-    st.query_params.clear()
+    # Update query parameters in one operation to avoid an intermediate
+    # empty URL/history state that can visibly flash in Android WebView.
+    params = {}
     if recovery_token:
-        st.query_params["recovery_token"] = recovery_token
+        params["recovery_token"] = recovery_token
     if article_slug:
-        st.query_params["article"] = article_slug
+        params["article"] = article_slug
     elif page_name != "Home":
         page_key = PAGE_QUERY_MAP.get(page_name)
         if page_key:
-            st.query_params["page"] = page_key
+            params["page"] = page_key
+    if st.query_params.to_dict() != params:
+        st.query_params.from_dict(params)
 
 # -----------------------------------------
 # COMMON SITE NAVIGATION
@@ -533,12 +537,17 @@ PUBLIC_PAGES = [
 ]
 
 
-def navigate(page_name):
+def _set_navigation_before_rerun(page_name):
+    """Run as a button callback so Streamlit needs only its normal rerun."""
     if page_name != "Learn":
         st.session_state.pop("learn_article_slug", None)
-
-    write_route_to_url(page_name)
     st.session_state.pending_public_page = page_name
+    st.session_state.public_navigation = page_name
+    write_route_to_url(page_name)
+
+
+def navigate(page_name):
+    _set_navigation_before_rerun(page_name)
     st.rerun()
 
 
@@ -572,13 +581,14 @@ def render_sidebar_brand():
 def render_navigation_buttons(items, selected_page):
     st.sidebar.markdown('<div class="iv-section-label">Navigation</div>', unsafe_allow_html=True)
     for page_name, icon in items:
-        if st.sidebar.button(
+        st.sidebar.button(
             f"{icon}  {page_name}",
             key=f"nav_{page_name.lower()}",
             type="primary" if page_name == selected_page else "secondary",
             use_container_width=True,
-        ):
-            navigate(page_name)
+            on_click=_set_navigation_before_rerun,
+            args=(page_name,),
+        )
 
 
 # Authenticated, opt-in biometric enrollment.
@@ -845,6 +855,10 @@ def render_public_navigation():
     if selected_page not in valid_pages:
         selected_page = default_page
         st.session_state.public_navigation = selected_page
+        # After login the previous public URL can still say ?page=login.
+        # Replace it once, avoiding a second navigation/rebuild cycle.
+        if authenticated and selected_page == "Dashboard":
+            write_route_to_url("Dashboard")
 
     # Signed-in account controls are now above navigation.
     if authenticated:
