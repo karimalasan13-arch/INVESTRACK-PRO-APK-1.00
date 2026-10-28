@@ -22,6 +22,12 @@ st.set_page_config(
 )
 
 
+# Handle Supabase recovery links before styling, navigation or login routing.
+# The recovery flow stops this run and never opens the normal dashboard.
+from auth import render_password_recovery
+if render_password_recovery():
+    st.stop()
+
 # -----------------------------------------
 # GLOBAL STYLING
 # Keeps Streamlit's top-right menu for
@@ -498,7 +504,11 @@ def sync_route_from_url():
 
 def write_route_to_url(page_name, article_slug=None):
     """Keep the browser URL shareable without changing the Streamlit app structure."""
+    # Preserve Supabase's one-time recovery token if a navigation event fires.
+    recovery_token = st.query_params.get("recovery_token")
     st.query_params.clear()
+    if recovery_token:
+        st.query_params["recovery_token"] = recovery_token
     if article_slug:
         st.query_params["article"] = article_slug
     elif page_name != "Home":
@@ -2543,12 +2553,6 @@ def render_cashflow_workspace():
     from cashflow import render_cashflow
     render_cashflow()
 
-
-# Password recovery must run before the login-first gate and quick-login pairing.
-# The handler returns True only for a recovery URL or active recovery flow.
-from auth import render_password_recovery
-if render_password_recovery():
-    st.stop()
 
 # STEP 4C.3 — SERVER SESSION INACTIVITY WATCHDOG
 # A fragment re-executes independently of dashboard widget interaction.
