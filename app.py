@@ -43,6 +43,109 @@ st.markdown(
         --iv-border: rgba(148, 163, 184, 0.25);
     }
 
+    /* Phase 1: restrained, route-specific page entrance animations.
+       No overlay, iframe, forced WebView reload, or delayed content. */
+    @keyframes iv-page-slide {
+        from { opacity: .88; transform: translate3d(16px,0,0); }
+        to { opacity: 1; transform: translate3d(0,0,0); }
+    }
+    @keyframes iv-login-fade {
+        from { opacity: .92; }
+        to { opacity: 1; }
+    }
+    @media (prefers-reduced-motion: no-preference) {
+        [data-testid="stMainBlockContainer"]:has(#iv-route-login) {
+            animation: iv-login-fade 180ms ease-out both;
+        }
+        @keyframes iv-slide-dashboard {
+            from { opacity: .88; transform: translate3d(16px,0,0); }
+            to { opacity: 1; transform: translate3d(0,0,0); }
+        }
+        [data-testid="stMainBlockContainer"]:has(#iv-route-dashboard) {
+            animation: iv-slide-dashboard 260ms cubic-bezier(.2,.7,.2,1) both;
+        }
+        @keyframes iv-slide-cashflow {
+            from { opacity: .88; transform: translate3d(16px,0,0); }
+            to { opacity: 1; transform: translate3d(0,0,0); }
+        }
+        [data-testid="stMainBlockContainer"]:has(#iv-route-cashflow) {
+            animation: iv-slide-cashflow 260ms cubic-bezier(.2,.7,.2,1) both;
+        }
+        @keyframes iv-slide-investments {
+            from { opacity: .88; transform: translate3d(16px,0,0); }
+            to { opacity: 1; transform: translate3d(0,0,0); }
+        }
+        [data-testid="stMainBlockContainer"]:has(#iv-route-investments) {
+            animation: iv-slide-investments 260ms cubic-bezier(.2,.7,.2,1) both;
+        }
+        @keyframes iv-slide-markets {
+            from { opacity: .88; transform: translate3d(16px,0,0); }
+            to { opacity: 1; transform: translate3d(0,0,0); }
+        }
+        [data-testid="stMainBlockContainer"]:has(#iv-route-markets) {
+            animation: iv-slide-markets 260ms cubic-bezier(.2,.7,.2,1) both;
+        }
+        @keyframes iv-slide-tools {
+            from { opacity: .88; transform: translate3d(16px,0,0); }
+            to { opacity: 1; transform: translate3d(0,0,0); }
+        }
+        [data-testid="stMainBlockContainer"]:has(#iv-route-tools) {
+            animation: iv-slide-tools 260ms cubic-bezier(.2,.7,.2,1) both;
+        }
+        @keyframes iv-slide-learn {
+            from { opacity: .88; transform: translate3d(16px,0,0); }
+            to { opacity: 1; transform: translate3d(0,0,0); }
+        }
+        [data-testid="stMainBlockContainer"]:has(#iv-route-learn) {
+            animation: iv-slide-learn 260ms cubic-bezier(.2,.7,.2,1) both;
+        }
+        @keyframes iv-slide-editorial {
+            from { opacity: .88; transform: translate3d(16px,0,0); }
+            to { opacity: 1; transform: translate3d(0,0,0); }
+        }
+        [data-testid="stMainBlockContainer"]:has(#iv-route-editorial) {
+            animation: iv-slide-editorial 260ms cubic-bezier(.2,.7,.2,1) both;
+        }
+        @keyframes iv-slide-about {
+            from { opacity: .88; transform: translate3d(16px,0,0); }
+            to { opacity: 1; transform: translate3d(0,0,0); }
+        }
+        [data-testid="stMainBlockContainer"]:has(#iv-route-about) {
+            animation: iv-slide-about 260ms cubic-bezier(.2,.7,.2,1) both;
+        }
+        @keyframes iv-slide-privacy {
+            from { opacity: .88; transform: translate3d(16px,0,0); }
+            to { opacity: 1; transform: translate3d(0,0,0); }
+        }
+        [data-testid="stMainBlockContainer"]:has(#iv-route-privacy) {
+            animation: iv-slide-privacy 260ms cubic-bezier(.2,.7,.2,1) both;
+        }
+        @keyframes iv-slide-terms {
+            from { opacity: .88; transform: translate3d(16px,0,0); }
+            to { opacity: 1; transform: translate3d(0,0,0); }
+        }
+        [data-testid="stMainBlockContainer"]:has(#iv-route-terms) {
+            animation: iv-slide-terms 260ms cubic-bezier(.2,.7,.2,1) both;
+        }
+        @keyframes iv-slide-contact {
+            from { opacity: .88; transform: translate3d(16px,0,0); }
+            to { opacity: 1; transform: translate3d(0,0,0); }
+        }
+        [data-testid="stMainBlockContainer"]:has(#iv-route-contact) {
+            animation: iv-slide-contact 260ms cubic-bezier(.2,.7,.2,1) both;
+        }
+        @keyframes iv-slide-home {
+            from { opacity: .88; transform: translate3d(16px,0,0); }
+            to { opacity: 1; transform: translate3d(0,0,0); }
+        }
+        [data-testid="stMainBlockContainer"]:has(#iv-route-home) {
+            animation: iv-slide-home 260ms cubic-bezier(.2,.7,.2,1) both;
+        }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        [data-testid="stMainBlockContainer"] { animation: none !important; }
+    }
+
     /* Native Android purchase authorization is a programmatic-only
        Streamlit widget. Keep it mounted in the DOM for WebView .click(),
        but never render it visibly or reserve layout space for it. */
@@ -2641,6 +2744,7 @@ if not ensure_auth():
         st.rerun(scope="app")
 
     _iv_quick_login_pairing()
+    st.markdown('<span id="iv-route-login" hidden></span>', unsafe_allow_html=True)
     login_ui()
     st.stop()
 
@@ -2658,6 +2762,15 @@ sync_route_from_url()
 
 selected_page, user_is_authenticated = (
     render_public_navigation()
+)
+
+# A route marker changes the animation only when the actual page changes.
+# The marker contains no credentials and does not interfere with Android's
+# existing quick-login, premium, or advertising DOM markers.
+_iv_route_key = PAGE_QUERY_MAP.get(selected_page, "home")
+st.markdown(
+    f'<span id="iv-route-{_iv_route_key}" hidden></span>',
+    unsafe_allow_html=True,
 )
 
 if selected_page == "Home":
