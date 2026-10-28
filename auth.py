@@ -437,7 +437,10 @@ def login_ui():
                         st.warning('Enter your email address.')
                     else:
                         try:
-                            get_supabase().auth.reset_password_email(email.strip())
+                            get_supabase().auth.reset_password_email(
+                                email.strip(),
+                                options={"redirect_to": "https://investrack-pro-apk-1-00-2.onrender.com/api/session/password-reset"},
+                            )
                             st.success('If an account exists for this email, password reset instructions will be sent.')
                         except Exception:
                             st.error('Unable to request a password reset right now. Please try again.')
