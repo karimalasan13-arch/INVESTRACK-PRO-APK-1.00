@@ -22,7 +22,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from fastapi import FastAPI, Header, HTTPException, Request as FastAPIRequest
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
@@ -661,6 +661,143 @@ async def claim_biometric_enrollment(request: FastAPIRequest):
         del _enrollments[challenge]
     return JSONResponse({'valid': True, 'user_id': account,
                          'refresh_token': refresh})
+
+
+
+
+# ---------------------------------------------------------------------------
+# Password recovery: isolated from Streamlit and native Quick Login.
+# Recovery token is carried in a URL fragment (never sent in HTTP GET), then
+# sent in a bounded same-origin POST. Supabase sessions stay server-side.
+# ---------------------------------------------------------------------------
+_RECOVERY_PATH = '/api/session/password-reset'
+_RECOVERY_MAX_BYTES = 4096
+
+_RECOVERY_HTML = r"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reset password | InvesTrack Pro</title>
+<style>
+:root{font-family:system-ui,-apple-system,Segoe UI,sans-serif;color-scheme:light}
+body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f3f6fa;color:#14233b}
+main{box-sizing:border-box;width:min(420px,calc(100% - 32px));padding:30px;border-radius:14px;background:white;box-shadow:0 8px 32px #152b4818}
+h1{font-size:1.55rem;margin:0 0 10px}p{line-height:1.5;color:#4a596b}label{display:block;font-weight:600;margin:18px 0 6px}
+input,button{box-sizing:border-box;width:100%;padding:12px;border-radius:8px;font:inherit}
+input{border:1px solid #abb7c8}button{margin-top:22px;border:0;background:#1559b5;color:white;cursor:pointer}
+button:disabled{opacity:.65;cursor:wait}#status{min-height:1.5em}a{color:#1559b5}
+</style></head><body><main><h1>Reset your password</h1>
+<p>Enter a new password for your InvesTrack Pro account.</p>
+<form id="reset" hidden>
+<label for="password">New password</label><input id="password" type="password" minlength="8" maxlength="256" autocomplete="new-password" required>
+<label for="confirm">Confirm new password</label><input id="confirm" type="password" minlength="8" maxlength="256" autocomplete="new-password" required>
+<button id="submit" type="submit">Update password</button></form>
+<p id="status" role="status" aria-live="polite"></p>
+<p><a href="/">Return to login</a></p></main>
+<script>
+(function(){
+  'use strict';
+  const status=document.getElementById('status'), form=document.getElementById('reset');
+  let token='';
+  try {
+    const fragment=new URLSearchParams(window.location.hash.slice(1));
+    token=fragment.get('recovery_token')||'';
+    // Remove sensitive fragment before user submits anything or navigates.
+    history.replaceState(null,'',window.location.pathname);
+  } catch (_) { token=''; }
+  if (!/^[A-Za-z0-9_-]{1,2048}$/.test(token)) {
+    status.textContent='This reset link is missing or invalid. Please request a new link from the login page.';
+    return;
+  }
+  form.hidden=false;
+  form.addEventListener('submit',async function(event){
+    event.preventDefault();
+    const password=document.getElementById('password').value;
+    const confirm=document.getElementById('confirm').value;
+    if(password!==confirm){status.textContent='Passwords do not match.';return;}
+    if(password.length<8){status.textContent='Use at least 8 characters.';return;}
+    const submit=document.getElementById('submit');submit.disabled=true;
+    status.textContent='Updating password…';
+    try {
+      const response=await fetch('/api/session/password-reset',{
+        method:'POST',credentials:'same-origin',cache:'no-store',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({token_hash:token,password:password})
+      });
+      const result=await response.json();
+      if(!response.ok) throw new Error(result.detail||'Unable to reset password.');
+      token=''; form.hidden=true;
+      status.textContent='Password updated successfully. Return to login and sign in with your new password.';
+    } catch(e) {status.textContent=e.message||'Unable to reset password.';}
+    finally {submit.disabled=false;}
+  });
+})();
+</script></body></html>"""
+
+
+@app.get(_RECOVERY_PATH, response_class=HTMLResponse)
+def password_reset_page():
+    return HTMLResponse(_RECOVERY_HTML, headers={
+        'Content-Security-Policy': "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+        'X-Frame-Options': 'DENY',
+    })
+
+
+@app.post(_RECOVERY_PATH)
+async def reset_password(request: FastAPIRequest):
+    # Browser-only same-origin form. Reject cross-origin requests without
+    # relying on cookies, and never accept the token in a query string.
+    origin = request.headers.get('origin')
+    if not origin or origin != 'https://' + request.headers.get('host', ''):
+        raise HTTPException(403, 'Request origin not allowed')
+    if request.headers.get('content-type', '').split(';', 1)[0].strip().lower() != 'application/json':
+        raise HTTPException(415, 'JSON body required')
+    if request.url.query:
+        raise HTTPException(400, 'Invalid request')
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > _RECOVERY_MAX_BYTES:
+            raise HTTPException(413, 'Request too large')
+        body.extend(chunk)
+    try:
+        data = json.loads(body)
+    except (ValueError, UnicodeError):
+        raise HTTPException(400, 'Invalid request') from None
+    finally:
+        body.clear()
+    if not isinstance(data, dict) or set(data) != {'token_hash', 'password'}:
+        raise HTTPException(400, 'Invalid request')
+    token, password = data['token_hash'], data['password']
+    if not (isinstance(token, str) and 1 <= len(token) <= 2048
+            and token.isascii() and all(c.isalnum() or c in '-_' for c in token)):
+        raise HTTPException(400, 'Invalid reset link')
+    if not isinstance(password, str) or not (8 <= len(password) <= 256):
+        raise HTTPException(400, 'Password must be 8–256 characters')
+
+    base, key = _configuration()
+    verify = Request(base + '/auth/v1/verify',
+                     data=json.dumps({'token_hash': token, 'type': 'recovery'}).encode('utf-8'),
+                     headers={'apikey': key, 'Content-Type': 'application/json',
+                              'Accept': 'application/json'}, method='POST')
+    try:
+        session = _supabase_json(verify)
+    except HTTPException as exc:
+        if exc.status_code == 401:
+            raise HTTPException(400, 'Reset link expired or invalid. Request a new link.') from None
+        raise
+    access = session.get('access_token')
+    if not _safe_token(access):
+        raise HTTPException(400, 'Reset link expired or invalid. Request a new link.')
+    update = Request(base + '/auth/v1/user',
+                     data=json.dumps({'password': password}).encode('utf-8'),
+                     headers={'apikey': key, 'Authorization': 'Bearer ' + access,
+                              'Content-Type': 'application/json', 'Accept': 'application/json'},
+                     method='PUT')
+    try:
+        _supabase_json(update)
+    except HTTPException as exc:
+        if exc.status_code == 401:
+            raise HTTPException(400, 'Password was not accepted. Request a new link if needed.') from None
+        raise
+    return {'updated': True}
 
 
 @app.api_route('/api/session/{path:path}', methods=['GET', 'POST', 'PUT', 'PATCH', 'DELETE'])
