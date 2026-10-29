@@ -1,6 +1,8 @@
 import base64
 import html
+import logging
 import os
+import re
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -20,6 +22,12 @@ st.set_page_config(
 )
 
 
+# Handle Supabase recovery links before styling, navigation or login routing.
+# The recovery flow stops this run and never opens the normal dashboard.
+from auth import render_password_recovery
+if render_password_recovery():
+    st.stop()
+
 # -----------------------------------------
 # GLOBAL STYLING
 # Keeps Streamlit's top-right menu for
@@ -33,6 +41,121 @@ st.markdown(
         --iv-green: #84cc16;
         --iv-muted: #64748b;
         --iv-border: rgba(148, 163, 184, 0.25);
+    }
+
+    /* Phase 1: restrained, route-specific page entrance animations.
+       No overlay, iframe, forced WebView reload, or delayed content. */
+    @keyframes iv-page-slide {
+        from { opacity: .88; transform: translate3d(16px,0,0); }
+        to { opacity: 1; transform: translate3d(0,0,0); }
+    }
+    @keyframes iv-login-fade {
+        from { opacity: .92; }
+        to { opacity: 1; }
+    }
+    @media (prefers-reduced-motion: no-preference) {
+        [data-testid="stMainBlockContainer"]:has(#iv-transition-route-login) {
+            animation: iv-login-fade 180ms ease-out both;
+        }
+        @keyframes iv-slide-dashboard {
+            from { opacity: .88; transform: translate3d(16px,0,0); }
+            to { opacity: 1; transform: translate3d(0,0,0); }
+        }
+        [data-testid="stMainBlockContainer"]:has(#iv-transition-route-dashboard) {
+            animation: iv-slide-dashboard 260ms cubic-bezier(.2,.7,.2,1) both;
+        }
+        @keyframes iv-slide-cashflow {
+            from { opacity: .88; transform: translate3d(16px,0,0); }
+            to { opacity: 1; transform: translate3d(0,0,0); }
+        }
+        [data-testid="stMainBlockContainer"]:has(#iv-transition-route-cashflow) {
+            animation: iv-slide-cashflow 260ms cubic-bezier(.2,.7,.2,1) both;
+        }
+        @keyframes iv-slide-investments {
+            from { opacity: .88; transform: translate3d(16px,0,0); }
+            to { opacity: 1; transform: translate3d(0,0,0); }
+        }
+        [data-testid="stMainBlockContainer"]:has(#iv-transition-route-investments) {
+            animation: iv-slide-investments 260ms cubic-bezier(.2,.7,.2,1) both;
+        }
+        @keyframes iv-slide-markets {
+            from { opacity: .88; transform: translate3d(16px,0,0); }
+            to { opacity: 1; transform: translate3d(0,0,0); }
+        }
+        [data-testid="stMainBlockContainer"]:has(#iv-transition-route-markets) {
+            animation: iv-slide-markets 260ms cubic-bezier(.2,.7,.2,1) both;
+        }
+        @keyframes iv-slide-tools {
+            from { opacity: .88; transform: translate3d(16px,0,0); }
+            to { opacity: 1; transform: translate3d(0,0,0); }
+        }
+        [data-testid="stMainBlockContainer"]:has(#iv-transition-route-tools) {
+            animation: iv-slide-tools 260ms cubic-bezier(.2,.7,.2,1) both;
+        }
+        @keyframes iv-slide-learn {
+            from { opacity: .88; transform: translate3d(16px,0,0); }
+            to { opacity: 1; transform: translate3d(0,0,0); }
+        }
+        [data-testid="stMainBlockContainer"]:has(#iv-transition-route-learn) {
+            animation: iv-slide-learn 260ms cubic-bezier(.2,.7,.2,1) both;
+        }
+        @keyframes iv-slide-editorial {
+            from { opacity: .88; transform: translate3d(16px,0,0); }
+            to { opacity: 1; transform: translate3d(0,0,0); }
+        }
+        [data-testid="stMainBlockContainer"]:has(#iv-transition-route-editorial) {
+            animation: iv-slide-editorial 260ms cubic-bezier(.2,.7,.2,1) both;
+        }
+        @keyframes iv-slide-about {
+            from { opacity: .88; transform: translate3d(16px,0,0); }
+            to { opacity: 1; transform: translate3d(0,0,0); }
+        }
+        [data-testid="stMainBlockContainer"]:has(#iv-transition-route-about) {
+            animation: iv-slide-about 260ms cubic-bezier(.2,.7,.2,1) both;
+        }
+        @keyframes iv-slide-privacy {
+            from { opacity: .88; transform: translate3d(16px,0,0); }
+            to { opacity: 1; transform: translate3d(0,0,0); }
+        }
+        [data-testid="stMainBlockContainer"]:has(#iv-transition-route-privacy) {
+            animation: iv-slide-privacy 260ms cubic-bezier(.2,.7,.2,1) both;
+        }
+        @keyframes iv-slide-terms {
+            from { opacity: .88; transform: translate3d(16px,0,0); }
+            to { opacity: 1; transform: translate3d(0,0,0); }
+        }
+        [data-testid="stMainBlockContainer"]:has(#iv-transition-route-terms) {
+            animation: iv-slide-terms 260ms cubic-bezier(.2,.7,.2,1) both;
+        }
+        @keyframes iv-slide-contact {
+            from { opacity: .88; transform: translate3d(16px,0,0); }
+            to { opacity: 1; transform: translate3d(0,0,0); }
+        }
+        [data-testid="stMainBlockContainer"]:has(#iv-transition-route-contact) {
+            animation: iv-slide-contact 260ms cubic-bezier(.2,.7,.2,1) both;
+        }
+        @keyframes iv-slide-home {
+            from { opacity: .88; transform: translate3d(16px,0,0); }
+            to { opacity: 1; transform: translate3d(0,0,0); }
+        }
+        [data-testid="stMainBlockContainer"]:has(#iv-transition-route-home) {
+            animation: iv-slide-home 260ms cubic-bezier(.2,.7,.2,1) both;
+        }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        [data-testid="stMainBlockContainer"] { animation: none !important; }
+    }
+
+    /* Native Android purchase authorization is a programmatic-only
+       Streamlit widget. Keep it mounted in the DOM for WebView .click(),
+       but never render it visibly or reserve layout space for it. */
+    [class*="st-key-iv_native_auth_request"] {
+        display: none !important;
+        visibility: hidden !important;
+        height: 0 !important;
+        min-height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
     }
 
     footer { display: none !important; visibility: hidden !important; }
@@ -468,28 +591,43 @@ PAGE_QUERY_MAP = {
 QUERY_PAGE_MAP = {value: key for key, value in PAGE_QUERY_MAP.items()}
 
 def sync_route_from_url():
-    """Read shareable query parameters into Streamlit session state."""
+    """Accept external deep links once; never override an in-app button click."""
     article_slug = str(st.query_params.get("article", "") or "").strip()
     page_key = str(st.query_params.get("page", "") or "").strip().lower()
-
+    route_signature = (page_key, article_slug)
+    if st.session_state.get("_iv_last_url_route") == route_signature:
+        return
+    st.session_state["_iv_last_url_route"] = route_signature
+    if st.session_state.get("pending_public_page"):
+        return
     if article_slug and article_slug in LEARN_ARTICLES:
         st.session_state.public_navigation = "Learn"
         st.session_state.learn_article_slug = article_slug
-        return
-
-    if page_key in QUERY_PAGE_MAP:
+    elif page_key in QUERY_PAGE_MAP:
         st.session_state.public_navigation = QUERY_PAGE_MAP[page_key]
         if QUERY_PAGE_MAP[page_key] != "Learn":
             st.session_state.pop("learn_article_slug", None)
 
+
 def write_route_to_url(page_name, article_slug=None):
-    """Keep the browser URL shareable without changing the Streamlit app structure."""
-    st.query_params.clear()
+    """Update the route atomically, retaining unrelated native event parameters."""
+    page_key = PAGE_QUERY_MAP.get(page_name, "home")
+    route_signature = (page_key if page_name != "Home" else "", article_slug or "")
+    st.session_state["_iv_last_url_route"] = route_signature
+    # Keep native Android ad/premium event parameters intact until consumed.
+    # Remove only the previous route keys, not the entire query string.
     if article_slug:
-        st.query_params["article"] = article_slug
-    elif page_name != "Home":
-        page_key = PAGE_QUERY_MAP.get(page_name)
-        if page_key:
+        if st.query_params.get("page") is not None:
+            del st.query_params["page"]
+        if st.query_params.get("article") != article_slug:
+            st.query_params["article"] = article_slug
+    else:
+        if st.query_params.get("article") is not None:
+            del st.query_params["article"]
+        if page_name == "Home":
+            if st.query_params.get("page") is not None:
+                del st.query_params["page"]
+        elif st.query_params.get("page") != page_key:
             st.query_params["page"] = page_key
 
 # -----------------------------------------
@@ -510,18 +648,26 @@ PUBLIC_PAGES = [
 
 
 def navigate(page_name):
+    """One authoritative destination for every app navigation button."""
+    if page_name not in PAGE_QUERY_MAP:
+        raise ValueError(f"Unknown navigation destination: {page_name}")
+    if not ensure_auth() and page_name in {"Dashboard", "Cash Flow", "Investments"}:
+        page_name = "Login"
     if page_name != "Learn":
         st.session_state.pop("learn_article_slug", None)
-
-    write_route_to_url(page_name)
+    previous = st.session_state.get("public_navigation")
+    st.session_state.public_navigation = page_name
     st.session_state.pending_public_page = page_name
+    if previous != page_name:
+        st.session_state["_iv_transition_to"] = page_name
+    write_route_to_url(page_name)
     st.rerun()
 
 
 def apply_pending_navigation(valid_pages, authenticated):
     pending_page = st.session_state.pop("pending_public_page", None)
     if pending_page:
-        if pending_page == "Dashboard" and not authenticated:
+        if not authenticated and pending_page in {"Dashboard", "Cash Flow", "Investments"}:
             pending_page = "Login"
         if pending_page in valid_pages:
             st.session_state.public_navigation = pending_page
@@ -557,6 +703,86 @@ def render_navigation_buttons(items, selected_page):
             navigate(page_name)
 
 
+# STEP 4H.4 — authenticated, opt-in biometric enrollment (staging only).
+# Streamlit creates a one-use enrollment intent on the server; the browser
+# exposes ONLY the public intent for Android to consume automatically.
+_IV_ENROLL_INTENT = re.compile(r"^[A-Za-z0-9_-]{43}$")
+
+
+def _iv_create_enrollment_intent():
+    """Create a short-lived, authenticated intent; never expose session tokens."""
+    logger = logging.getLogger("investrack.quicklogin.enrollment")
+    try:
+        if not ensure_auth():
+            logger.warning("IV_ENROLL_DIAG auth_check_failed")
+            return None
+        access = st.session_state.get("access_token")
+        refresh = st.session_state.get("refresh_token")
+        user_id = st.session_state.get("user_id")
+        if not all(isinstance(v, str) and v for v in (access, refresh, user_id)):
+            logger.warning("IV_ENROLL_DIAG session_fields_missing")
+            return None
+        from quick_login_pair import _post
+        response = _post("/api/session/quick-login/enroll/intent", {
+            "access_token": access,
+            "refresh_token": refresh,
+            "expected_user_id": user_id,
+        })
+        logger.warning("IV_ENROLL_DIAG intent_response status=%d", response.status_code)
+        if response.status_code != 200:
+            return None
+        intent = response.json().get("intent")
+        return intent if isinstance(intent, str) and _IV_ENROLL_INTENT.fullmatch(intent) else None
+    except (requests.RequestException, ValueError, RuntimeError, TypeError) as exc:
+        logger.warning("IV_ENROLL_DIAG intent_exception type=%s", type(exc).__name__)
+        return None
+
+
+def render_biometric_enrollment_control(show_controls=True):
+    """User opt-in; Android uses the one-use intent to complete enrollment."""
+    # A successful password login may request opt-in enrollment once.
+    # Only the server-side one-use intent reaches the Android WebView.
+    if st.session_state.pop('_iv_remember_enroll_pending', False):
+        new_intent = _iv_create_enrollment_intent()
+        if new_intent:
+            st.session_state['_iv_enroll_intent'] = new_intent
+            st.session_state['_iv_enroll_requested_at'] = time.monotonic()
+        else:
+            st.session_state['_iv_remember_enroll_failed'] = True
+    now = time.monotonic()
+    pending_at = st.session_state.get("_iv_enroll_requested_at", 0)
+    intent = st.session_state.get("_iv_enroll_intent")
+    pending = bool(pending_at and now - pending_at < 90
+                   and isinstance(intent, str) and _IV_ENROLL_INTENT.fullmatch(intent))
+    if pending_at and not pending:
+        st.session_state.pop("_iv_enroll_requested_at", None)
+        st.session_state.pop("_iv_enroll_intent", None)
+
+    if pending:
+        # The intent is a public, random, single-use capability, NOT a token.
+        # Android reads this marker and sends it to /enroll/prepare along with
+        # its native-generated challenge and SHA256 secret verifier.
+        st.markdown(
+            f'<span id="iv-biometric-enroll-request" hidden data-intent="{intent}"></span>',
+            unsafe_allow_html=True,
+        )
+        if show_controls:
+            st.sidebar.caption("Waiting for Android secure login setup (up to 90 seconds)…")
+        if show_controls and st.sidebar.button("Cancel biometric setup", key="iv_enroll_cancel"):
+            st.session_state.pop("_iv_enroll_requested_at", None)
+            st.session_state.pop("_iv_enroll_intent", None)
+            st.rerun()
+    elif show_controls and st.sidebar.button("🔐  Enable Biometric Login", key="iv_enroll_opt_in",
+                           use_container_width=True):
+        new_intent = _iv_create_enrollment_intent()
+        if new_intent:
+            st.session_state["_iv_enroll_intent"] = new_intent
+            st.session_state["_iv_enroll_requested_at"] = time.monotonic()
+            st.rerun()
+        else:
+            st.sidebar.warning("Biometric setup could not be authorized. Please retry.")
+
+
 def render_profile_section(user):
     email = getattr(user, "email", "") or ""
     initials = get_user_initials(email)
@@ -571,6 +797,8 @@ def render_profile_section(user):
         """,
         unsafe_allow_html=True,
     )
+    # Process Remember Me even when the profile panel is closed.
+    render_biometric_enrollment_control(show_controls=False)
     if "profile_panel_open" not in st.session_state:
         st.session_state.profile_panel_open = False
     if st.sidebar.button("👤  Profile", key="toggle_profile_panel", use_container_width=True):
@@ -630,14 +858,29 @@ def render_android_premium_handoff():
     """One-time code handoff for the trusted Android WebView (not an entitlement)."""
     if not ensure_auth():
         return
-    # Native WebView clicks this button on demand. No code is issued on page load.
-    st.markdown("""<style>[class*="st-key-iv_native_auth_request"] {display:none!important}</style>""",
-                unsafe_allow_html=True)
+    # Keep the navigation request in the DOM across Streamlit reruns. Native
+    # WebView acknowledges it locally by deduplicating the event ID.
+    pending_event = st.session_state.get("iv_premium_pending_event")
+    pending_at = st.session_state.get("iv_premium_pending_at", 0)
+    if pending_event and time.monotonic() - pending_at < 120:
+        st.markdown(
+            f'<span id="iv-native-premium-event" hidden data-event="{html.escape(str(pending_event), quote=True)}"></span>',
+            unsafe_allow_html=True,
+        )
+    elif pending_event:
+        st.session_state.pop("iv_premium_pending_event", None)
+        st.session_state.pop("iv_premium_pending_at", None)
+    # Keep the actual Streamlit button mounted and clickable by Android's
+    # evaluateJavascript(), while hiding its whole widget container.
+    # The global style above prevents rerun-time flashes; this local rule is a
+    # safeguard when Streamlit remounts the handoff section.
+    st.html('<style>[class*="st-key-iv_native_auth_request"]{display:none!important;visibility:hidden!important;}</style>')
     if st.button("Native purchase authorization", key="iv_native_auth_request"):
         code, error = issue_premium_auth_code()
         if code:
             st.session_state["iv_native_handoff_code"] = code
             st.session_state["iv_native_handoff_at"] = time.monotonic()
+            st.session_state.pop("iv_native_handoff_error", None)
         else:
             st.session_state.pop("iv_native_handoff_code", None)
             st.session_state["iv_native_handoff_error"] = error or "Authorization unavailable"
@@ -646,172 +889,16 @@ def render_android_premium_handoff():
     if code and time.monotonic() - issued_at < 60:
         # This marker is readable only by the main-frame native evaluateJavascript.
         # Never include the code in a URL, analytics, or application logs.
-        st.markdown(f'<span id="iv-native-auth-code" hidden>{html.escape(code)}</span>',
-                    unsafe_allow_html=True)
+        # st.html renders into the parent Streamlit DOM, not a component iframe.
+        # The native Android WebView reads this exact ID in the main document.
+        st.html(f'<span id="iv-native-auth-code" hidden>{html.escape(code)}</span>')
     else:
         st.session_state.pop("iv_native_handoff_code", None)
     if st.session_state.get("iv_native_handoff_error"):
-        st.markdown('<span id="iv-native-auth-error" hidden>unavailable</span>',
-                    unsafe_allow_html=True)
+        st.html('<span id="iv-native-auth-error" hidden>unavailable</span>')
         st.session_state.pop("iv_native_handoff_error", None)
 
 
-def render_premium_verify_diagnostic():
-    """Temporary admin-only authenticated check; never grants entitlements."""
-    enabled = str(get_secret("PREMIUM_VERIFY_TEST_ENABLED", "false")).lower() in {"1", "true", "yes"}
-    if not enabled:
-        return
-
-    # Restrict to an explicitly configured account, not every signed-in user.
-    allowed_email = str(get_secret("PREMIUM_VERIFY_TEST_EMAIL", "")).strip().lower()
-    user = st.session_state.get("user")
-    email = str(getattr(user, "email", "") or "").strip().lower()
-    if not allowed_email or email != allowed_email:
-        return
-
-    with st.sidebar.expander("Premium verification diagnostic", expanded=False):
-        st.caption("Authenticated validation test only. No purchase is submitted or granted.")
-        if st.button("Test one-time authorization code", key="premium_auth_code_test"):
-            access_token = st.session_state.get("access_token")
-            supabase_url = str(get_secret("SUPABASE_URL", "")).rstrip("/")
-            anon_key = str(get_secret("SUPABASE_ANON_KEY", ""))
-            if not access_token or not supabase_url or not anon_key:
-                st.error("A signed-in session or Supabase configuration is missing.")
-            else:
-                try:
-                    response = requests.post(
-                        f"{supabase_url}/rest/v1/rpc/premium_issue_auth_code",
-                        headers={
-                            "Authorization": f"Bearer {access_token}",
-                            "apikey": anon_key,
-                            "Content-Type": "application/json",
-                        },
-                        json={},
-                        timeout=15,
-                    )
-                    if response.status_code == 200:
-                        code = response.json()
-                        if isinstance(code, str) and len(code) == 64 and all(ch in "0123456789abcdef" for ch in code):
-                            st.success("Authorization code issued successfully (64 hexadecimal characters). Code hidden for security.")
-                        else:
-                            st.error("Unexpected authorization-code response. Check function configuration.")
-                    else:
-                        st.error(f"Authorization-code issuance failed (HTTP {response.status_code}).")
-                except (requests.RequestException, ValueError):
-                    st.error("Could not complete the authorization-code test. Check connection and server logs.")
-        # Step 4A.3: server-side redemption diagnostic (admin test account only).
-        # Service-role credentials are read on the server; never rendered to the browser.
-        def redeem_test_code(code):
-            service_key = str(get_secret("SUPABASE_SERVICE_ROLE_KEY", ""))
-            url = str(get_secret("SUPABASE_URL", "")).rstrip("/")
-            if not service_key or not url:
-                return None, "Missing server-side SUPABASE_SERVICE_ROLE_KEY or SUPABASE_URL."
-            try:
-                response = requests.post(
-                    f"{url}/rest/v1/rpc/premium_redeem_auth_code",
-                    headers={"Authorization": f"Bearer {service_key}",
-                             "apikey": service_key, "Content-Type": "application/json"},
-                    json={"p_code": code}, timeout=15,
-                )
-                if response.status_code != 200:
-                    return None, f"Redemption endpoint returned HTTP {response.status_code}."
-                return response.json(), None
-            except (requests.RequestException, ValueError):
-                return None, "Redemption request failed or returned invalid JSON."
-
-        def issue_test_code():
-            return issue_premium_auth_code()
-
-        if st.button("Test redemption and replay protection", key="premium_redemption_test"):
-            if not str(get_secret("SUPABASE_SERVICE_ROLE_KEY", "")):
-                st.warning("Configure SUPABASE_SERVICE_ROLE_KEY as a private Render environment variable first.")
-            else:
-                code, error = issue_test_code()
-                if error:
-                    st.error(error)
-                else:
-                    redeemed_user, error = redeem_test_code(code)
-                    expected_id = str(st.session_state.get("user_id") or getattr(user, "id", ""))
-                    if error:
-                        st.error(error)
-                    elif isinstance(redeemed_user, str) and redeemed_user == expected_id:
-                        st.success("PASS: first redemption returned the signed-in user ID.")
-                        second_user, replay_error = redeem_test_code(code)
-                        if replay_error:
-                            st.error(replay_error)
-                        elif second_user is None:
-                            st.success("PASS: replay was rejected (null result).")
-                        else:
-                            st.error("FAIL: replay unexpectedly returned a user ID.")
-                    else:
-                        st.error("FAIL: redemption did not match the signed-in account.")
-
-        if st.button("Issue code for expiry test", key="premium_expiry_issue"):
-            code, error = issue_test_code()
-            if error:
-                st.error(error)
-            else:
-                st.session_state["premium_expiry_test_code"] = code
-                st.session_state["premium_expiry_test_time"] = time.monotonic()
-                st.info("Code issued and hidden. Wait at least 95 seconds, then click Check expired code.")
-
-        if st.button("Check expired code", key="premium_expiry_check"):
-            code = st.session_state.get("premium_expiry_test_code")
-            issued_at = st.session_state.get("premium_expiry_test_time")
-            if not code or issued_at is None:
-                st.warning("Issue an expiry-test code first.")
-            elif time.monotonic() - issued_at < 95:
-                st.warning("Wait at least 95 seconds after issuance before testing expiry.")
-            else:
-                result, error = redeem_test_code(code)
-                st.session_state.pop("premium_expiry_test_code", None)
-                st.session_state.pop("premium_expiry_test_time", None)
-                if error:
-                    st.error(error)
-                elif result is None:
-                    st.success("PASS: expired authorization code was rejected.")
-                else:
-                    st.error("FAIL: expired code unexpectedly returned a user ID.")
-
-        if st.button("Run authentication test", key="premium_verify_diagnostic_run"):
-            access_token = st.session_state.get("access_token")
-            supabase_url = str(get_secret("SUPABASE_URL", "")).rstrip("/")
-            anon_key = get_secret("SUPABASE_ANON_KEY", "")
-            if not access_token or not supabase_url or not anon_key:
-                st.error("A signed-in session or Supabase configuration is missing.")
-                return
-            try:
-                response = requests.post(
-                    f"{supabase_url}/functions/v1/premium-verify",
-                    headers={
-                        "Authorization": f"Bearer {access_token}",
-                        "apikey": str(anon_key),
-                        "Content-Type": "application/json",
-                    },
-                    json={},
-                    timeout=15,
-                )
-                st.write(f"HTTP status: {response.status_code}")
-                try:
-                    body = response.json()
-                except ValueError:
-                    body = {}
-                # Show only a bounded server message; never echo credentials or response headers.
-                message = body.get("error") or body.get("message") if isinstance(body, dict) else None
-                if isinstance(message, str):
-                    st.write("Response: " + message[:250])
-                else:
-                    st.write("Response received (no displayable error message).")
-                if response.status_code == 401:
-                    st.warning("Authentication was rejected. Check the session and function configuration.")
-                elif response.status_code in (400, 422):
-                    st.success("Authenticated request reached purchase-input validation.")
-                elif 200 <= response.status_code < 300:
-                    st.warning("Unexpected success for an empty purchase payload. Review the Edge Function before proceeding.")
-                else:
-                    st.info("Review the function logs for this status.")
-            except requests.RequestException:
-                st.error("The verification function could not be reached. Check the deployment and connection.")
 
 
 def fetch_my_premium_entitlement():
@@ -870,26 +957,6 @@ def render_native_entitlement_snapshot():
     else:
         st.markdown('<span id="iv-native-entitlement" hidden data-tier="pending"></span>', unsafe_allow_html=True)
 
-def render_entitlement_lookup_test():
-    """Read-only admin diagnostic. Does not alter Android ads or entitlements."""
-    enabled = str(get_secret("PREMIUM_VERIFY_TEST_ENABLED", "false")).lower() in {"1", "true", "yes"}
-    email = str(get_secret("PREMIUM_VERIFY_TEST_EMAIL", "")).strip().lower()
-    user = st.session_state.get("user") or {}
-    if isinstance(user, dict):
-        current_email = str(user.get("email", "")).strip().lower()
-    else:
-        current_email = str(getattr(user, "email", "")).strip().lower()
-    if not enabled or not email or current_email != email:
-        return
-    with st.sidebar.expander("Premium account lookup test", expanded=False):
-        st.caption("Read-only check against Supabase. Does not change ads or purchases.")
-        if st.button("Check my verified Premium tier", key="iv_entitlement_lookup_test"):
-            result, error = fetch_my_premium_entitlement()
-            if error:
-                st.error(error)
-            else:
-                st.success(f"Account entitlement: {result['tier'].upper()}")
-                st.caption("Authenticated account ID: " + result["user_id"][:8] + "…")
 
 
 def render_public_navigation():
@@ -931,8 +998,6 @@ def render_public_navigation():
     if authenticated:
         render_android_premium_handoff()
         render_native_entitlement_snapshot()
-        render_premium_verify_diagnostic()
-        render_entitlement_lookup_test()
 
     if not authenticated:
         st.session_state.pop("iv_entitlement_snapshot", None)
@@ -1802,6 +1867,8 @@ def open_learn_article(slug):
         write_route_to_url("Learn", article_slug=slug)
         st.session_state.learn_article_slug = slug
         st.session_state.pending_public_page = "Learn"
+        st.session_state.public_navigation = "Learn"
+        st.session_state["_iv_transition_to"] = "Learn"
         st.rerun()
 
 
@@ -1809,6 +1876,7 @@ def close_learn_article():
     st.session_state.pop("learn_article_slug", None)
     write_route_to_url("Learn")
     st.session_state.public_navigation = "Learn"
+    st.session_state["_iv_transition_to"] = "Learn"
     st.rerun()
 
 
@@ -2597,7 +2665,10 @@ def render_financial_hub():
         if st.button("✨ Explore Premium Plans →", key="hub_premium_upgrade",
                      use_container_width=True):
             import uuid
-            st.query_params["iv_premium"] = uuid.uuid4().hex
+            event_id = uuid.uuid4().hex
+            st.session_state["iv_premium_pending_event"] = event_id
+            st.session_state["iv_premium_pending_at"] = time.monotonic()
+            st.query_params["iv_premium"] = event_id
 
     st.divider()
     a, b = st.columns(2)
@@ -2619,6 +2690,18 @@ def render_cashflow_workspace():
     render_cashflow()
 
 
+# STEP 4C.3 — SERVER SESSION INACTIVITY WATCHDOG
+# A fragment re-executes independently of dashboard widget interaction.
+# It never renews the inactivity timestamp.
+@st.fragment(run_every="1s")
+def _iv_inactivity_watchdog():
+    from auth import session_inactivity_expired
+    if session_inactivity_expired():
+        # Force a full rerun so the login-first gate replaces the dashboard.
+        st.rerun(scope="app")
+
+_iv_inactivity_watchdog()
+
 # -----------------------------------------
 # STEP 4C.1 — LOGIN-FIRST GATE
 # Render no public navigation or dashboard for signed-out visitors.
@@ -2639,16 +2722,79 @@ if not ensure_auth():
       }
     </style>
     """, unsafe_allow_html=True)
+    # Step 4G.2 — staging-only, session-local native pairing metadata.
+    # The challenge is not a credential; only Android native may attach a ticket.
+    from quick_login_pair import create_pair, consume_pair
+    import html as _iv_html
+
+    @st.fragment(run_every="2s")
+    def _iv_quick_login_pairing():
+        if ensure_auth():
+            return
+        now = time.monotonic()
+        challenge = st.session_state.get("_iv_ql_pair_challenge")
+        expiry = st.session_state.get("_iv_ql_pair_expires", 0)
+        if not isinstance(challenge, str) or now >= expiry:
+            st.session_state.pop("_iv_ql_pair_challenge", None)
+            st.session_state.pop("_iv_ql_pair_expires", None)
+            created = create_pair()
+            if created is None:
+                return  # Fail closed: ordinary password login remains available.
+            challenge, expiry = created
+            st.session_state["_iv_ql_pair_challenge"] = challenge
+            st.session_state["_iv_ql_pair_expires"] = expiry
+        # Only a pairing identifier is rendered; never credentials or tickets.
+        st.markdown(
+            '<span id="iv-quick-login-pair" hidden data-challenge="'
+            + _iv_html.escape(challenge, quote=True) + '"></span>',
+            unsafe_allow_html=True,
+        )
+        status, credentials = consume_pair(challenge)
+        if status == "pending":
+            return
+        st.session_state.pop("_iv_ql_pair_challenge", None)
+        st.session_state.pop("_iv_ql_pair_expires", None)
+        if status != "ready" or credentials is None:
+            return
+        from auth import restore_verified_session, _clear_auth_identity
+        access, refresh, expected_id = credentials
+        if not restore_verified_session(access, refresh):
+            return
+        if str(st.session_state.get("user_id", "")).lower() != expected_id.lower():
+            _clear_auth_identity()
+            return
+        st.rerun(scope="app")
+
+    _iv_quick_login_pairing()
+    st.markdown('<span id="iv-route-login" hidden></span>', unsafe_allow_html=True)
     login_ui()
     st.stop()
+
+# Only the authenticated page mounts the trusted interaction listener.
+# This reports actual mouse, touch, keyboard and scroll input to the server.
+# It does NOT renew the clock on page load, Streamlit reruns, or timer ticks.
+from activity_watch import render_authenticated_activity_watch
+render_authenticated_activity_watch()
 
 # -----------------------------------------
 # MAIN ROUTER
 # -----------------------------------------
 sync_route_from_url()
 
+
 selected_page, user_is_authenticated = (
     render_public_navigation()
+)
+
+# A route marker changes the animation only when the actual page changes.
+# The marker contains no credentials and does not interfere with Android's
+# existing quick-login, premium, or advertising DOM markers.
+_iv_route_key = PAGE_QUERY_MAP.get(selected_page, "home")
+_iv_animate = st.session_state.pop("_iv_transition_to", None) == selected_page
+_iv_marker = "iv-transition-route" if _iv_animate else "iv-route"
+st.markdown(
+    f'<span id="{_iv_marker}-{_iv_route_key}" hidden></span>',
+    unsafe_allow_html=True,
 )
 
 if selected_page == "Home":

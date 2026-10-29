@@ -1,55 +1,49 @@
-
 map $http_upgrade $connection_upgrade {
     default upgrade;
     '' close;
 }
-
 server {
     listen 10000;
-
-    # Existing ads.txt configuration
     location = /ads.txt {
         alias /app/ads.txt;
         default_type text/plain;
         add_header Content-Type "text/plain; charset=utf-8";
         add_header Cache-Control "no-cache, no-store, must-revalidate";
     }
-
-    # Google AdMob app-ads.txt verification
     location = /app-ads.txt {
         alias /app/static/app-ads.txt;
         default_type text/plain;
         add_header Cache-Control "no-cache, no-store, must-revalidate";
     }
-
-    # Existing Android App Links verification
     location = /.well-known/assetlinks.json {
         alias /app/.well-known/assetlinks.json;
         default_type application/json;
         add_header Content-Type application/json;
         add_header Cache-Control "no-cache";
     }
-
-    # Existing Streamlit reverse proxy
+    # Exact prefix ensures authentication traffic does not reach Streamlit.
+    location ^~ /api/session/ {
+        proxy_pass http://127.0.0.1:8502;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header Connection "";
+        proxy_read_timeout 30s;
+        add_header Cache-Control "no-store" always;
+    }
     location / {
         proxy_pass http://127.0.0.1:8501;
         proxy_http_version 1.1;
-
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection $connection_upgrade;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-
-        # Required so nginx can modify Streamlit's HTML response.
         proxy_set_header Accept-Encoding "";
-
-        # Insert a server-rendered canonical URL into the actual HTML <head>.
-        # $is_args$args preserves routes such as ?article=dca.
         sub_filter_types text/html;
         sub_filter_once on;
         sub_filter '<head>' '<head><link rel="canonical" href="https://www.investrackpro.com$uri$is_args$args">';
-
         proxy_read_timeout 86400;
     }
 }

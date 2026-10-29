@@ -47,8 +47,15 @@ activity_bridge = st.components.v2.component(
 )
 
 
+@st.fragment
 def render_authenticated_activity_watch():
-    """Update server clock only on a real frontend input event."""
+    """Update the server clock without rerendering the full financial hub.
+
+    The authenticated V2 component is intentionally confined to this fragment.
+    Its trusted activity trigger reruns this fragment, while the existing
+    on_activity_change callback still calls register_user_activity() in auth.py.
+    The separate inactivity watchdog remains responsible for enforcing expiry.
+    """
     activity_bridge(
         key='iv_authenticated_activity_bridge_widget',
         on_activity_change=register_user_activity,
