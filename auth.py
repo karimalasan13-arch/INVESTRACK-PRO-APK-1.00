@@ -193,10 +193,13 @@ def register_user_activity():
 
 
 def logout():
-    try:
-        get_supabase().auth.sign_out()
-    except Exception:
-        pass
+    """End the Streamlit login without revoking native Quick Login.
+
+    Supabase sign_out() revokes refresh tokens, including a token held by the
+    Android biometric vault. Device credential revocation must be a separate,
+    explicit operation. Authentication guards rely on Streamlit session state.
+    """
+    _clear_auth_identity()
     for key in list(st.session_state.keys()):
         del st.session_state[key]
     st.rerun()
