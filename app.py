@@ -54,91 +54,91 @@ st.markdown(
         to { opacity: 1; }
     }
     @media (prefers-reduced-motion: no-preference) {
-        [data-testid="stMainBlockContainer"]:has(#iv-route-login) {
+        [data-testid="stMainBlockContainer"]:has(#iv-transition-route-login) {
             animation: iv-login-fade 180ms ease-out both;
         }
         @keyframes iv-slide-dashboard {
             from { opacity: .88; transform: translate3d(16px,0,0); }
             to { opacity: 1; transform: translate3d(0,0,0); }
         }
-        [data-testid="stMainBlockContainer"]:has(#iv-route-dashboard) {
+        [data-testid="stMainBlockContainer"]:has(#iv-transition-route-dashboard) {
             animation: iv-slide-dashboard 260ms cubic-bezier(.2,.7,.2,1) both;
         }
         @keyframes iv-slide-cashflow {
             from { opacity: .88; transform: translate3d(16px,0,0); }
             to { opacity: 1; transform: translate3d(0,0,0); }
         }
-        [data-testid="stMainBlockContainer"]:has(#iv-route-cashflow) {
+        [data-testid="stMainBlockContainer"]:has(#iv-transition-route-cashflow) {
             animation: iv-slide-cashflow 260ms cubic-bezier(.2,.7,.2,1) both;
         }
         @keyframes iv-slide-investments {
             from { opacity: .88; transform: translate3d(16px,0,0); }
             to { opacity: 1; transform: translate3d(0,0,0); }
         }
-        [data-testid="stMainBlockContainer"]:has(#iv-route-investments) {
+        [data-testid="stMainBlockContainer"]:has(#iv-transition-route-investments) {
             animation: iv-slide-investments 260ms cubic-bezier(.2,.7,.2,1) both;
         }
         @keyframes iv-slide-markets {
             from { opacity: .88; transform: translate3d(16px,0,0); }
             to { opacity: 1; transform: translate3d(0,0,0); }
         }
-        [data-testid="stMainBlockContainer"]:has(#iv-route-markets) {
+        [data-testid="stMainBlockContainer"]:has(#iv-transition-route-markets) {
             animation: iv-slide-markets 260ms cubic-bezier(.2,.7,.2,1) both;
         }
         @keyframes iv-slide-tools {
             from { opacity: .88; transform: translate3d(16px,0,0); }
             to { opacity: 1; transform: translate3d(0,0,0); }
         }
-        [data-testid="stMainBlockContainer"]:has(#iv-route-tools) {
+        [data-testid="stMainBlockContainer"]:has(#iv-transition-route-tools) {
             animation: iv-slide-tools 260ms cubic-bezier(.2,.7,.2,1) both;
         }
         @keyframes iv-slide-learn {
             from { opacity: .88; transform: translate3d(16px,0,0); }
             to { opacity: 1; transform: translate3d(0,0,0); }
         }
-        [data-testid="stMainBlockContainer"]:has(#iv-route-learn) {
+        [data-testid="stMainBlockContainer"]:has(#iv-transition-route-learn) {
             animation: iv-slide-learn 260ms cubic-bezier(.2,.7,.2,1) both;
         }
         @keyframes iv-slide-editorial {
             from { opacity: .88; transform: translate3d(16px,0,0); }
             to { opacity: 1; transform: translate3d(0,0,0); }
         }
-        [data-testid="stMainBlockContainer"]:has(#iv-route-editorial) {
+        [data-testid="stMainBlockContainer"]:has(#iv-transition-route-editorial) {
             animation: iv-slide-editorial 260ms cubic-bezier(.2,.7,.2,1) both;
         }
         @keyframes iv-slide-about {
             from { opacity: .88; transform: translate3d(16px,0,0); }
             to { opacity: 1; transform: translate3d(0,0,0); }
         }
-        [data-testid="stMainBlockContainer"]:has(#iv-route-about) {
+        [data-testid="stMainBlockContainer"]:has(#iv-transition-route-about) {
             animation: iv-slide-about 260ms cubic-bezier(.2,.7,.2,1) both;
         }
         @keyframes iv-slide-privacy {
             from { opacity: .88; transform: translate3d(16px,0,0); }
             to { opacity: 1; transform: translate3d(0,0,0); }
         }
-        [data-testid="stMainBlockContainer"]:has(#iv-route-privacy) {
+        [data-testid="stMainBlockContainer"]:has(#iv-transition-route-privacy) {
             animation: iv-slide-privacy 260ms cubic-bezier(.2,.7,.2,1) both;
         }
         @keyframes iv-slide-terms {
             from { opacity: .88; transform: translate3d(16px,0,0); }
             to { opacity: 1; transform: translate3d(0,0,0); }
         }
-        [data-testid="stMainBlockContainer"]:has(#iv-route-terms) {
+        [data-testid="stMainBlockContainer"]:has(#iv-transition-route-terms) {
             animation: iv-slide-terms 260ms cubic-bezier(.2,.7,.2,1) both;
         }
         @keyframes iv-slide-contact {
             from { opacity: .88; transform: translate3d(16px,0,0); }
             to { opacity: 1; transform: translate3d(0,0,0); }
         }
-        [data-testid="stMainBlockContainer"]:has(#iv-route-contact) {
+        [data-testid="stMainBlockContainer"]:has(#iv-transition-route-contact) {
             animation: iv-slide-contact 260ms cubic-bezier(.2,.7,.2,1) both;
         }
         @keyframes iv-slide-home {
             from { opacity: .88; transform: translate3d(16px,0,0); }
             to { opacity: 1; transform: translate3d(0,0,0); }
         }
-        [data-testid="stMainBlockContainer"]:has(#iv-route-home) {
+        [data-testid="stMainBlockContainer"]:has(#iv-transition-route-home) {
             animation: iv-slide-home 260ms cubic-bezier(.2,.7,.2,1) both;
         }
     }
@@ -591,32 +591,43 @@ PAGE_QUERY_MAP = {
 QUERY_PAGE_MAP = {value: key for key, value in PAGE_QUERY_MAP.items()}
 
 def sync_route_from_url():
-    """Read shareable query parameters into Streamlit session state."""
+    """Accept external deep links once; never override an in-app button click."""
     article_slug = str(st.query_params.get("article", "") or "").strip()
     page_key = str(st.query_params.get("page", "") or "").strip().lower()
-
+    route_signature = (page_key, article_slug)
+    if st.session_state.get("_iv_last_url_route") == route_signature:
+        return
+    st.session_state["_iv_last_url_route"] = route_signature
+    if st.session_state.get("pending_public_page"):
+        return
     if article_slug and article_slug in LEARN_ARTICLES:
         st.session_state.public_navigation = "Learn"
         st.session_state.learn_article_slug = article_slug
-        return
-
-    if page_key in QUERY_PAGE_MAP:
+    elif page_key in QUERY_PAGE_MAP:
         st.session_state.public_navigation = QUERY_PAGE_MAP[page_key]
         if QUERY_PAGE_MAP[page_key] != "Learn":
             st.session_state.pop("learn_article_slug", None)
 
+
 def write_route_to_url(page_name, article_slug=None):
-    """Keep the browser URL shareable without changing the Streamlit app structure."""
-    # Preserve Supabase's one-time recovery token if a navigation event fires.
-    recovery_token = st.query_params.get("recovery_token")
-    st.query_params.clear()
-    if recovery_token:
-        st.query_params["recovery_token"] = recovery_token
+    """Update the route atomically, retaining unrelated native event parameters."""
+    page_key = PAGE_QUERY_MAP.get(page_name, "home")
+    route_signature = (page_key if page_name != "Home" else "", article_slug or "")
+    st.session_state["_iv_last_url_route"] = route_signature
+    # Keep native Android ad/premium event parameters intact until consumed.
+    # Remove only the previous route keys, not the entire query string.
     if article_slug:
-        st.query_params["article"] = article_slug
-    elif page_name != "Home":
-        page_key = PAGE_QUERY_MAP.get(page_name)
-        if page_key:
+        if st.query_params.get("page") is not None:
+            del st.query_params["page"]
+        if st.query_params.get("article") != article_slug:
+            st.query_params["article"] = article_slug
+    else:
+        if st.query_params.get("article") is not None:
+            del st.query_params["article"]
+        if page_name == "Home":
+            if st.query_params.get("page") is not None:
+                del st.query_params["page"]
+        elif st.query_params.get("page") != page_key:
             st.query_params["page"] = page_key
 
 # -----------------------------------------
@@ -637,18 +648,26 @@ PUBLIC_PAGES = [
 
 
 def navigate(page_name):
+    """One authoritative destination for every app navigation button."""
+    if page_name not in PAGE_QUERY_MAP:
+        raise ValueError(f"Unknown navigation destination: {page_name}")
+    if not ensure_auth() and page_name in {"Dashboard", "Cash Flow", "Investments"}:
+        page_name = "Login"
     if page_name != "Learn":
         st.session_state.pop("learn_article_slug", None)
-
-    write_route_to_url(page_name)
+    previous = st.session_state.get("public_navigation")
+    st.session_state.public_navigation = page_name
     st.session_state.pending_public_page = page_name
+    if previous != page_name:
+        st.session_state["_iv_transition_to"] = page_name
+    write_route_to_url(page_name)
     st.rerun()
 
 
 def apply_pending_navigation(valid_pages, authenticated):
     pending_page = st.session_state.pop("pending_public_page", None)
     if pending_page:
-        if pending_page == "Dashboard" and not authenticated:
+        if not authenticated and pending_page in {"Dashboard", "Cash Flow", "Investments"}:
             pending_page = "Login"
         if pending_page in valid_pages:
             st.session_state.public_navigation = pending_page
@@ -1848,6 +1867,8 @@ def open_learn_article(slug):
         write_route_to_url("Learn", article_slug=slug)
         st.session_state.learn_article_slug = slug
         st.session_state.pending_public_page = "Learn"
+        st.session_state.public_navigation = "Learn"
+        st.session_state["_iv_transition_to"] = "Learn"
         st.rerun()
 
 
@@ -1855,6 +1876,7 @@ def close_learn_article():
     st.session_state.pop("learn_article_slug", None)
     write_route_to_url("Learn")
     st.session_state.public_navigation = "Learn"
+    st.session_state["_iv_transition_to"] = "Learn"
     st.rerun()
 
 
@@ -2768,8 +2790,10 @@ selected_page, user_is_authenticated = (
 # The marker contains no credentials and does not interfere with Android's
 # existing quick-login, premium, or advertising DOM markers.
 _iv_route_key = PAGE_QUERY_MAP.get(selected_page, "home")
+_iv_animate = st.session_state.pop("_iv_transition_to", None) == selected_page
+_iv_marker = "iv-transition-route" if _iv_animate else "iv-route"
 st.markdown(
-    f'<span id="iv-route-{_iv_route_key}" hidden></span>',
+    f'<span id="{_iv_marker}-{_iv_route_key}" hidden></span>',
     unsafe_allow_html=True,
 )
 
