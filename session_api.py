@@ -272,6 +272,31 @@ async def start_quick_login(request: FastAPIRequest):
     })
 
 
+# Conservative, process-local creation throttle for the staging guest endpoint.
+# Global rather than client-IP keyed: proxy headers are not a trustworthy identity.
+# This limits accidental bursts but MUST be supplemented by an upstream shared
+# rate limit before public activation, especially with multiple workers/replicas.
+_GUEST_WINDOW_SECONDS = 60.0
+_GUEST_MAX_PER_WINDOW = 3
+_GUEST_DAILY_SECONDS = 86400.0
+_GUEST_MAX_PER_DAY = 30
+_guest_attempts: list[float] = []
+_guest_attempts_lock = threading.Lock()
+
+
+def _reserve_guest_creation_slot():
+    now = time.monotonic()
+    with _guest_attempts_lock:
+        _guest_attempts[:] = [t for t in _guest_attempts
+                             if now - t < _GUEST_DAILY_SECONDS]
+        recent = sum(1 for t in _guest_attempts
+                     if now - t < _GUEST_WINDOW_SECONDS)
+        if recent >= _GUEST_MAX_PER_WINDOW or len(_guest_attempts) >= _GUEST_MAX_PER_DAY:
+            raise HTTPException(429, 'Guest sign-in temporarily busy')
+        # Charge attempts, not just successes, to avoid unlimited provider calls.
+        _guest_attempts.append(now)
+
+
 # ---------------------------------------------------------------------------
 # STAGING: Android-native anonymous guest bootstrap.
 # This endpoint is not used until the native guest flow is wired up.
@@ -312,6 +337,7 @@ async def start_anonymous_guest(request: FastAPIRequest):
         if len(_pending_tickets) >= _MAX_PENDING_TICKETS:
             raise HTTPException(429, 'Guest sign-in temporarily busy')
 
+    _reserve_guest_creation_slot()
     base, key = _configuration()
     signup = Request(base + '/auth/v1/signup',
                      data=b'{}',
