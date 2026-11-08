@@ -22,6 +22,29 @@ def _mark_session_activity():
 from db import get_supabase
 
 
+def is_anonymous_user(user=None) -> bool:
+    """Identify a Supabase anonymous Auth user; never infer from absent email alone."""
+    if user is None:
+        user = st.session_state.get('user')
+    if user is None:
+        return False
+    marker = getattr(user, 'is_anonymous', None)
+    if isinstance(marker, bool):
+        return marker
+    if isinstance(user, dict) and isinstance(user.get('is_anonymous'), bool):
+        return user['is_anonymous']
+    # Fail closed for unknown user representations; do not grant guest UI by guesswork.
+    return False
+
+
+def current_account_kind() -> str:
+    """UI hint only. All authorization must still use verified Supabase sessions/RLS."""
+    if not ensure_auth():
+        return 'signed_out'
+    return 'guest' if is_anonymous_user() else 'registered'
+
+
+
 def _clear_auth_identity():
     """Clear account-specific state without discarding unrelated UI preferences."""
     for key in ('access_token', 'refresh_token', '_attached_access_token',
