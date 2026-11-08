@@ -272,6 +272,81 @@ async def start_quick_login(request: FastAPIRequest):
     })
 
 
+# ---------------------------------------------------------------------------
+# STAGING: Android-native anonymous guest bootstrap.
+# This endpoint is not used until the native guest flow is wired up.
+# Existing Quick Login, pairing, and recovery endpoints are unchanged.
+# ---------------------------------------------------------------------------
+@app.post('/api/session/guest/start')
+async def start_anonymous_guest(request: FastAPIRequest):
+    """Create a Supabase anonymous identity for the native Android client.
+
+    Native response: user_id, refresh_token, ticket, ticket_expires_in.
+    The access token remains server-side in the one-time handoff store.
+    Android must encrypt the refresh token before attaching the ticket to a
+    Streamlit pairing challenge. Never invoke from WebView JavaScript.
+    """
+    if os.environ.get('IV_GUEST_SIGNIN_ENABLED', '').lower() != 'true':
+        raise HTTPException(404, 'Not found')
+    _bridge_secret()
+    if request.headers.get('content-type', '').split(';', 1)[0].strip().lower() != 'application/json':
+        raise HTTPException(415, 'JSON body required')
+    # Native clients send no browser Origin; this is defense-in-depth, not
+    # authentication. Public abuse protection must also be enforced upstream.
+    if request.headers.get('origin'):
+        raise HTTPException(403, 'Native client required')
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > 128:
+            raise HTTPException(413, 'Request too large')
+        body.extend(chunk)
+    try:
+        if json.loads(body) != {}:
+            raise HTTPException(400, 'Empty JSON object required')
+    except (ValueError, UnicodeError):
+        raise HTTPException(400, 'Invalid JSON') from None
+    finally:
+        body.clear()
+    with _pending_tickets_lock:
+        _remove_expired_locked(time.monotonic())
+        if len(_pending_tickets) >= _MAX_PENDING_TICKETS:
+            raise HTTPException(429, 'Guest sign-in temporarily busy')
+
+    base, key = _configuration()
+    signup = Request(base + '/auth/v1/signup',
+                     data=b'{}',
+                     headers={'apikey': key, 'Content-Type': 'application/json',
+                              'Accept': 'application/json'}, method='POST')
+    session = _supabase_json(signup)
+    access, refresh = session.get('access_token'), session.get('refresh_token')
+    if not _safe_token(access) or not _safe_token(refresh):
+        raise HTTPException(503, 'Anonymous sign-in unavailable')
+    # Verify the identity and anonymous status against Supabase, not the
+    # signup response alone.
+    user_request = Request(base + '/auth/v1/user', headers={
+        'apikey': key, 'Authorization': 'Bearer ' + access,
+        'Accept': 'application/json'}, method='GET')
+    user = _supabase_json(user_request)
+    try:
+        account = str(uuid.UUID(user.get('id')))
+    except (TypeError, ValueError, AttributeError):
+        raise HTTPException(503, 'Anonymous identity verification failed') from None
+    if user.get('is_anonymous') is not True:
+        raise HTTPException(503, 'Anonymous identity verification failed')
+
+    with _pending_tickets_lock:
+        now = time.monotonic()
+        _remove_expired_locked(now)
+        if len(_pending_tickets) >= _MAX_PENDING_TICKETS:
+            raise HTTPException(429, 'Guest sign-in temporarily busy')
+        ticket = secrets.token_urlsafe(32)
+        _pending_tickets[ticket] = (now + _TICKET_TTL, account, access, refresh)
+    return JSONResponse({
+        'user_id': account, 'refresh_token': refresh,
+        'ticket': ticket, 'ticket_expires_in': int(_TICKET_TTL),
+    })
+
+
 @app.post('/api/session/quick-login/claim')
 async def claim_quick_login(request: FastAPIRequest):
     """STREAMLIT SERVER-ONLY via http://127.0.0.1:8502. Not a WebView API.
