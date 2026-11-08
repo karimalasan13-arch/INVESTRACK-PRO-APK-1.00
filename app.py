@@ -789,7 +789,14 @@ def render_profile_section(user):
         st.sidebar.markdown("---")
         st.sidebar.markdown("**Guest account**")
         st.sidebar.caption("Your records are linked to this device's anonymous account. Register before changing devices or uninstalling the app to avoid losing access.")
-        # Never invoke registered-user biometric enrollment for anonymous guests.
+        # Account management is optional and must never replace a guest UUID silently.
+        with st.sidebar.expander("Account Settings", expanded=False):
+            st.info("Your guest records are linked to this account. Registering must upgrade this same account, not create a different one.")
+            st.caption("Guest-to-email upgrade is not enabled yet; we must first verify the Supabase identity-linking and email-confirmation flow.")
+            if st.button("Sign in to an existing account", key="iv_guest_switch_account", use_container_width=True):
+                st.session_state["iv_explicit_account_signin"] = True
+                logout()
+                st.rerun()
         return
     email = getattr(user, "email", "") or ""
     initials = get_user_initials(email)
@@ -2784,8 +2791,32 @@ if not ensure_auth():
         st.rerun(scope="app")
 
     _iv_quick_login_pairing()
+    # Step 5H: guest-first native onboarding. The browser cannot mint a guest
+    # identity: only native HTTPS obtains and attaches the one-time ticket.
+    # Explicit sign-in remains available for returning registered users.
     st.markdown('<span id="iv-route-login" hidden></span>', unsafe_allow_html=True)
-    login_ui()
+    guest_first = str(os.environ.get("IV_GUEST_UI_ENABLED", "false")).strip().lower() == "true"
+    if not guest_first or st.session_state.get("iv_explicit_account_signin", False):
+        if guest_first:
+            st.caption("Account Settings · Sign in to an existing account")
+            if st.button("Return to automatic guest access", key="iv_guest_signin_back"):
+                st.session_state.pop("iv_explicit_account_signin", None)
+                st.rerun()
+        login_ui()
+    else:
+        st.markdown("## InvesTrack Pro")
+        st.markdown("### Preparing your Financial Hub")
+        st.caption("Your secure guest account is being created or restored automatically. No registration is required.")
+        st.info("If this takes longer than expected, check your connection and retry. Existing guest records will not be replaced.")
+        if st.button("Retry guest connection", key="iv_guest_retry", type="primary"):
+            # Rebuild the Streamlit challenge; native transport detects the new one.
+            st.session_state.pop("_iv_ql_pair_challenge", None)
+            st.session_state.pop("_iv_ql_pair_expires", None)
+            st.rerun()
+        with st.expander("Already have an account?", expanded=False):
+            if st.button("Sign in to existing account", key="iv_guest_open_signin"):
+                st.session_state["iv_explicit_account_signin"] = True
+                st.rerun()
     st.stop()
 
 # Only the authenticated page mounts the trusted interaction listener.
