@@ -784,6 +784,13 @@ def render_biometric_enrollment_control(show_controls=True):
 
 
 def render_profile_section(user):
+    from auth import is_anonymous_user
+    if is_anonymous_user(user):
+        st.sidebar.markdown("---")
+        st.sidebar.markdown("**Guest account**")
+        st.sidebar.caption("Your records are linked to this device's anonymous account. Register before changing devices or uninstalling the app to avoid losing access.")
+        # Never invoke registered-user biometric enrollment for anonymous guests.
+        return
     email = getattr(user, "email", "") or ""
     initials = get_user_initials(email)
     st.sidebar.markdown("---")
@@ -941,6 +948,17 @@ def render_native_entitlement_snapshot():
     Refreshes periodically; never supplies a purchase token or Supabase credential.
     """
     import uuid as _uuid
+    from auth import is_anonymous_user
+    if is_anonymous_user():
+        # Authenticated Supabase anonymous accounts are Free; the user ID comes
+        # exclusively from the verified server-side Supabase session.
+        try:
+            guest_id = str(_uuid.UUID(str(st.session_state.get("user_id", ""))))
+        except (ValueError, TypeError, AttributeError):
+            st.markdown('<span id="iv-native-entitlement" hidden data-tier="pending"></span>', unsafe_allow_html=True)
+            return
+        st.markdown(f'<span id="iv-native-entitlement" hidden data-tier="free" data-user="{guest_id}"></span>', unsafe_allow_html=True)
+        return
     now = time.monotonic()
     snapshot = st.session_state.get("iv_entitlement_snapshot")
     if snapshot is None or now - snapshot.get("checked_at", 0) > 25:
@@ -2658,7 +2676,7 @@ def render_financial_hub():
                      use_container_width=True):
             navigate("Investments")
     # Central Premium entry point, available only in an authenticated session.
-    if ensure_auth():
+    if ensure_auth() and not __import__("auth").is_anonymous_user():
         st.markdown("---")
         st.subheader("✨ Upgrade Your Experience")
         st.caption("Enjoy fewer ads with Premium Lite or go completely ad-free with Premium Plus.")
