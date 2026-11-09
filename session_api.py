@@ -1,4 +1,4 @@
-"""InvesTrack Pro session API — Step 5I.2 restricted activation.
+"""InvesTrack Pro session API — Step 5I.43B transaction-ready guest restoration.
 
 Verifies Supabase JWTs and rotates a refresh token for the native Android app.
 The API is stateless. It does NOT authenticate any Streamlit websocket or
@@ -230,6 +230,286 @@ async def refresh_session(request: FastAPIRequest):
         'expires_in': expires,
     })
 
+
+
+# ---------------------------------------------------------------------------
+# Step 5I.43B: Opt-in, durable native guest refresh transactions.
+# Existing /quick-login/start remains unchanged until Android is upgraded.
+# Requires cryptography (AESGCM), IV_GUEST_REFRESH_ENCRYPTION_KEY, and
+# the restricted public.iv_guest_refresh_transactions table.
+# A pending record deliberately blocks replay after an uncertain exchange.
+# ---------------------------------------------------------------------------
+
+def _guest_tx_key():
+    raw = os.environ.get('IV_GUEST_REFRESH_ENCRYPTION_KEY', '')
+    if len(raw) != 64:
+        raise HTTPException(503, 'Guest transaction encryption unavailable')
+    try:
+        key = bytes.fromhex(raw)
+    except ValueError:
+        raise HTTPException(503, 'Guest transaction encryption unavailable') from None
+    if len(key) != 32:
+        raise HTTPException(503, 'Guest transaction encryption unavailable')
+    return key
+
+
+def _guest_tx_cipher():
+    try:
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    except ImportError:
+        raise HTTPException(503, 'Guest transaction encryption unavailable') from None
+    return AESGCM(_guest_tx_key())
+
+
+def _guest_tx_fingerprint(token, account):
+    # Keyed digest: raw refresh tokens and their unsalted hashes are not stored.
+    return hmac.new(_guest_tx_key(),
+                    (account + ':' + token).encode('utf-8'), hashlib.sha256).hexdigest()
+
+
+def _guest_tx_encrypt(request_id, account, data):
+    nonce = secrets.token_bytes(12)
+    associated = (request_id + ':' + account).encode('ascii')
+    ciphertext = _guest_tx_cipher().encrypt(
+        nonce, json.dumps(data, separators=(',', ':')).encode('utf-8'), associated)
+    import base64
+    return base64.b64encode(nonce + ciphertext).decode('ascii')
+
+
+def _guest_tx_decrypt(request_id, account, encoded):
+    import base64
+    try:
+        packed = base64.b64decode(encoded, validate=True)
+        if len(packed) < 29:
+            raise ValueError('Invalid encrypted transaction')
+        plain = _guest_tx_cipher().decrypt(
+            packed[:12], packed[12:], (request_id + ':' + account).encode('ascii'))
+        result = json.loads(plain)
+        if not isinstance(result, dict):
+            raise ValueError('Invalid transaction')
+        return result
+    except (ValueError, TypeError, KeyError, UnicodeError):
+        raise HTTPException(503, 'Guest transaction unavailable') from None
+    except Exception:
+        raise HTTPException(503, 'Guest transaction unavailable') from None
+
+
+def _guest_tx_rest(method, path, body=None, *, prefer=None):
+    base, _ = _configuration()
+    role = os.environ.get('SUPABASE_SERVICE_ROLE_KEY', '')
+    if not role:
+        raise HTTPException(503, 'Guest transaction storage unavailable')
+    headers = {'apikey': role, 'Authorization': 'Bearer ' + role,
+               'Accept': 'application/json', 'Content-Type': 'application/json'}
+    if prefer:
+        headers['Prefer'] = prefer
+    req = Request(base + '/rest/v1/iv_guest_refresh_transactions' + path,
+                  data=(json.dumps(body).encode('utf-8') if body is not None else None),
+                  headers=headers, method=method)
+    try:
+        with urlopen(req, timeout=8) as response:
+            raw = response.read(32769)
+            if len(raw) > 32768:
+                raise ValueError('Oversized transaction')
+            return json.loads(raw) if raw else None
+    except HTTPError as exc:
+        if exc.code == 409:
+            raise HTTPException(409, 'Guest transaction already reserved') from None
+        raise HTTPException(503, 'Guest transaction storage unavailable') from None
+    except (URLError, TimeoutError, ValueError, OSError):
+        raise HTTPException(503, 'Guest transaction storage unavailable') from None
+
+
+def _guest_tx_lookup(request_id):
+    from urllib.parse import quote
+    result = _guest_tx_rest('GET', '?request_id=eq.' + quote(request_id, safe='')
+                            + '&select=request_id,user_id,request_fingerprint,status,encrypted_response,expires_at')
+    if not isinstance(result, list) or len(result) > 1:
+        raise HTTPException(503, 'Guest transaction storage unavailable')
+    return result[0] if result else None
+
+
+def _guest_tx_issue_ticket(account, access, rotated):
+    _bridge_secret()
+    if not (_safe_token(access) and _safe_token(rotated)):
+        raise HTTPException(503, 'Guest transaction unavailable')
+    with _pending_tickets_lock:
+        now = time.monotonic()
+        _remove_expired_locked(now)
+        if len(_pending_tickets) >= _MAX_PENDING_TICKETS:
+            raise HTTPException(429, 'Quick Login temporarily busy')
+        ticket = secrets.token_urlsafe(32)
+        _pending_tickets[ticket] = (now + _TICKET_TTL, account, access, rotated)
+    return {'ticket': ticket, 'user_id': account,
+            'rotated_refresh_token': rotated, 'ticket_expires_in': int(_TICKET_TTL)}
+
+
+async def _guest_tx_payload(request, required):
+    if request.headers.get('content-type', '').split(';', 1)[0].strip().lower() != 'application/json':
+        raise HTTPException(415, 'JSON body required')
+    if request.headers.get('origin'):
+        raise HTTPException(403, 'Native client required')
+    buffer = bytearray()
+    async for chunk in request.stream():
+        if len(buffer) + len(chunk) > _MAX_BODY_BYTES:
+            raise HTTPException(413, 'Request too large')
+        buffer.extend(chunk)
+    try:
+        data = json.loads(buffer)
+    except (ValueError, UnicodeError):
+        raise HTTPException(400, 'Invalid request') from None
+    finally:
+        buffer.clear()
+    if not isinstance(data, dict) or set(data) != required:
+        raise HTTPException(400, 'Invalid request')
+    try:
+        data['request_id'] = str(uuid.UUID(data['request_id']))
+        data['expected_user_id'] = str(uuid.UUID(data['expected_user_id']))
+    except (ValueError, TypeError, AttributeError, KeyError):
+        raise HTTPException(400, 'Invalid request') from None
+    if not _safe_token(data['refresh_token']):
+        raise HTTPException(400, 'Invalid request')
+    return data
+
+
+# Database primary-key reservation and conditional status updates coordinate requests.
+# Never hold a Python mutex across network I/O: FastAPI is async and blocking
+# network calls already need to run in a worker thread.
+
+def _guest_tx_valid_record(record, request_id, account, fingerprint):
+    if (record.get('user_id') != account or
+            not hmac.compare_digest(record.get('request_fingerprint') or '', fingerprint)):
+        raise HTTPException(409, 'Guest transaction mismatch')
+    from datetime import datetime, timezone
+    try:
+        expires = datetime.fromisoformat(record['expires_at'].replace('Z', '+00:00'))
+    except (ValueError, TypeError, AttributeError):
+        raise HTTPException(503, 'Guest transaction unavailable') from None
+    if expires <= datetime.now(timezone.utc):
+        raise HTTPException(409, 'Guest transaction expired')
+
+
+def _guest_tx_start_sync(data):
+    """Run blocking Supabase I/O off the event loop. DB reservation is authoritative."""
+    request_id, account = data['request_id'], data['expected_user_id']
+    supplied = data['refresh_token']
+    fingerprint = _guest_tx_fingerprint(supplied, account)
+    record = _guest_tx_lookup(request_id)
+    if record is None:
+        # Check handoff capacity before consuming a refresh token.
+        _bridge_secret()
+        with _pending_tickets_lock:
+            _remove_expired_locked(time.monotonic())
+            if len(_pending_tickets) >= _MAX_PENDING_TICKETS:
+                raise HTTPException(429, 'Quick Login temporarily busy')
+        from datetime import datetime, timedelta, timezone
+        expiry = (datetime.now(timezone.utc) + timedelta(minutes=15)).isoformat()
+        try:
+            _guest_tx_rest('POST', '', [{
+                'request_id': request_id, 'user_id': account,
+                'request_fingerprint': fingerprint, 'status': 'pending',
+                'expires_at': expiry,
+            }], prefer='return=minimal')
+        except HTTPException as exc:
+            # Another request may have reserved this ID. It must never
+            # trigger a second provider refresh.
+            if exc.status_code != 409:
+                raise
+            record = _guest_tx_lookup(request_id)
+            if record is None:
+                raise HTTPException(503, 'Guest transaction unavailable')
+        else:
+            # Only the successful reserver is allowed to rotate the token.
+            # A crash between Supabase rotation and durable PATCH remains
+            # unrecoverable without provider-side idempotency support.
+            base, key = _configuration()
+            exchange = Request(base + '/auth/v1/token?grant_type=refresh_token',
+                data=json.dumps({'refresh_token': supplied}).encode('utf-8'),
+                headers={'apikey': key, 'Content-Type': 'application/json',
+                         'Accept': 'application/json'}, method='POST')
+            session = _supabase_json(exchange)
+            access, rotated = session.get('access_token'), session.get('refresh_token')
+            if not _safe_token(access) or not _safe_token(rotated):
+                raise HTTPException(503, 'Guest transaction unavailable')
+            check = Request(base + '/auth/v1/user', headers={
+                'apikey': key, 'Authorization': 'Bearer ' + access,
+                'Accept': 'application/json'}, method='GET')
+            verified = _supabase_json(check)
+            try:
+                actual = str(uuid.UUID(verified.get('id')))
+            except (TypeError, ValueError, AttributeError):
+                raise HTTPException(401, 'Session not valid') from None
+            if actual != account:
+                raise HTTPException(401, 'Account does not match')
+            encrypted = _guest_tx_encrypt(request_id, account,
+                                          {'access_token': access, 'refresh_token': rotated})
+            from urllib.parse import quote
+            updated = _guest_tx_rest('PATCH', '?request_id=eq.' + quote(request_id, safe='')
+                + '&status=eq.pending', {'status': 'completed', 'encrypted_response': encrypted},
+                prefer='return=representation')
+            if not isinstance(updated, list) or len(updated) != 1:
+                raise HTTPException(503, 'Guest transaction storage unavailable')
+            return _guest_tx_issue_ticket(account, access, rotated)
+    _guest_tx_valid_record(record, request_id, account, fingerprint)
+    if record['status'] == 'pending':
+        raise HTTPException(409, 'Guest refresh outcome uncertain; do not retry')
+    if record['status'] != 'completed' or not record.get('encrypted_response'):
+        raise HTTPException(409, 'Guest transaction already acknowledged')
+    recovered = _guest_tx_decrypt(request_id, account, record['encrypted_response'])
+    return _guest_tx_issue_ticket(account, recovered.get('access_token'),
+                                  recovered.get('refresh_token'))
+
+
+@app.post('/api/session/quick-login/transaction/start')
+async def guest_transaction_start(request: FastAPIRequest):
+    """Native opt-in endpoint; retries never repeat the Supabase rotation."""
+    _bridge_secret()
+    data = await _guest_tx_payload(request, {'request_id', 'expected_user_id', 'refresh_token'})
+    from starlette.concurrency import run_in_threadpool
+    return JSONResponse(await run_in_threadpool(_guest_tx_start_sync, data))
+
+
+def _guest_tx_ack_sync(data):
+    request_id, account = data['request_id'], data['expected_user_id']
+    record = _guest_tx_lookup(request_id)
+    if record is None or record.get('user_id') != account:
+        raise HTTPException(401, 'Guest transaction unavailable')
+    from datetime import datetime, timezone
+    try:
+        expires = datetime.fromisoformat(record['expires_at'].replace('Z', '+00:00'))
+    except (ValueError, TypeError, AttributeError):
+        raise HTTPException(503, 'Guest transaction unavailable') from None
+    if expires <= datetime.now(timezone.utc):
+        raise HTTPException(409, 'Guest transaction expired')
+    if record.get('status') == 'acknowledged':
+        # The rotated token was deliberately erased at acknowledgment.
+        # We can no longer verify possession, so do not report success.
+        raise HTTPException(409, 'Guest transaction already acknowledged')
+    if record.get('status') != 'completed' or not record.get('encrypted_response'):
+        raise HTTPException(409, 'Guest transaction not completed')
+    recovered = _guest_tx_decrypt(request_id, account, record['encrypted_response'])
+    if not hmac.compare_digest(recovered.get('refresh_token', ''), data['refresh_token']):
+        raise HTTPException(401, 'Guest transaction mismatch')
+    from urllib.parse import quote
+    updated = _guest_tx_rest('PATCH', '?request_id=eq.' + quote(request_id, safe='')
+        + '&status=eq.completed', {
+            'status': 'acknowledged', 'encrypted_response': None,
+            'acknowledged_at': datetime.now(timezone.utc).isoformat()},
+        prefer='return=representation')
+    if not isinstance(updated, list) or len(updated) != 1:
+        # Another valid acknowledgement may have completed first.
+        latest = _guest_tx_lookup(request_id)
+        if latest is None or latest.get('status') != 'acknowledged':
+            raise HTTPException(503, 'Guest transaction storage unavailable')
+    return {'acknowledged': True}
+
+
+@app.post('/api/session/quick-login/transaction/ack')
+async def guest_transaction_ack(request: FastAPIRequest):
+    """Acknowledge only after Android has durably saved the rotated token."""
+    data = await _guest_tx_payload(request, {'request_id', 'expected_user_id', 'refresh_token'})
+    from starlette.concurrency import run_in_threadpool
+    return await run_in_threadpool(_guest_tx_ack_sync, data)
 
 
 # ---------------------------------------------------------------------------
