@@ -1,17 +1,18 @@
-"""InvesTrack Pro STAGING session API.
+"""InvesTrack Pro session API — Step 5I.2 restricted activation.
 
 Verifies Supabase JWTs and rotates a refresh token for the native Android app.
 The API is stateless. It does NOT authenticate any Streamlit websocket or
 session_state, does not enroll a device, and does not enable Quick Login by itself.
 
 SECURITY:
-- Use ONLY behind HTTPS on staging; no browser/JavaScript exposure of tokens.
+- Use ONLY behind HTTPS; no browser/JavaScript exposure of tokens.
 - Do not log tokens, request bodies, or responses.
 - Never put tokens in query strings, cookies, or Android deep links.
 - The original /verify endpoint is retained.
 """
 
 import hmac
+import hashlib
 import json
 import secrets
 import threading
@@ -298,46 +299,83 @@ def _reserve_guest_creation_slot():
 
 
 # ---------------------------------------------------------------------------
-# STAGING: Android-native anonymous guest bootstrap.
-# This endpoint is not used until the native guest flow is wired up.
-# Existing Quick Login, pairing, and recovery endpoints are unchanged.
+# Step 5I.2: restricted, activation-gated anonymous guest bootstrap.
+# Only NEW guest creation requires a one-time code. Existing guest identities
+# continue through /quick-login/start with their stored refresh credentials.
 # ---------------------------------------------------------------------------
+def _redeem_guest_activation(code: str) -> bool:
+    """Consume an activation code atomically using the service-role-only RPC."""
+    if not isinstance(code, str) or not code.isascii() or not __import__('re').fullmatch(r'[A-Fa-f0-9]{48}', code):
+        return False
+    base, _ = _configuration()
+    service_key = os.environ.get('SUPABASE_SERVICE_ROLE_KEY', '')
+    if not service_key:
+        raise HTTPException(503, 'Guest activation not configured')
+    # Codes are generated as uppercase 24-byte hex in the administrator SQL.
+    # The exact uppercase string is hashed, matching the SQL generator.
+    code_hash = hashlib.sha256(code.upper().encode('ascii')).hexdigest()
+    req = Request(
+        base + '/rest/v1/rpc/iv_redeem_guest_activation',
+        data=json.dumps({'p_code_hash': code_hash}).encode('utf-8'),
+        headers={'apikey': service_key,
+                 'Authorization': 'Bearer ' + service_key,
+                 'Content-Type': 'application/json',
+                 'Accept': 'application/json'},
+        method='POST',
+    )
+    try:
+        with urlopen(req, timeout=8) as response:
+            raw = response.read(128)
+        result = json.loads(raw)
+        if not isinstance(result, bool):
+            raise HTTPException(503, 'Guest activation unavailable')
+        return result
+    except HTTPError:
+        raise HTTPException(503, 'Guest activation unavailable') from None
+    except (URLError, TimeoutError, OSError, ValueError):
+        raise HTTPException(503, 'Guest activation unavailable') from None
+
+
 @app.post('/api/session/guest/start')
 async def start_anonymous_guest(request: FastAPIRequest):
-    """Create a Supabase anonymous identity for the native Android client.
+    """Create a new anonymous identity only after one-time code redemption.
 
+    Native request: {"activation_code": "48 uppercase hex characters"}.
     Native response: user_id, refresh_token, ticket, ticket_expires_in.
-    The access token remains server-side in the one-time handoff store.
-    Android must encrypt the refresh token before attaching the ticket to a
-    Streamlit pairing challenge. Never invoke from WebView JavaScript.
+    This endpoint must never be invoked from browser JavaScript.
     """
     if os.environ.get('IV_GUEST_SIGNIN_ENABLED', '').lower() != 'true':
         raise HTTPException(404, 'Not found')
     _bridge_secret()
     if request.headers.get('content-type', '').split(';', 1)[0].strip().lower() != 'application/json':
         raise HTTPException(415, 'JSON body required')
-    # Native clients send no browser Origin; this is defense-in-depth, not
-    # authentication. Public abuse protection must also be enforced upstream.
     if request.headers.get('origin'):
         raise HTTPException(403, 'Native client required')
     body = bytearray()
     async for chunk in request.stream():
-        if len(body) + len(chunk) > 128:
+        if len(body) + len(chunk) > 256:
             raise HTTPException(413, 'Request too large')
         body.extend(chunk)
     try:
-        if json.loads(body) != {}:
-            raise HTTPException(400, 'Empty JSON object required')
+        data = json.loads(body)
     except (ValueError, UnicodeError):
         raise HTTPException(400, 'Invalid JSON') from None
     finally:
         body.clear()
+    if not isinstance(data, dict) or set(data) != {'activation_code'}:
+        raise HTTPException(400, 'Activation code required')
+    code = data['activation_code']
+    if not isinstance(code, str) or len(code) != 48 or not code.isascii() or any(c not in '0123456789abcdefABCDEF' for c in code):
+        raise HTTPException(400, 'Invalid activation code')
     with _pending_tickets_lock:
         _remove_expired_locked(time.monotonic())
         if len(_pending_tickets) >= _MAX_PENDING_TICKETS:
             raise HTTPException(429, 'Guest sign-in temporarily busy')
-
     _reserve_guest_creation_slot()
+    # A redeemed code is irrevocably spent, including if Supabase signup fails.
+    # This prevents replay but requires a new code after transient failures.
+    if not _redeem_guest_activation(code):
+        raise HTTPException(401, 'Activation code invalid, expired or already used')
     base, key = _configuration()
     signup = Request(base + '/auth/v1/signup',
                      data=b'{}',
@@ -347,8 +385,6 @@ async def start_anonymous_guest(request: FastAPIRequest):
     access, refresh = session.get('access_token'), session.get('refresh_token')
     if not _safe_token(access) or not _safe_token(refresh):
         raise HTTPException(503, 'Anonymous sign-in unavailable')
-    # Verify the identity and anonymous status against Supabase, not the
-    # signup response alone.
     user_request = Request(base + '/auth/v1/user', headers={
         'apikey': key, 'Authorization': 'Bearer ' + access,
         'Accept': 'application/json'}, method='GET')
@@ -359,7 +395,6 @@ async def start_anonymous_guest(request: FastAPIRequest):
         raise HTTPException(503, 'Anonymous identity verification failed') from None
     if user.get('is_anonymous') is not True:
         raise HTTPException(503, 'Anonymous identity verification failed')
-
     with _pending_tickets_lock:
         now = time.monotonic()
         _remove_expired_locked(now)
