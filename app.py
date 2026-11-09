@@ -2803,7 +2803,7 @@ if not ensure_auth():
         str(os.environ.get("IV_GUEST_UI_ENABLED", "false")).strip().lower() == "true"
         and guest_service in {
             "investrack-pro-apk-1.00-2",  # staging
-            "investrack-pro-apk-1.00-1",  # production
+            "investrack-pro-apk-1-00-1",  # production
         }
     )
     # STEP 5I.10 TEMPORARY DIAGNOSTIC — remove after rollout verification.
