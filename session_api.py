@@ -14,6 +14,7 @@ SECURITY:
 import hmac
 import hashlib
 import json
+import logging
 import secrets
 import threading
 import time
@@ -104,6 +105,38 @@ def _supabase_json(req: Request):
             raise HTTPException(503, 'Authentication provider unavailable')
         return data
     except HTTPError as exc:
+        # Step 5I.36: Diagnose failed Supabase refreshes without logging secrets.
+        # Do not log the provider response, exception, URL, headers or tokens.
+        if req.full_url.split('?', 1)[0].endswith('/auth/v1/token'):
+            category = 'unknown'
+            try:
+                raw = exc.read(4096)
+                error_data = json.loads(raw)
+                if isinstance(error_data, dict):
+                    # Explicit allowlist: arbitrary provider messages may contain
+                    # sensitive details and must never reach application logs.
+                    known_codes = {
+                        'refresh_token_not_found', 'refresh_token_already_used',
+                        'invalid_grant', 'invalid_refresh_token',
+                        'session_not_found', 'session_expired',
+                        'user_not_found', 'invalid_credentials',
+                    }
+                    code = error_data.get('error_code') or error_data.get('code')
+                    if isinstance(code, str) and code in known_codes:
+                        category = code
+                    elif isinstance(error_data.get('error'), str):
+                        # Supabase sometimes supplies an error label instead of
+                        # error_code; accept only the same fixed categories.
+                        label = error_data['error']
+                        if label in known_codes:
+                            category = label
+            except (OSError, ValueError, UnicodeError):
+                pass
+            logging.getLogger('investrack.session').warning(
+                'IV_REFRESH_DIAG provider_status=%s category=%s',
+                exc.code if exc.code in (400, 401, 403, 404, 422, 429, 500, 502, 503, 504) else 'other',
+                category,
+            )
         if exc.code in (400, 401, 403, 422):
             raise HTTPException(401, 'Session not valid') from None
         raise HTTPException(503, 'Authentication provider unavailable') from None
