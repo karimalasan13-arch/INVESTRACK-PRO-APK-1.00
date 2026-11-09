@@ -2806,6 +2806,18 @@ if not ensure_auth():
             "investrack-pro-apk-1.00-1",  # production
         }
     )
+    # STEP 5I.10 TEMPORARY DIAGNOSTIC — remove after rollout verification.
+    # Only feature-flag state, service identity and routing booleans are logged.
+    # No credentials, tokens, account IDs or other environment values are logged.
+    _iv_guest_diag_logger = logging.getLogger("investrack.guest_ui")
+    _iv_guest_diag_logger.warning(
+        "IV_GUEST_UI_DIAG service=%r ui_flag=%r guest_first=%s explicit_signin=%s route=%s",
+        guest_service,
+        str(os.environ.get("IV_GUEST_UI_ENABLED", "<unset>")).strip().lower(),
+        guest_first,
+        bool(st.session_state.get("iv_explicit_account_signin", False)),
+        "login" if (not guest_first or st.session_state.get("iv_explicit_account_signin", False)) else "guest_preparing",
+    )
     if not guest_first or st.session_state.get("iv_explicit_account_signin", False):
         if guest_first:
             st.caption("Account Settings · Sign in to an existing account")
