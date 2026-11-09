@@ -2795,7 +2795,13 @@ if not ensure_auth():
     # identity: only native HTTPS obtains and attaches the one-time ticket.
     # Explicit sign-in remains available for returning registered users.
     st.markdown('<span id="iv-route-login" hidden></span>', unsafe_allow_html=True)
-    guest_first = str(os.environ.get("IV_GUEST_UI_ENABLED", "false")).strip().lower() == "true"
+    # Restricted rollout: BOTH the opt-in flag and the known staging Render
+    # service identity are required. Production must never enable this UI.
+    guest_first = (
+        str(os.environ.get("IV_GUEST_UI_ENABLED", "false")).strip().lower() == "true"
+        and str(os.environ.get("RENDER_SERVICE_NAME", "")).strip().lower()
+        == "investrack-pro-apk-1.00-2"
+    )
     if not guest_first or st.session_state.get("iv_explicit_account_signin", False):
         if guest_first:
             st.caption("Account Settings · Sign in to an existing account")
