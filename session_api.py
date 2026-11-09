@@ -1249,6 +1249,209 @@ async def reset_password(request: FastAPIRequest):
     return {'updated': True}
 
 
+# ---------------------------------------------------------------------------
+# Step 5I.43D.60P: Google Play Integrity Standard API guest onboarding.
+# Feature-flagged OFF until Android integration and end-to-end verification.
+# The legacy activation-code route and all saved guest restoration paths remain.
+# Requires the restricted Supabase migration iv_integrity_onboarding_*.
+# ---------------------------------------------------------------------------
+_IV_INTEGRITY_PACKAGE = 'com.investrackpro.app'
+_IV_INTEGRITY_TTL_SECONDS = 120
+_IV_INTEGRITY_MAX_BODY = 32768
+_IV_INTEGRITY_PROJECT = '82972562008'
+
+
+def _integrity_enabled():
+    if os.environ.get('IV_PLAY_INTEGRITY_GUEST_ENABLED', '').lower() != 'true':
+        raise HTTPException(404, 'Not found')
+
+
+def _integrity_rpc(function, params):
+    base, _ = _configuration()
+    role = os.environ.get('SUPABASE_SERVICE_ROLE_KEY', '')
+    if not role:
+        raise HTTPException(503, 'Integrity storage unavailable')
+    req = Request(base + '/rest/v1/rpc/' + function,
+                  data=json.dumps(params).encode('utf-8'),
+                  headers={'apikey': role, 'Authorization': 'Bearer ' + role,
+                           'Content-Type': 'application/json', 'Accept': 'application/json'},
+                  method='POST')
+    try:
+        with urlopen(req, timeout=8) as response:
+            raw = response.read(1025)
+        if len(raw) > 1024:
+            raise ValueError('Oversized RPC response')
+        result = json.loads(raw)
+        if type(result) is not bool:
+            raise ValueError('Unexpected RPC response')
+        return result
+    except (HTTPError, URLError, TimeoutError, OSError, ValueError):
+        raise HTTPException(503, 'Integrity storage unavailable') from None
+
+
+def _integrity_store_challenge(digest):
+    from datetime import datetime, timedelta, timezone
+    base, _ = _configuration()
+    role = os.environ.get('SUPABASE_SERVICE_ROLE_KEY', '')
+    if not role:
+        raise HTTPException(503, 'Integrity storage unavailable')
+    expiry = (datetime.now(timezone.utc) + timedelta(seconds=_IV_INTEGRITY_TTL_SECONDS)).isoformat()
+    req = Request(base + '/rest/v1/iv_integrity_onboarding_challenges',
+                  data=json.dumps({'challenge_hash': digest, 'expires_at': expiry}).encode('utf-8'),
+                  headers={'apikey': role, 'Authorization': 'Bearer ' + role,
+                           'Content-Type': 'application/json', 'Prefer': 'return=minimal'},
+                  method='POST')
+    try:
+        with urlopen(req, timeout=8) as response:
+            if response.status not in (200, 201, 204):
+                raise ValueError('Storage rejected challenge')
+    except (HTTPError, URLError, TimeoutError, OSError, ValueError):
+        raise HTTPException(503, 'Integrity storage unavailable') from None
+
+
+def _integrity_request_hash(challenge):
+    # Contract for native Android: SHA-256 of this ASCII string, lowercase hex.
+    return hashlib.sha256(('iv-guest-v1:' + challenge).encode('ascii')).hexdigest()
+
+
+async def _integrity_json(request, expected, max_bytes):
+    if request.headers.get('content-type', '').split(';', 1)[0].strip().lower() != 'application/json':
+        raise HTTPException(415, 'JSON body required')
+    if request.headers.get('origin') or request.url.query:
+        raise HTTPException(403, 'Native client required')
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > max_bytes:
+            raise HTTPException(413, 'Request too large')
+        body.extend(chunk)
+    try:
+        payload = json.loads(body)
+    except (ValueError, UnicodeError):
+        raise HTTPException(400, 'Invalid request') from None
+    finally:
+        body.clear()
+    if not isinstance(payload, dict) or set(payload) != expected:
+        raise HTTPException(400, 'Invalid request')
+    return payload
+
+
+def _integrity_google_decode(token):
+    # Service account credentials are never sent to the Android client.
+    try:
+        import google.auth.transport.requests
+        from google.oauth2 import service_account
+        credentials_data = json.loads(os.environ.get('IV_PLAY_INTEGRITY_CREDENTIALS_JSON', ''))
+        if not isinstance(credentials_data, dict) or credentials_data.get('type') != 'service_account':
+            raise ValueError('Invalid service account configuration')
+        credentials = service_account.Credentials.from_service_account_info(
+            credentials_data, scopes=['https://www.googleapis.com/auth/playintegrity'])
+        credentials.refresh(google.auth.transport.requests.Request())
+        import requests
+        response = requests.post(
+            'https://playintegrity.googleapis.com/v1/' + _IV_INTEGRITY_PACKAGE + ':decodeIntegrityToken',
+            headers={'Authorization': 'Bearer ' + credentials.token,
+                     'Content-Type': 'application/json'},
+            json={'integrity_token': token}, timeout=10)
+        if response.status_code != 200 or len(response.content) > 32768:
+            raise ValueError('Google verification failed')
+        result = response.json()
+        payload = result.get('tokenPayloadExternal') if isinstance(result, dict) else None
+        if not isinstance(payload, dict):
+            raise ValueError('Invalid Google verdict')
+        return payload
+    except Exception:
+        # Never log token, credential, response body or provider exception.
+        raise HTTPException(503, 'Integrity verification unavailable') from None
+
+
+def _integrity_validate(verdict, request_hash):
+    details = verdict.get('requestDetails')
+    app_integrity = verdict.get('appIntegrity')
+    device = verdict.get('deviceIntegrity')
+    if not all(isinstance(v, dict) for v in (details, app_integrity, device)):
+        raise HTTPException(403, 'Integrity verification rejected')
+    if (details.get('requestPackageName') != _IV_INTEGRITY_PACKAGE or
+            not hmac.compare_digest(str(details.get('requestHash', '')), request_hash) or
+            app_integrity.get('appRecognitionVerdict') != 'PLAY_RECOGNIZED' or
+            'MEETS_DEVICE_INTEGRITY' not in device.get('deviceRecognitionVerdict', [])):
+        raise HTTPException(403, 'Integrity verification rejected')
+    try:
+        timestamp_ms = int(details['timestampMillis'])
+    except (TypeError, ValueError, KeyError):
+        raise HTTPException(403, 'Integrity verification rejected') from None
+    age_ms = int(time.time() * 1000) - timestamp_ms
+    if age_ms < -30000 or age_ms > _IV_INTEGRITY_TTL_SECONDS * 1000:
+        raise HTTPException(403, 'Integrity verification rejected')
+
+
+def _integrity_signup_sync(challenge, token):
+    # Verify with Google first; no account is created on an invalid verdict.
+    digest = hashlib.sha256(challenge.encode('ascii')).hexdigest()
+    verdict = _integrity_google_decode(token)
+    _integrity_validate(verdict, _integrity_request_hash(challenge))
+    if not _integrity_rpc('iv_consume_integrity_challenge', {'p_challenge_hash': digest}):
+        raise HTTPException(409, 'Onboarding challenge expired or already used')
+    if not _integrity_rpc('iv_reserve_integrity_signup_slot',
+                          {'p_max_minute': 10, 'p_max_day': 1000}):
+        raise HTTPException(429, 'Guest onboarding temporarily busy')
+    _bridge_secret()
+    with _pending_tickets_lock:
+        _remove_expired_locked(time.monotonic())
+        if len(_pending_tickets) >= _MAX_PENDING_TICKETS:
+            raise HTTPException(429, 'Guest onboarding temporarily busy')
+    base, key = _configuration()
+    signup = Request(base + '/auth/v1/signup', data=b'{}',
+                     headers={'apikey': key, 'Content-Type': 'application/json',
+                              'Accept': 'application/json'}, method='POST')
+    session = _supabase_json(signup)
+    access, refresh = session.get('access_token'), session.get('refresh_token')
+    if not _safe_token(access) or not _safe_token(refresh):
+        raise HTTPException(503, 'Anonymous sign-in unavailable')
+    check = Request(base + '/auth/v1/user', headers={
+        'apikey': key, 'Authorization': 'Bearer ' + access,
+        'Accept': 'application/json'}, method='GET')
+    user = _supabase_json(check)
+    try:
+        account = str(uuid.UUID(user.get('id')))
+    except (TypeError, ValueError, AttributeError):
+        raise HTTPException(503, 'Anonymous identity verification failed') from None
+    if user.get('is_anonymous') is not True:
+        raise HTTPException(503, 'Anonymous identity verification failed')
+    with _pending_tickets_lock:
+        now = time.monotonic()
+        _remove_expired_locked(now)
+        if len(_pending_tickets) >= _MAX_PENDING_TICKETS:
+            raise HTTPException(429, 'Guest onboarding temporarily busy')
+        ticket = secrets.token_urlsafe(32)
+        _pending_tickets[ticket] = (now + _TICKET_TTL, account, access, refresh)
+    return {'user_id': account, 'refresh_token': refresh,
+            'ticket': ticket, 'ticket_expires_in': int(_TICKET_TTL)}
+
+
+@app.post('/api/session/guest/integrity/challenge')
+async def integrity_guest_challenge(request: FastAPIRequest):
+    _integrity_enabled()
+    await _integrity_json(request, set(), 128)
+    challenge = secrets.token_urlsafe(32)
+    _integrity_store_challenge(hashlib.sha256(challenge.encode('ascii')).hexdigest())
+    return JSONResponse({'challenge': challenge,
+                         'request_hash': _integrity_request_hash(challenge),
+                         'expires_in': _IV_INTEGRITY_TTL_SECONDS})
+
+
+@app.post('/api/session/guest/integrity/start')
+async def integrity_guest_start(request: FastAPIRequest):
+    _integrity_enabled()
+    payload = await _integrity_json(request, {'challenge', 'integrity_token'}, _IV_INTEGRITY_MAX_BODY)
+    challenge, token = payload['challenge'], payload['integrity_token']
+    if not _valid_pair_challenge(challenge) or not (isinstance(token, str) and
+            1 <= len(token) <= 24000 and token.isascii() and
+            all(ch.isalnum() or ch in '-_.' for ch in token)):
+        raise HTTPException(400, 'Invalid request')
+    from starlette.concurrency import run_in_threadpool
+    return JSONResponse(await run_in_threadpool(_integrity_signup_sync, challenge, token))
+
+
 @app.api_route('/api/session/{path:path}', methods=['GET', 'POST', 'PUT', 'PATCH', 'DELETE'])
 def unavailable(path: str):
     return JSONResponse(status_code=501, content={
