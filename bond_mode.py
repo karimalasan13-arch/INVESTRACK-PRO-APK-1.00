@@ -1,3 +1,4 @@
+import visitor_investments as vi
 from hourly_history import hourly_history
 from portfolio_charts import render_portfolio_charts
 import uuid
@@ -98,6 +99,8 @@ def db():
 
 
 def load_setting(user_id, key, default):
+    if vi.is_visitor(user_id):
+        return vi.load_setting(key, default)
     try:
         res = (
             db()
@@ -114,6 +117,9 @@ def load_setting(user_id, key, default):
 
 
 def save_setting(user_id, key, value):
+    if vi.is_visitor(user_id):
+        vi.save_setting(key, value)
+        return
     db().table("user_settings").upsert(
         {"user_id": user_id, "key": key, "value": float(value)},
         on_conflict="user_id,key",
@@ -125,7 +131,7 @@ def currency_label(currency):
 
 
 def load_currency_index(user_id):
-    idx = int(load_setting(user_id, "bond_currency_index", 0))
+    idx = int(load_setting(user_id, "bond_currency_index", 5))
     return idx if 0 <= idx < len(CURRENCY_OPTIONS) else 0
 
 
@@ -142,6 +148,8 @@ def metric_delta(value):
 
 
 def load_bond_holdings(user_id):
+    if vi.is_visitor(user_id):
+        return vi.bonds()
     try:
         res = (
             db()
@@ -162,6 +170,9 @@ def load_bond_holdings(user_id):
 
 
 def add_bond_holding(user_id, holding):
+    if vi.is_visitor(user_id):
+        vi.add_bond(holding)
+        return
     row = {
         "id": str(uuid.uuid4()),
         "user_id": user_id,
@@ -171,6 +182,9 @@ def add_bond_holding(user_id, holding):
 
 
 def update_bond_holding(user_id, holding_id, holding):
+    if vi.is_visitor(user_id):
+        vi.update_bond(holding_id, holding)
+        return
     (
         db()
         .table("bond_holdings")
@@ -182,6 +196,9 @@ def update_bond_holding(user_id, holding_id, holding):
 
 
 def delete_bond_holding(user_id, holding_id):
+    if vi.is_visitor(user_id):
+        vi.delete_bond(holding_id)
+        return
     (
         db()
         .table("bond_holdings")
@@ -193,6 +210,8 @@ def delete_bond_holding(user_id, holding_id):
 
 
 def load_portfolio_history(user_id):
+    if vi.is_visitor(user_id):
+        return []
     try:
         res = (
             db()
@@ -209,6 +228,8 @@ def load_portfolio_history(user_id):
 
 
 def force_snapshot(user_id, value, mode="bond"):
+    if vi.is_visitor(user_id):
+        return False
     try:
         db().table("portfolio_history").insert(
             {
@@ -432,7 +453,7 @@ def render_allocation_chart(df, value_col, selected_currency):
 def bond_form(
     prefix,
     default=None,
-    default_display_currency="GHS",
+    default_display_currency="USD",
 ):
     default = default or {}
 
@@ -597,11 +618,9 @@ def bond_app():
         "other fixed-income holdings — including instruments without live tickers."
     )
 
-    if "user_id" not in st.session_state:
-        st.error("User not logged in.")
-        return
-
-    user_id = st.session_state.user_id
+    user_id = st.session_state.get("user_id") or vi.VISITOR_ID
+    if vi.is_visitor(user_id):
+        vi.demo_notice()
 
     currency_index = load_currency_index(user_id)
     selected_currency = CURRENCY_OPTIONS[currency_index]
@@ -908,7 +927,7 @@ def bond_app():
 
     st.subheader("Portfolio Performance")
     try:
-        scheduled_history = hourly_history(user_id, "bond", usd_to_display_rate)
+        scheduled_history = pd.DataFrame() if vi.is_visitor(user_id) else hourly_history(user_id, "bond", usd_to_display_rate)
         if not scheduled_history.empty:
             history = scheduled_history
     except Exception:
@@ -928,7 +947,7 @@ def bond_app():
         )
 
     # Autosave only when the portfolio has an actual positive value.
-    if total_current_value > 0:
+    if not vi.is_visitor(user_id) and total_current_value > 0:
         autosave_portfolio_value(
             user_id,
             total_current_value,
@@ -937,6 +956,7 @@ def bond_app():
 
     if st.button(
         "Save Bond Snapshot",
+        disabled=vi.is_visitor(user_id),
         key="bond_snapshot",
     ):
         if total_current_value > 0:
