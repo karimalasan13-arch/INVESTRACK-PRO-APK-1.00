@@ -1,3 +1,4 @@
+import visitor_investments as vi
 from hourly_history import hourly_history
 from portfolio_charts import render_portfolio_charts
 import streamlit as st
@@ -102,6 +103,8 @@ def db():
 
 
 def force_snapshot(user_id, value_ghs, mode="crypto"):
+    if vi.is_visitor(user_id):
+        return False
     try:
         db().table("portfolio_history").insert({
             "user_id": user_id,
@@ -140,6 +143,8 @@ def set_last_good_value(value):
 
 
 def load_setting(user_id, key, default):
+    if vi.is_visitor(user_id):
+        return vi.load_setting(key, default)
     try:
         res = (
             db()
@@ -156,6 +161,9 @@ def load_setting(user_id, key, default):
 
 
 def save_setting(user_id, key, value):
+    if vi.is_visitor(user_id):
+        vi.save_setting(key, value)
+        return
     db().table("user_settings").upsert(
         {"user_id": user_id, "key": key, "value": float(value)},
         on_conflict="user_id,key",
@@ -167,7 +175,7 @@ def currency_label(currency):
 
 
 def load_currency_index(user_id, mode):
-    idx = int(load_setting(user_id, f"{mode}_currency_index", 0))
+    idx = int(load_setting(user_id, f"crypto_currency_index", 5))
     return idx if 0 <= idx < len(CURRENCY_OPTIONS) else 0
 
 
@@ -193,6 +201,8 @@ def build_pnl_history(history, invested):
 
 
 def load_crypto_holdings(user_id):
+    if vi.is_visitor(user_id):
+        return vi.holdings("crypto", API_MAP)
     holdings = {k: 0.0 for k in API_MAP}
 
     try:
@@ -216,6 +226,9 @@ def load_crypto_holdings(user_id):
 
 
 def save_crypto_holdings(user_id, holdings):
+    if vi.is_visitor(user_id):
+        vi.save_holdings("crypto", holdings)
+        return
     rows = [
         {"user_id": user_id, "symbol": k, "quantity": float(v)}
         for k, v in holdings.items()
@@ -228,6 +241,8 @@ def save_crypto_holdings(user_id, holdings):
 
 
 def load_portfolio_history(user_id):
+    if vi.is_visitor(user_id):
+        return []
     try:
         res = (
             db()
@@ -349,16 +364,14 @@ def render_donut_chart(donut_df, value_col, selected_currency):
 def crypto_app():
     st.title("Crypto Dashboard")
 
-    if "user_id" not in st.session_state:
-        st.error("User not logged in.")
-        return
-
-    user_id = st.session_state.user_id
+    user_id = st.session_state.get("user_id") or vi.VISITOR_ID
+    if vi.is_visitor(user_id):
+        vi.demo_notice()
 
     currency_index = load_currency_index(user_id, "crypto")
     selected_currency = CURRENCY_OPTIONS[currency_index]
 
-    rate = load_setting(user_id, "crypto_rate", 14.5)
+    rate = load_setting(user_id, "crypto_rate", 1.0 if currency_index == 5 else 14.5)
     invested = load_setting(user_id, "crypto_investment", 0.0)
     holdings = load_crypto_holdings(user_id)
 
@@ -568,7 +581,7 @@ def crypto_app():
     col1, col2 = st.columns([1, 3])
 
     with col1:
-        if st.button("📸 Save Snapshot Now"):
+        if st.button("📸 Save Snapshot Now", disabled=vi.is_visitor(user_id)):
             if total_value > 0:
                 if force_snapshot(user_id, total_value):
                     st.success("Snapshot saved!")
@@ -578,12 +591,12 @@ def crypto_app():
     with col2:
         st.caption("Manually save portfolio history")
 
-    if total_value > 0 and not data_degraded:
+    if not vi.is_visitor(user_id) and total_value > 0 and not data_degraded:
         autosave_portfolio_value(user_id, total_value, "crypto")
 
     st.subheader("Portfolio Performance")
     try:
-        scheduled_history = hourly_history(user_id, "crypto", rate)
+        scheduled_history = pd.DataFrame() if vi.is_visitor(user_id) else hourly_history(user_id, "crypto", rate)
         if not scheduled_history.empty:
             history = scheduled_history
     except Exception:
