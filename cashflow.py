@@ -22,6 +22,9 @@ def _categories(workspace_kind, transaction_kind):
 
 
 def _db():
+    if st.session_state.get('_iv_cashflow_visitor_render'):
+        from visitor_cashflow_store import get_visitor_client
+        return get_visitor_client()
     return get_auth_client()
 
 
@@ -125,12 +128,18 @@ def _cashflow_section_changed():
         _signal_cashflow_navigation('history')
 
 
-def render_cashflow():
-    user_id = st.session_state.get('user_id')
+def render_cashflow(visitor=False):
+    user_id = 'visitor' if visitor else st.session_state.get('user_id')
     if not user_id:
         st.warning('Sign in to access Cash Flow.')
         return
     st.title('💳 Cash Flow Management')
+    if visitor:
+        st.info('DEMO MODE — All figures and transactions are illustrative. Changes last only for this browsing session and are never saved to your account.')
+        if st.button('Reset demo Cash Flow', key='iv_cf_reset_demo'):
+            from visitor_cashflow_store import reset
+            reset()
+            st.rerun()
     st.caption('Know exactly where your money comes from and where it goes.')
     kind_label = st.radio('Financial workspace', ['Personal', 'Business'], horizontal=True, key='cf_kind', on_change=_cashflow_workspace_changed)
     kind = kind_label.lower()
@@ -197,7 +206,7 @@ def render_cashflow():
                 party = st.text_input('Paid to / received from', placeholder='e.g. Supermarket, client, employer, supplier')
                 description = st.text_area('What was this for?', placeholder='Describe exactly what the money was spent on or received for')
                 reference = st.text_input('Receipt / transaction reference (optional)')
-                submitted = st.form_submit_button('Save transaction', type='primary', use_container_width=True)
+                submitted = st.form_submit_button('Add temporary transaction' if visitor else 'Save transaction', type='primary', use_container_width=True)
             if submitted:
                 if tx_kind == 'Transfer' and (len(accounts) < 2 or target_id == source_id):
                     st.error('Transfers require two different accounts.')
@@ -210,7 +219,7 @@ def render_cashflow():
                                'counterparty': party.strip(), 'description': description.strip(), 'reference': reference.strip()}
                     try:
                         _db().table('cf_transactions').insert(payload).execute()
-                        st.success('Transaction saved.')
+                        st.success('Temporary demo transaction added.' if visitor else 'Transaction saved.')
                         _rerun()
                     except Exception as exc:
                         st.error(f'Could not save transaction: {exc}')
@@ -271,7 +280,7 @@ def render_cashflow():
                         else:
                             try:
                                 _db().table('cf_transactions').update({'occurred_on': edit_date.isoformat(), 'amount': str(Decimal(str(edit_amount)).quantize(Decimal('0.01'))), 'category': edit_category.strip(), 'counterparty': edit_party.strip(), 'description': edit_description.strip(), 'reference': edit_reference.strip()}).eq('id', chosen_id).eq('workspace_id', ws['id']).execute()
-                                st.success('Transaction updated.')
+                                st.success('Temporary demo transaction updated.' if visitor else 'Transaction updated.')
                                 _rerun()
                             except Exception as exc: st.error(f'Update failed: {exc}')
                 with st.expander('Delete selected transaction'):
