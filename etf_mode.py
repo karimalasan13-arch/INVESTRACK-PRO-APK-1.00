@@ -1,3 +1,4 @@
+import visitor_investments as vi
 from hourly_history import hourly_history
 from portfolio_charts import render_portfolio_charts
 import streamlit as st
@@ -93,6 +94,8 @@ def db():
 
 
 def force_snapshot(user_id, value_ghs, mode="etf"):
+    if vi.is_visitor(user_id):
+        return False
     try:
         db().table("portfolio_history").insert({
             "user_id": user_id,
@@ -158,6 +161,8 @@ def build_pnl(df, invested):
 
 
 def load_setting(user_id, key, default):
+    if vi.is_visitor(user_id):
+        return vi.load_setting(key, default)
     try:
         res = (
             db()
@@ -174,6 +179,9 @@ def load_setting(user_id, key, default):
 
 
 def save_setting(user_id, key, value):
+    if vi.is_visitor(user_id):
+        vi.save_setting(key, value)
+        return
     db().table("user_settings").upsert(
         {"user_id": user_id, "key": key, "value": float(value)},
         on_conflict="user_id,key",
@@ -185,7 +193,7 @@ def currency_label(currency):
 
 
 def load_currency_index(user_id, mode):
-    idx = int(load_setting(user_id, f"{mode}_currency_index", 0))
+    idx = int(load_setting(user_id, f"etf_currency_index", 5))
     return idx if 0 <= idx < len(CURRENCY_OPTIONS) else 0
 
 
@@ -194,6 +202,8 @@ def fmt(v, currency):
 
 
 def load_etf_holdings(user_id):
+    if vi.is_visitor(user_id):
+        return vi.holdings("etf", ETF_MAP)
     holdings = {k: 0.0 for k in ETF_MAP}
 
     try:
@@ -217,6 +227,9 @@ def load_etf_holdings(user_id):
 
 
 def save_etf_holdings(user_id, holdings):
+    if vi.is_visitor(user_id):
+        vi.save_holdings("etf", holdings)
+        return
     rows = [
         {"user_id": user_id, "symbol": k, "quantity": float(v)}
         for k, v in holdings.items()
@@ -229,6 +242,8 @@ def save_etf_holdings(user_id, holdings):
 
 
 def load_portfolio_history(user_id):
+    if vi.is_visitor(user_id):
+        return []
     try:
         res = (
             db()
@@ -349,16 +364,14 @@ def render_donut_chart(donut_df, value_col, selected_currency):
 def etf_app():
     st.title("ETF Portfolio Dashboard")
 
-    if "user_id" not in st.session_state:
-        st.error("User not logged in.")
-        return
-
-    user_id = st.session_state.user_id
+    user_id = st.session_state.get("user_id") or vi.VISITOR_ID
+    if vi.is_visitor(user_id):
+        vi.demo_notice()
 
     currency_index = load_currency_index(user_id, "etf")
     selected_currency = CURRENCY_OPTIONS[currency_index]
 
-    rate = load_setting(user_id, "etf_rate", 14.5)
+    rate = load_setting(user_id, "etf_rate", 1.0 if currency_index == 5 else 14.5)
     invested = load_setting(user_id, "etf_investment", 0.0)
     cash = load_setting(user_id, "etf_cash", 0.0)
 
@@ -560,7 +573,7 @@ def etf_app():
 
     st.subheader("Portfolio Performance")
     try:
-        scheduled_history = hourly_history(user_id, "etf", rate)
+        scheduled_history = pd.DataFrame() if vi.is_visitor(user_id) else hourly_history(user_id, "etf", rate)
         if not scheduled_history.empty:
             history = scheduled_history
     except Exception:
@@ -576,9 +589,9 @@ def etf_app():
     donut_df = build_donut_df(top_df, value_col)
     render_donut_chart(donut_df, value_col, selected_currency)
 
-    if total_value > 0 and not data_degraded:
+    if not vi.is_visitor(user_id) and total_value > 0 and not data_degraded:
         autosave_portfolio_value(user_id, total_value, "etf")
 
-    if st.button("Save Snapshot"):
+    if st.button("Save Snapshot", disabled=vi.is_visitor(user_id)):
         if total_value > 0 and not data_degraded:
             force_snapshot(user_id, total_value, "etf")
