@@ -2697,11 +2697,18 @@ def render_financial_hub():
 
 
 def render_cashflow_workspace():
-    if not ensure_auth():
-        from explore_preview import render_cashflow_preview
-        render_cashflow_preview(navigate)
-        return
     from cashflow import render_cashflow
+    if not ensure_auth():
+        st.session_state['_iv_cashflow_visitor_render'] = True
+        try:
+            render_cashflow(visitor=True)
+        finally:
+            st.session_state['_iv_cashflow_visitor_render'] = False
+        st.info('To save your financial records permanently, sign in or create an account.')
+        if st.button('Sign in to save', key='iv_cf_native_login'):
+            navigate('Login')
+        return
+    st.session_state['_iv_cashflow_visitor_render'] = False
     render_cashflow()
 
 
