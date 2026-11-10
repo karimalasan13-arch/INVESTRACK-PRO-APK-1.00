@@ -1384,21 +1384,150 @@ def _integrity_validate(verdict, request_hash):
         raise HTTPException(403, 'Integrity verification rejected')
 
 
-def _integrity_signup_sync(challenge, token):
-    # Verify with Google first; no account is created on an invalid verdict.
-    digest = hashlib.sha256(challenge.encode('ascii')).hexdigest()
+def _integrity_tx_secret_digest(secret):
+    # The native client generates and durably stores a 32-byte random secret
+    # BEFORE sending /start. Neither the raw secret nor credentials are logged.
+    if not (isinstance(secret, str) and len(secret) == 43 and
+            all(ch.isalnum() or ch in '-_' for ch in secret)):
+        raise HTTPException(400, 'Invalid onboarding transaction')
+    return hashlib.sha256(secret.encode('ascii')).hexdigest()
+
+
+def _integrity_tx_id(value):
+    try:
+        parsed = str(uuid.UUID(value))
+        if parsed != value:
+            raise ValueError('Noncanonical request ID')
+        return parsed
+    except (ValueError, TypeError, AttributeError):
+        raise HTTPException(400, 'Invalid onboarding transaction') from None
+
+
+def _integrity_tx_reserve(request_id, digest):
+    # Supabase RPC is an atomic first-writer reservation. Its response is TEXT,
+    # unlike the existing boolean-returning integrity challenge RPCs.
+    base, _ = _configuration()
+    role = os.environ.get('SUPABASE_SERVICE_ROLE_KEY', '')
+    if not role:
+        raise HTTPException(503, 'Integrity storage unavailable')
+    req = Request(base + '/rest/v1/rpc/iv_reserve_integrity_onboarding',
+                  data=json.dumps({'p_request_id': request_id,
+                                   'p_secret_digest': digest}).encode('utf-8'),
+                  headers={'apikey': role, 'Authorization': 'Bearer ' + role,
+                           'Content-Type': 'application/json', 'Accept': 'application/json'},
+                  method='POST')
+    try:
+        with urlopen(req, timeout=8) as response:
+            raw = response.read(256)
+        status = json.loads(raw)
+        if status not in ('reserved', 'pending', 'completed', 'mismatch', 'expired', 'invalid'):
+            raise ValueError('Unexpected reservation result')
+        return status
+    except (HTTPError, URLError, TimeoutError, OSError, ValueError):
+        raise HTTPException(503, 'Integrity storage unavailable') from None
+
+
+def _integrity_tx_record(request_id, digest):
+    from urllib.parse import quote
+    base, _ = _configuration()
+    role = os.environ.get('SUPABASE_SERVICE_ROLE_KEY', '')
+    if not role:
+        raise HTTPException(503, 'Integrity storage unavailable')
+    query = ('?request_id=eq.' + quote(request_id, safe='') +
+             '&select=secret_digest,status,user_id,encrypted_response,expires_at')
+    req = Request(base + '/rest/v1/iv_integrity_onboarding_transactions' + query,
+                  headers={'apikey': role, 'Authorization': 'Bearer ' + role,
+                           'Accept': 'application/json'}, method='GET')
+    try:
+        with urlopen(req, timeout=8) as response:
+            raw = response.read(40000)
+        records = json.loads(raw)
+        if not isinstance(records, list) or len(records) > 1:
+            raise ValueError('Invalid transaction record')
+    except (HTTPError, URLError, TimeoutError, OSError, ValueError):
+        raise HTTPException(503, 'Integrity storage unavailable') from None
+    if not records:
+        raise HTTPException(404, 'Onboarding transaction unavailable')
+    record = records[0]
+    if not hmac.compare_digest(str(record.get('secret_digest', '')), digest):
+        raise HTTPException(404, 'Onboarding transaction unavailable')
+    from datetime import datetime, timezone
+    try:
+        expiry = datetime.fromisoformat(record['expires_at'].replace('Z', '+00:00'))
+    except (ValueError, TypeError, AttributeError, KeyError):
+        raise HTTPException(503, 'Integrity storage unavailable') from None
+    if expiry <= datetime.now(timezone.utc):
+        raise HTTPException(410, 'Onboarding transaction expired')
+    return record
+
+
+def _integrity_tx_complete(request_id, digest, account, encrypted):
+    return _integrity_rpc('iv_complete_integrity_onboarding', {
+        'p_request_id': request_id, 'p_secret_digest': digest,
+        'p_user_id': account, 'p_encrypted_response': encrypted})
+
+
+def _integrity_tx_ticket(account, access, refresh):
+    _bridge_secret()
+    if not (_safe_token(access) and _safe_token(refresh)):
+        raise HTTPException(503, 'Onboarding transaction unavailable')
+    with _pending_tickets_lock:
+        now = time.monotonic()
+        _remove_expired_locked(now)
+        if len(_pending_tickets) >= _MAX_PENDING_TICKETS:
+            raise HTTPException(429, 'Guest onboarding temporarily busy')
+        ticket = secrets.token_urlsafe(32)
+        _pending_tickets[ticket] = (now + _TICKET_TTL, account, access, refresh)
+    return {'user_id': account, 'refresh_token': refresh,
+            'ticket': ticket, 'ticket_expires_in': int(_TICKET_TTL)}
+
+
+def _integrity_tx_recover_sync(request_id, secret):
+    digest = _integrity_tx_secret_digest(secret)
+    record = _integrity_tx_record(request_id, digest)
+    if record.get('status') != 'completed':
+        # An uncertain provider outcome must NOT trigger a new Supabase signup.
+        raise HTTPException(409, 'Onboarding outcome uncertain; do not create a new guest')
+    try:
+        account = str(uuid.UUID(record['user_id']))
+        encrypted = record['encrypted_response']
+        recovered = _guest_tx_decrypt(request_id, account, encrypted)
+    except (ValueError, TypeError, KeyError, AttributeError):
+        raise HTTPException(503, 'Onboarding transaction unavailable') from None
+    return _integrity_tx_ticket(account, recovered.get('access_token'),
+                                recovered.get('refresh_token'))
+
+
+def _integrity_signup_sync(challenge, token, request_id, secret):
+    # Verify with Google before reserving a signup; never create an identity
+    # without a valid, fresh Play Integrity verdict.
+    digest = _integrity_tx_secret_digest(secret)
+    challenge_digest = hashlib.sha256(challenge.encode('ascii')).hexdigest()
     verdict = _integrity_google_decode(token)
     _integrity_validate(verdict, _integrity_request_hash(challenge))
-    if not _integrity_rpc('iv_consume_integrity_challenge', {'p_challenge_hash': digest}):
+    if not _integrity_rpc('iv_consume_integrity_challenge',
+                          {'p_challenge_hash': challenge_digest}):
         raise HTTPException(409, 'Onboarding challenge expired or already used')
+    # Existing signup rate limit remains in place.
     if not _integrity_rpc('iv_reserve_integrity_signup_slot',
                           {'p_max_minute': 10, 'p_max_day': 1000}):
         raise HTTPException(429, 'Guest onboarding temporarily busy')
     _bridge_secret()
+    _guest_tx_cipher()  # Fail before creating an identity if encryption is unavailable.
     with _pending_tickets_lock:
         _remove_expired_locked(time.monotonic())
         if len(_pending_tickets) >= _MAX_PENDING_TICKETS:
             raise HTTPException(429, 'Guest onboarding temporarily busy')
+    reservation = _integrity_tx_reserve(request_id, digest)
+    if reservation != 'reserved':
+        if reservation == 'completed':
+            return _integrity_tx_recover_sync(request_id, secret)
+        if reservation == 'pending':
+            raise HTTPException(409, 'Onboarding outcome uncertain; do not create a new guest')
+        raise HTTPException(409, 'Onboarding transaction unavailable')
+    # Only the request that reserved this transaction may call Supabase signup.
+    # If the process crashes after signup but before completion, it stays
+    # pending. Never retry signup under that ID or automatically use a new ID.
     base, key = _configuration()
     signup = Request(base + '/auth/v1/signup', data=b'{}',
                      headers={'apikey': key, 'Content-Type': 'application/json',
@@ -1417,15 +1546,11 @@ def _integrity_signup_sync(challenge, token):
         raise HTTPException(503, 'Anonymous identity verification failed') from None
     if user.get('is_anonymous') is not True:
         raise HTTPException(503, 'Anonymous identity verification failed')
-    with _pending_tickets_lock:
-        now = time.monotonic()
-        _remove_expired_locked(now)
-        if len(_pending_tickets) >= _MAX_PENDING_TICKETS:
-            raise HTTPException(429, 'Guest onboarding temporarily busy')
-        ticket = secrets.token_urlsafe(32)
-        _pending_tickets[ticket] = (now + _TICKET_TTL, account, access, refresh)
-    return {'user_id': account, 'refresh_token': refresh,
-            'ticket': ticket, 'ticket_expires_in': int(_TICKET_TTL)}
+    encrypted = _guest_tx_encrypt(request_id, account,
+                                  {'access_token': access, 'refresh_token': refresh})
+    if not _integrity_tx_complete(request_id, digest, account, encrypted):
+        raise HTTPException(503, 'Onboarding transaction unavailable')
+    return _integrity_tx_ticket(account, access, refresh)
 
 
 @app.post('/api/session/guest/integrity/challenge')
@@ -1442,14 +1567,33 @@ async def integrity_guest_challenge(request: FastAPIRequest):
 @app.post('/api/session/guest/integrity/start')
 async def integrity_guest_start(request: FastAPIRequest):
     _integrity_enabled()
-    payload = await _integrity_json(request, {'challenge', 'integrity_token'}, _IV_INTEGRITY_MAX_BODY)
+    payload = await _integrity_json(
+        request, {'challenge', 'integrity_token', 'request_id', 'recovery_secret'},
+        _IV_INTEGRITY_MAX_BODY)
     challenge, token = payload['challenge'], payload['integrity_token']
+    request_id = _integrity_tx_id(payload['request_id'])
+    secret = payload['recovery_secret']
+    _integrity_tx_secret_digest(secret)
     if not _valid_pair_challenge(challenge) or not (isinstance(token, str) and
             1 <= len(token) <= 24000 and token.isascii() and
             all(ch.isalnum() or ch in '-_.' for ch in token)):
         raise HTTPException(400, 'Invalid request')
     from starlette.concurrency import run_in_threadpool
-    return JSONResponse(await run_in_threadpool(_integrity_signup_sync, challenge, token))
+    return JSONResponse(await run_in_threadpool(
+        _integrity_signup_sync, challenge, token, request_id, secret))
+
+
+@app.post('/api/session/guest/integrity/recover')
+async def integrity_guest_recover(request: FastAPIRequest):
+    _integrity_enabled()
+    payload = await _integrity_json(
+        request, {'request_id', 'recovery_secret'}, 512)
+    request_id = _integrity_tx_id(payload['request_id'])
+    secret = payload['recovery_secret']
+    _integrity_tx_secret_digest(secret)
+    from starlette.concurrency import run_in_threadpool
+    return JSONResponse(await run_in_threadpool(
+        _integrity_tx_recover_sync, request_id, secret))
 
 
 @app.api_route('/api/session/{path:path}', methods=['GET', 'POST', 'PUT', 'PATCH', 'DELETE'])
