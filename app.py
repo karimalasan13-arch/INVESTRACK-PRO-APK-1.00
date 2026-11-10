@@ -2551,12 +2551,8 @@ def render_partner_cta():
 # AUTHENTICATED DASHBOARD
 # -----------------------------------------
 def render_dashboard():
-    if not ensure_auth():
-        from explore_preview import render_investment_preview
-        render_investment_preview(navigate)
-        return
-
-    if (
+    visitor_mode = not ensure_auth()
+    if not visitor_mode and (
         "user" not in st.session_state
         or "user_id" not in st.session_state
     ):
@@ -2564,7 +2560,7 @@ def render_dashboard():
         logout()
         st.stop()
 
-    user = st.session_state.user
+    user = st.session_state.get("user") if not visitor_mode else None
 
 
     # Do not force a full app rerun every 60 seconds. It reloads heavy
