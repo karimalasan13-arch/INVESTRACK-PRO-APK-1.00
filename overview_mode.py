@@ -1,3 +1,4 @@
+import visitor_investments as vi
 from hourly_history import hourly_history
 from portfolio_charts import render_portfolio_charts
 from datetime import datetime
@@ -81,6 +82,8 @@ def db():
 
 
 def load_setting(user_id, key, default):
+    if vi.is_visitor(user_id):
+        return vi.load_setting(key, default)
     try:
         res = (
             db()
@@ -97,6 +100,9 @@ def load_setting(user_id, key, default):
 
 
 def save_setting(user_id, key, value):
+    if vi.is_visitor(user_id):
+        vi.save_setting(key, value)
+        return
     db().table("user_settings").upsert(
         {"user_id": user_id, "key": key, "value": float(value)},
         on_conflict="user_id,key",
@@ -137,6 +143,8 @@ def to_master(value, source_usd_rate, master_usd_rate):
 
 
 def load_overview_history(user_id):
+    if vi.is_visitor(user_id):
+        return []
     try:
         res = (
             db()
@@ -291,16 +299,14 @@ def overview_app():
         "One view across Crypto, Stocks, ETFs and Bonds / Fixed Income."
     )
 
-    if "user_id" not in st.session_state:
-        st.error("User not logged in.")
-        return
-
-    user_id = st.session_state.user_id
+    user_id = st.session_state.get("user_id") or vi.VISITOR_ID
+    if vi.is_visitor(user_id):
+        vi.demo_notice()
 
     # ---------------------------------------------------------
     # MASTER REPORTING CURRENCY
     # ---------------------------------------------------------
-    master_index = int(load_setting(user_id, "overview_currency_index", 0))
+    master_index = int(load_setting(user_id, "overview_currency_index", 5))
     if not 0 <= master_index < len(CURRENCY_OPTIONS):
         master_index = 0
 
@@ -351,18 +357,18 @@ def overview_app():
     # ---------------------------------------------------------
     # MODULE SETTINGS
     # ---------------------------------------------------------
-    crypto_rate = load_setting(user_id, "crypto_rate", 14.5)
+    crypto_rate = load_setting(user_id, "crypto_rate", 1.0 if vi.is_visitor(user_id) else 14.5)
     crypto_invested = load_setting(user_id, "crypto_investment", 0.0)
 
-    stock_rate = load_setting(user_id, "stock_rate", 14.5)
+    stock_rate = load_setting(user_id, "stock_rate", 1.0 if vi.is_visitor(user_id) else 14.5)
     stock_invested = load_setting(user_id, "stock_investment", 0.0)
     stock_cash = load_setting(user_id, "stock_cash", 0.0)
 
-    etf_rate = load_setting(user_id, "etf_rate", 14.5)
+    etf_rate = load_setting(user_id, "etf_rate", 1.0 if vi.is_visitor(user_id) else 14.5)
     etf_invested = load_setting(user_id, "etf_investment", 0.0)
     etf_cash = load_setting(user_id, "etf_cash", 0.0)
 
-    bond_display_rate = load_setting(user_id, "bond_rate", 14.5)
+    bond_display_rate = load_setting(user_id, "bond_rate", 1.0 if vi.is_visitor(user_id) else 14.5)
     bond_cash = load_setting(user_id, "bond_cash", 0.0)
 
     # ---------------------------------------------------------
@@ -788,7 +794,7 @@ def overview_app():
     st.subheader("Unified Portfolio Performance")
     history = clean_history(load_overview_history(user_id))
     try:
-        scheduled_history = hourly_history(user_id, "overview", master_rate)
+        scheduled_history = pd.DataFrame() if vi.is_visitor(user_id) else hourly_history(user_id, "overview", master_rate)
         if not scheduled_history.empty:
             history = scheduled_history
     except Exception:
@@ -801,6 +807,7 @@ def overview_app():
     with snap_col:
         if st.button(
             "📸 Save Unified Snapshot",
+            disabled=vi.is_visitor(user_id),
             key="overview_manual_snapshot",
             use_container_width=True,
         ):
@@ -828,7 +835,7 @@ def overview_app():
 
     # Only autosave when every held market-priced asset was successfully
     # valued. This prevents temporary API failures from creating false drops.
-    if total_value > 0 and not failed_assets:
+    if not vi.is_visitor(user_id) and total_value > 0 and not failed_assets:
         autosave_portfolio_value(
             user_id,
             total_value,
