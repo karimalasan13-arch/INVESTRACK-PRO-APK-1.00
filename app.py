@@ -2727,6 +2727,50 @@ if not ensure_auth():
         unsafe_allow_html=True,
     )
 
+# STEP 5I.44F — Keep native Quick Login pairing alive on public visitor pages.
+# This is NOT anonymous Supabase authentication. It only accepts a verified
+# one-time native pairing result and restores the existing registered account.
+@st.fragment(run_every="2s")
+def _iv_quick_login_pairing():
+    if ensure_auth():
+        return
+    from quick_login_pair import create_pair, consume_pair
+    import html as _iv_html
+    now = time.monotonic()
+    challenge = st.session_state.get("_iv_ql_pair_challenge")
+    expiry = st.session_state.get("_iv_ql_pair_expires", 0)
+    if not isinstance(challenge, str) or now >= expiry:
+        st.session_state.pop("_iv_ql_pair_challenge", None)
+        st.session_state.pop("_iv_ql_pair_expires", None)
+        created = create_pair()
+        if created is None:
+            return
+        challenge, expiry = created
+        st.session_state["_iv_ql_pair_challenge"] = challenge
+        st.session_state["_iv_ql_pair_expires"] = expiry
+    st.markdown(
+        '<span id="iv-quick-login-pair" hidden data-challenge="'
+        + _iv_html.escape(challenge, quote=True) + '"></span>',
+        unsafe_allow_html=True,
+    )
+    status, credentials = consume_pair(challenge)
+    if status == "pending":
+        return
+    st.session_state.pop("_iv_ql_pair_challenge", None)
+    st.session_state.pop("_iv_ql_pair_expires", None)
+    if status != "ready" or credentials is None:
+        return
+    from auth import restore_verified_session, _clear_auth_identity
+    access, refresh, expected_id = credentials
+    if not restore_verified_session(access, refresh):
+        return
+    if str(st.session_state.get("user_id", "")).lower() != expected_id.lower():
+        _clear_auth_identity()
+        return
+    st.rerun(scope="app")
+
+_iv_quick_login_pairing()
+
 # Only the authenticated page mounts the trusted interaction listener.
 # This reports actual mouse, touch, keyboard and scroll input to the server.
 # It does NOT renew the clock on page load, Streamlit reruns, or timer ticks.
