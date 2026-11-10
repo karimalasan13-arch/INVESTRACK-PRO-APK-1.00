@@ -651,8 +651,6 @@ def navigate(page_name):
     """One authoritative destination for every app navigation button."""
     if page_name not in PAGE_QUERY_MAP:
         raise ValueError(f"Unknown navigation destination: {page_name}")
-    if not ensure_auth() and page_name in {"Dashboard", "Cash Flow", "Investments"}:
-        page_name = "Login"
     if page_name != "Learn":
         st.session_state.pop("learn_article_slug", None)
     previous = st.session_state.get("public_navigation")
@@ -667,8 +665,6 @@ def navigate(page_name):
 def apply_pending_navigation(valid_pages, authenticated):
     pending_page = st.session_state.pop("pending_public_page", None)
     if pending_page:
-        if not authenticated and pending_page in {"Dashboard", "Cash Flow", "Investments"}:
-            pending_page = "Login"
         if pending_page in valid_pages:
             st.session_state.public_navigation = pending_page
 
@@ -1000,10 +996,10 @@ def render_public_navigation():
             ("Contact", "✉️"),
         ]
     else:
-        navigation_items = PUBLIC_PAGES.copy()
+        navigation_items = [("Dashboard", "🏠"), ("Cash Flow", "💳"), ("Investments", "📈")] + PUBLIC_PAGES
     valid_pages = [name for name, _ in navigation_items]
     apply_pending_navigation(valid_pages, authenticated)
-    default_page = "Dashboard" if authenticated else "Home"
+    default_page = "Dashboard"
     selected_page = st.session_state.get("public_navigation", default_page)
     if selected_page not in valid_pages:
         selected_page = default_page
@@ -2556,17 +2552,8 @@ def render_partner_cta():
 # -----------------------------------------
 def render_dashboard():
     if not ensure_auth():
-        st.warning(
-            "Please log in to access your portfolio dashboard."
-        )
-
-        if st.button(
-            "Go to Login",
-            key="dashboard_go_to_login",
-            type="primary",
-        ):
-            navigate("Login")
-
+        from explore_preview import render_investment_preview
+        render_investment_preview(navigate)
         return
 
     if (
@@ -2668,6 +2655,8 @@ def render_dashboard():
 def render_financial_hub():
     st.title("Your Financial Hub")
     st.caption("Manage money today. Track investments for tomorrow.")
+    if not ensure_auth():
+        st.info("Explore freely with sample data. Sign in when you are ready to save your finances.")
     cash, invest = st.columns([1.2, 1])
     with cash:
         st.subheader("💳 Cash Flow")
@@ -2709,7 +2698,8 @@ def render_financial_hub():
 
 def render_cashflow_workspace():
     if not ensure_auth():
-        navigate("Login")
+        from explore_preview import render_cashflow_preview
+        render_cashflow_preview(navigate)
         return
     from cashflow import render_cashflow
     render_cashflow()
@@ -2727,125 +2717,22 @@ def _iv_inactivity_watchdog():
 
 _iv_inactivity_watchdog()
 
-# -----------------------------------------
-# STEP 4C.1 — LOGIN-FIRST GATE
-# Render no public navigation or dashboard for signed-out visitors.
-# Existing signed-in sessions retain the existing Financial Hub and
-# server-derived Android entitlement synchronization.
-# -----------------------------------------
+# STEP 5I.44A — Public exploration is intentionally unauthenticated.
+# No guest account, token, pairing challenge, or Supabase session is created.
+# Existing account login remains accessible via the Login route.
 if not ensure_auth():
     st.session_state.pop("iv_entitlement_snapshot", None)
-    # Native Android reads this guest marker to keep advertisements gated.
     st.markdown(
         '<span id="iv-native-entitlement" hidden data-tier="guest"></span>',
         unsafe_allow_html=True,
     )
-    st.markdown("""
-    <style>
-      [data-testid="stSidebar"], [data-testid="stSidebarCollapsedControl"] {
-          display: none !important;
-      }
-    </style>
-    """, unsafe_allow_html=True)
-    # Step 4G.2 — staging-only, session-local native pairing metadata.
-    # The challenge is not a credential; only Android native may attach a ticket.
-    from quick_login_pair import create_pair, consume_pair
-    import html as _iv_html
-
-    @st.fragment(run_every="2s")
-    def _iv_quick_login_pairing():
-        if ensure_auth():
-            return
-        now = time.monotonic()
-        challenge = st.session_state.get("_iv_ql_pair_challenge")
-        expiry = st.session_state.get("_iv_ql_pair_expires", 0)
-        if not isinstance(challenge, str) or now >= expiry:
-            st.session_state.pop("_iv_ql_pair_challenge", None)
-            st.session_state.pop("_iv_ql_pair_expires", None)
-            created = create_pair()
-            if created is None:
-                return  # Fail closed: ordinary password login remains available.
-            challenge, expiry = created
-            st.session_state["_iv_ql_pair_challenge"] = challenge
-            st.session_state["_iv_ql_pair_expires"] = expiry
-        # Only a pairing identifier is rendered; never credentials or tickets.
-        st.markdown(
-            '<span id="iv-quick-login-pair" hidden data-challenge="'
-            + _iv_html.escape(challenge, quote=True) + '"></span>',
-            unsafe_allow_html=True,
-        )
-        status, credentials = consume_pair(challenge)
-        if status == "pending":
-            return
-        st.session_state.pop("_iv_ql_pair_challenge", None)
-        st.session_state.pop("_iv_ql_pair_expires", None)
-        if status != "ready" or credentials is None:
-            return
-        from auth import restore_verified_session, _clear_auth_identity
-        access, refresh, expected_id = credentials
-        if not restore_verified_session(access, refresh):
-            return
-        if str(st.session_state.get("user_id", "")).lower() != expected_id.lower():
-            _clear_auth_identity()
-            return
-        st.rerun(scope="app")
-
-    _iv_quick_login_pairing()
-    # Step 5H: guest-first native onboarding. The browser cannot mint a guest
-    # identity: only native HTTPS obtains and attaches the one-time ticket.
-    # Explicit sign-in remains available for returning registered users.
-    st.markdown('<span id="iv-route-login" hidden></span>', unsafe_allow_html=True)
-    # Restricted rollout: opt-in and an explicitly approved Render service.
-    # The backend must independently enforce one-time activation before this
-    # UI flag is enabled. This UI check is not an authorization boundary.
-    guest_service = str(os.environ.get("RENDER_SERVICE_NAME", "")).strip().lower()
-    guest_first = (
-        str(os.environ.get("IV_GUEST_UI_ENABLED", "false")).strip().lower() == "true"
-        and guest_service in {
-            "investrack-pro-apk-1.00-2",  # staging
-            "investrack-pro-apk-1-00-1",  # production
-        }
-    )
-    # STEP 5I.10 TEMPORARY DIAGNOSTIC — remove after rollout verification.
-    # Only feature-flag state, service identity and routing booleans are logged.
-    # No credentials, tokens, account IDs or other environment values are logged.
-    _iv_guest_diag_logger = logging.getLogger("investrack.guest_ui")
-    _iv_guest_diag_logger.warning(
-        "IV_GUEST_UI_DIAG service=%r ui_flag=%r guest_first=%s explicit_signin=%s route=%s",
-        guest_service,
-        str(os.environ.get("IV_GUEST_UI_ENABLED", "<unset>")).strip().lower(),
-        guest_first,
-        bool(st.session_state.get("iv_explicit_account_signin", False)),
-        "login" if (not guest_first or st.session_state.get("iv_explicit_account_signin", False)) else "guest_preparing",
-    )
-    if not guest_first or st.session_state.get("iv_explicit_account_signin", False):
-        if guest_first:
-            st.caption("Account Settings · Sign in to an existing account")
-            if st.button("Return to automatic guest access", key="iv_guest_signin_back"):
-                st.session_state.pop("iv_explicit_account_signin", None)
-                st.rerun()
-        login_ui()
-    else:
-        st.markdown("## InvesTrack Pro")
-        st.markdown("### Preparing your Financial Hub")
-        st.caption("Your secure guest account is being created or restored automatically. No registration is required.")
-        st.info("If this takes longer than expected, check your connection and retry. Existing guest records will not be replaced.")
-        if st.button("Retry guest connection", key="iv_guest_retry", type="primary"):
-            # Rebuild the Streamlit challenge; native transport detects the new one.
-            st.session_state.pop("_iv_ql_pair_challenge", None)
-            st.session_state.pop("_iv_ql_pair_expires", None)
-            st.rerun()
-        with st.expander("Already have an account?", expanded=False):
-            if st.button("Sign in to existing account", key="iv_guest_open_signin"):
-                st.session_state["iv_explicit_account_signin"] = True
-                st.rerun()
-    st.stop()
 
 # Only the authenticated page mounts the trusted interaction listener.
 # This reports actual mouse, touch, keyboard and scroll input to the server.
 # It does NOT renew the clock on page load, Streamlit reruns, or timer ticks.
 from activity_watch import render_authenticated_activity_watch
-render_authenticated_activity_watch()
+if ensure_auth():
+    render_authenticated_activity_watch()
 
 # -----------------------------------------
 # MAIN ROUTER
@@ -2914,10 +2801,7 @@ elif selected_page == "Login":
     render_public_footer()
 
 elif selected_page == "Dashboard":
-    if user_is_authenticated:
-        render_financial_hub()
-    else:
-        render_dashboard()
+    render_financial_hub()
 
 elif selected_page == "Cash Flow":
     render_cashflow_workspace()
