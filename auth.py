@@ -1,5 +1,7 @@
 """Supabase authentication for InvesTrack Pro (per Streamlit session)."""
 import time
+import base64
+import json
 import streamlit as st
 
 # Step 4C.3: server-side guard on every Streamlit script execution.
@@ -45,8 +47,34 @@ def current_account_kind() -> str:
 
 
 
+def _jwt_access_unexpired(access_token: str) -> bool:
+    """Only an expiry precheck; Supabase get_user remains the identity authority."""
+    try:
+        payload_part = access_token.split(".")[1]
+        payload = json.loads(base64.urlsafe_b64decode(
+            payload_part + "=" * (-len(payload_part) % 4)
+        ))
+        exp = payload.get("exp")
+        return type(exp) in (int, float) and exp > time.time() + 5
+    except (IndexError, ValueError, TypeError, KeyError):
+        return False
+
+
+def _native_guest_client():
+    """A per-Streamlit-session client that cannot automatically rotate guest tokens."""
+    from supabase import ClientOptions, create_client
+    from db import SUPABASE_URL, SUPABASE_KEY
+    return create_client(
+        SUPABASE_URL, SUPABASE_KEY,
+        options=ClientOptions(auto_refresh_token=False, persist_session=False),
+    )
+
+
 def _clear_auth_identity():
     """Clear account-specific state without discarding unrelated UI preferences."""
+    # A guest-specific client must never carry over to registered sign-in.
+    if st.session_state.pop('_iv_native_guest_session', False):
+        st.session_state.pop('supabase_client', None)
     for key in ('access_token', 'refresh_token', '_attached_access_token',
                 'user', 'user_id', '_auth_checked_at', 'iv_entitlement_snapshot',
                 'iv_entitlement_snapshot_at', 'iv_entitlement_user_id',
@@ -60,8 +88,11 @@ def _attach_session():
     refresh = st.session_state.get('refresh_token')
     if not access or not refresh:
         return client
+    if st.session_state.get('_iv_native_guest_session') and not _jwt_access_unexpired(access):
+        # Never spend Android's vault refresh token from Streamlit.
+        raise RuntimeError('Native guest access token expired; native restoration required')
     if st.session_state.get('_attached_access_token') != access:
-        # set_session can rotate an expired access token using the refresh token.
+        # Registered sessions retain the original SDK refresh behaviour.
         response = client.auth.set_session(access_token=access, refresh_token=refresh)
         if not response or not response.session:
             raise RuntimeError('Supabase did not return a valid session')
@@ -100,7 +131,19 @@ def restore_verified_session(access_token: str, refresh_token: str) -> bool:
 
     restored_successfully = False
     try:
+        # Verify the supplied access token against Supabase *before* attaching
+        # any session. An anonymous identity uses a non-refreshing client.
         client = get_supabase()
+        verified = client.auth.get_user(access_token)
+        if not verified or not verified.user or not getattr(verified.user, 'id', None):
+            return False
+        native_guest = is_anonymous_user(verified.user)
+        if native_guest:
+            # If expired, require a new native vault transaction. Never allow
+            # set_session() to rotate a token outside the Android vault.
+            if not _jwt_access_unexpired(access_token):
+                return False
+            client = _native_guest_client()
         response = client.auth.set_session(
             access_token=access_token, refresh_token=refresh_token
         )
@@ -110,12 +153,14 @@ def restore_verified_session(access_token: str, refresh_token: str) -> bool:
         restored = response.session
         if not _valid_token(restored.access_token) or not _valid_token(restored.refresh_token):
             return False
-
-        # A fresh Supabase Auth server verification is required. Do not accept
-        # a locally decoded JWT or an account ID supplied by the native caller.
-        verified = client.auth.get_user(restored.access_token)
-        if not verified or not verified.user or not getattr(verified.user, 'id', None):
+        # Server-verified identity must remain the same after attachment.
+        checked = client.auth.get_user(restored.access_token)
+        if not checked or not checked.user or str(checked.user.id) != str(verified.user.id):
             return False
+        verified = checked
+        if native_guest:
+            st.session_state.supabase_client = client
+            st.session_state._iv_native_guest_session = True
 
         st.session_state.access_token = restored.access_token
         st.session_state.refresh_token = restored.refresh_token
@@ -171,6 +216,12 @@ def ensure_auth() -> bool:
         return False
     if not st.session_state.get('access_token') or not st.session_state.get('refresh_token'):
         return False
+    # Never let a native guest use the SDK to rotate an expired token,
+    # including while the 30-second identity verification cache is active.
+    if (st.session_state.get('_iv_native_guest_session')
+            and not _jwt_access_unexpired(st.session_state.get('access_token', ''))):
+        _clear_auth_identity()
+        return False
     # Never allow an identity cached from another login to remain trusted.
     if (st.session_state.get('user_id') and st.session_state.get('user')
             and time.monotonic() - st.session_state.get('_auth_checked_at', 0) < 30):
@@ -186,7 +237,9 @@ def ensure_auth() -> bool:
             st.session_state.pop('iv_entitlement_snapshot', None)
         st.session_state.user = result.user
         st.session_state.user_id = result.user.id
-        session = client.auth.get_session()
+        # Guest credentials belong to Android; do not read back a token
+        # possibly rotated by another Supabase SDK session manager.
+        session = None if st.session_state.get('_iv_native_guest_session') else client.auth.get_session()
         if session:
             st.session_state.access_token = session.access_token
             st.session_state.refresh_token = session.refresh_token
