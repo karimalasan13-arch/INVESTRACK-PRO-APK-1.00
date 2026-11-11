@@ -2787,6 +2787,16 @@ if ensure_auth():
 sync_route_from_url()
 
 
+# Avoid silently showing Demo Mode during a transient auth verification failure.
+# Credentials are retained by ensure_auth() on network errors; display a retry
+# state rather than rendering visitor financial data in that situation.
+if (st.session_state.get('access_token') and st.session_state.get('refresh_token')
+        and not ensure_auth()):
+    st.warning('Unable to verify your session. Check your connection and retry.')
+    if st.button('Retry session verification', key='iv_retry_auth_verification'):
+        st.rerun()
+    st.stop()
+
 selected_page, user_is_authenticated = (
     render_public_navigation()
 )
