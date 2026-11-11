@@ -2780,7 +2780,7 @@ if not ensure_auth():
 # STEP 5I.44F — Keep native Quick Login pairing alive on public visitor pages.
 # This is NOT anonymous Supabase authentication. It only accepts a verified
 # one-time native pairing result and restores the existing registered account.
-@st.fragment(run_every="2s")
+@st.fragment(run_every="5s")
 def _iv_quick_login_pairing():
     if ensure_auth():
         return
