@@ -140,8 +140,13 @@ def _cashflow_workspace_changed():
 
 
 def _cashflow_section_changed():
-    if st.session_state.get('cf_section') == '📜 Transaction history':
+    # Only a genuine user navigation to an ad-eligible section emits an event.
+    # The Android observer retains responsibility for cooldown and entitlements.
+    section = st.session_state.get('cf_section')
+    if section == '📜 Transaction history':
         _signal_cashflow_navigation('history')
+    elif section == '📊 Reports':
+        _signal_cashflow_navigation('reports')
 
 
 def render_cashflow(visitor=False):
@@ -366,7 +371,23 @@ def render_cashflow(visitor=False):
                 for col in ('income', 'expense'):
                     if col not in pivot.columns: pivot[col] = 0.0
                 pivot['Net'] = pivot['income'] - pivot['expense']
-                st.bar_chart(pivot[['income', 'expense']])
+                # Keep the monthly trend in view while the user scrolls its table.
+                # A keyed Streamlit container supplies a stable CSS hook.
+                st.markdown('''<style>
+                .st-key-cf_reports_sticky_chart {
+                    position: sticky;
+                    top: 3.5rem;
+                    z-index: 5;
+                    background: var(--background-color, #fff);
+                    border-radius: .65rem;
+                    padding: .35rem .5rem;
+                }
+                @media (max-width: 640px) {
+                    .st-key-cf_reports_sticky_chart { top: 3rem; }
+                }
+                </style>''', unsafe_allow_html=True)
+                with st.container(key='cf_reports_sticky_chart'):
+                    st.bar_chart(pivot[['income', 'expense']], height=230)
                 st.dataframe(pivot.rename(columns={'income': 'Income', 'expense': 'Expenses'}), use_container_width=True)
             expenses = [t for t in transactions if t['kind'] == 'expense']
             if expenses:
