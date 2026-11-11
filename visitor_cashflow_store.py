@@ -18,7 +18,7 @@ def _seed():
         wsid = 'preview_workspace_' + kind
         result.setdefault('cf_workspaces', []).append({
             'id': wsid, 'user_id': 'visitor', 'kind': kind,
-            'name': 'Personal' if kind == 'personal' else 'Sample Business', 'currency': 'GHS'})
+            'name': 'Personal' if kind == 'personal' else 'Sample Business', 'currency': 'USD'})
         account = {'id': 'preview_account_' + kind, 'user_id': 'visitor',
                    'workspace_id': wsid, 'name': 'Sample bank account',
                    'account_type': 'Bank', 'opening_balance': '2500.00'}
