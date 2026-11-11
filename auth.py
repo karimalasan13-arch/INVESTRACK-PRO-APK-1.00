@@ -73,10 +73,11 @@ def _native_guest_client():
 def _clear_auth_identity():
     """Clear account-specific state without discarding unrelated UI preferences."""
     # A guest-specific client must never carry over to registered sign-in.
-    if st.session_state.pop('_iv_native_guest_session', False):
-        st.session_state.pop('supabase_client', None)
+    st.session_state.pop('_iv_native_guest_session', None)
+    # Never reuse an SDK client authenticated as a previous identity.
+    st.session_state.pop('supabase_client', None)
     for key in ('access_token', 'refresh_token', '_attached_access_token',
-                'user', 'user_id', '_auth_checked_at', 'iv_entitlement_snapshot',
+                'user', 'user_id', '_auth_checked_at', '_iv_client_attachment_verified', 'iv_entitlement_snapshot',
                 'iv_entitlement_snapshot_at', 'iv_entitlement_user_id',
                 '_iv_last_activity_monotonic'):
         st.session_state.pop(key, None)
@@ -91,7 +92,8 @@ def _attach_session():
     if st.session_state.get('_iv_native_guest_session') and not _jwt_access_unexpired(access):
         # Never spend Android's vault refresh token from Streamlit.
         raise RuntimeError('Native guest access token expired; native restoration required')
-    if st.session_state.get('_attached_access_token') != access:
+    if (st.session_state.get('_attached_access_token') != access
+            or not st.session_state.get('_iv_client_attachment_verified')):
         # Registered sessions retain the original SDK refresh behaviour.
         response = client.auth.set_session(access_token=access, refresh_token=refresh)
         if not response or not response.session:
@@ -99,6 +101,7 @@ def _attach_session():
         st.session_state.access_token = response.session.access_token
         st.session_state.refresh_token = response.session.refresh_token
         st.session_state._attached_access_token = response.session.access_token
+        st.session_state._iv_client_attachment_verified = True
     return client
 
 
@@ -165,6 +168,7 @@ def restore_verified_session(access_token: str, refresh_token: str) -> bool:
         st.session_state.access_token = restored.access_token
         st.session_state.refresh_token = restored.refresh_token
         st.session_state._attached_access_token = restored.access_token
+        st.session_state._iv_client_attachment_verified = True
         st.session_state.user = verified.user
         st.session_state.user_id = verified.user.id
         st.session_state._auth_checked_at = time.monotonic()
@@ -224,6 +228,7 @@ def ensure_auth() -> bool:
         return False
     # Never allow an identity cached from another login to remain trusted.
     if (st.session_state.get('user_id') and st.session_state.get('user')
+            and st.session_state.get('_iv_client_attachment_verified')
             and time.monotonic() - st.session_state.get('_auth_checked_at', 0) < 30):
         return True
     try:
@@ -405,6 +410,7 @@ def login_ui():
                         st.warning('Enter your email and password.')
                     else:
                         try:
+                            _clear_auth_identity()
                             result = get_supabase().auth.sign_in_with_password({'email': email.strip(), 'password': password})
                             if not result.user or not result.session:
                                 st.error('Login failed.')
@@ -412,12 +418,14 @@ def login_ui():
                                 st.session_state.access_token = result.session.access_token
                                 st.session_state.refresh_token = result.session.refresh_token
                                 st.session_state._attached_access_token = result.session.access_token
+                                st.session_state._iv_client_attachment_verified = True
                                 st.session_state.user = result.user
                                 st.session_state.user_id = result.user.id
                                 st.session_state._auth_checked_at = time.monotonic()
                                 _mark_session_activity()
                                 st.session_state.pop('iv_entitlement_snapshot', None)
                                 st.session_state.pending_public_page = 'Dashboard'
+                                st.session_state.public_navigation = 'Dashboard'
                                 if remember_me:
                                     st.session_state['_iv_remember_enroll_pending'] = True
                                 st.rerun()
@@ -443,12 +451,14 @@ def login_ui():
                                 st.session_state.access_token = result.session.access_token
                                 st.session_state.refresh_token = result.session.refresh_token
                                 st.session_state._attached_access_token = result.session.access_token
+                                st.session_state._iv_client_attachment_verified = True
                                 st.session_state.user = result.user
                                 st.session_state.user_id = result.user.id
                                 st.session_state._auth_checked_at = time.monotonic()
                                 _mark_session_activity()
                                 st.session_state.pop('iv_entitlement_snapshot', None)
                                 st.session_state.pending_public_page = 'Dashboard'
+                                st.session_state.public_navigation = 'Dashboard'
                                 st.rerun()
                             else:
                                 st.success('If confirmation is required, check your email to confirm your address, then sign in.')
