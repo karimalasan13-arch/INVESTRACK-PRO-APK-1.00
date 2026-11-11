@@ -48,7 +48,7 @@ def _workspace(kind, user_id):
     existing = db.table('cf_workspaces').select('*').eq('user_id', user_id).eq('kind', kind).limit(1).execute().data
     if existing:
         return existing[0]
-    return db.table('cf_workspaces').insert({'user_id': user_id, 'kind': kind, 'name': 'Personal' if kind == 'personal' else 'My Business', 'currency': 'GHS'}).execute().data[0]
+    return db.table('cf_workspaces').insert({'user_id': user_id, 'kind': kind, 'name': 'Personal' if kind == 'personal' else 'My Business', 'currency': 'USD'}).execute().data[0]
 
 
 
@@ -151,7 +151,7 @@ def render_cashflow(visitor=False):
         st.error('We could not load your cash flow information. Please try again shortly. If the problem continues, contact support.')
         return
 
-    currency = ws.get('currency') or 'GHS'
+    currency = ws.get('currency') or 'USD'
     account_names = {a['id']: a['name'] for a in accounts}
     movements = {a['id']: Decimal(str(a.get('opening_balance') or 0)) for a in accounts}
     total_income = Decimal('0')
@@ -363,7 +363,7 @@ def render_cashflow(visitor=False):
         st.write(f'Workspace: **{ws["name"]}** · Type: **{kind_label}**')
         st.caption('Each workspace has its own accounts, transactions and reporting currency.')
         if not transactions and not accounts:
-            options = ['GHS', 'USD', 'GBP', 'EUR', 'NGN', 'PHP', 'KES', 'ZAR', 'CAD', 'AUD']
+            options = ['USD', 'GHS', 'GBP', 'EUR', 'NGN', 'PHP', 'KES', 'ZAR', 'CAD', 'AUD']
             choice = st.selectbox('Reporting currency', options, index=options.index(currency) if currency in options else 0)
             if st.button('Save currency', key=f'cf_currency_save_{kind}'):
                 _db().table('cf_workspaces').update({'currency': choice}).eq('id', ws['id']).execute()
