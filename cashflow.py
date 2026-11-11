@@ -371,23 +371,7 @@ def render_cashflow(visitor=False):
                 for col in ('income', 'expense'):
                     if col not in pivot.columns: pivot[col] = 0.0
                 pivot['Net'] = pivot['income'] - pivot['expense']
-                # Keep the monthly trend in view while the user scrolls its table.
-                # A keyed Streamlit container supplies a stable CSS hook.
-                st.markdown('''<style>
-                .st-key-cf_reports_sticky_chart {
-                    position: sticky;
-                    top: 3.5rem;
-                    z-index: 5;
-                    background: var(--background-color, #fff);
-                    border-radius: .65rem;
-                    padding: .35rem .5rem;
-                }
-                @media (max-width: 640px) {
-                    .st-key-cf_reports_sticky_chart { top: 3rem; }
-                }
-                </style>''', unsafe_allow_html=True)
-                with st.container(key='cf_reports_sticky_chart'):
-                    st.bar_chart(pivot[['income', 'expense']], height=230)
+                st.bar_chart(pivot[['income', 'expense']])
                 st.dataframe(pivot.rename(columns={'income': 'Income', 'expense': 'Expenses'}), use_container_width=True)
             expenses = [t for t in transactions if t['kind'] == 'expense']
             if expenses:
