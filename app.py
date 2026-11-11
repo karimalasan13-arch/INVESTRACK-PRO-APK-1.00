@@ -238,6 +238,23 @@ st.markdown(
         background: linear-gradient(135deg,#65a30d,#a3e635) !important;
     }
 
+    /* Keep sidebar navigation labels white in every interaction state. */
+    [data-testid="stSidebar"] [data-testid="stButton"] button,
+    [data-testid="stSidebar"] [data-testid="stButton"] button:hover,
+    [data-testid="stSidebar"] [data-testid="stButton"] button:focus,
+    [data-testid="stSidebar"] [data-testid="stButton"] button:active,
+    [data-testid="stSidebar"] [data-testid="stButton"] button[kind="primary"],
+    [data-testid="stSidebar"] button[data-testid^="stBaseButton-"] {
+        color: #ffffff !important;
+        -webkit-text-fill-color: #ffffff !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stButton"] button :is(p, span, div, strong),
+    [data-testid="stSidebar"] [data-testid="stButton"] button:is(:hover, :focus, :active) :is(p, span, div, strong),
+    [data-testid="stSidebar"] button[data-testid^="stBaseButton-"] :is(p, span, div, strong) {
+        color: #ffffff !important;
+        -webkit-text-fill-color: #ffffff !important;
+    }
+
     /* Sidebar form controls: keep white fields but force readable dark text. */
     [data-testid="stSidebar"] input {
         color: #0f172a !important;
