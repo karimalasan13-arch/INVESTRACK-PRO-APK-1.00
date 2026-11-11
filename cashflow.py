@@ -362,6 +362,7 @@ def render_cashflow(visitor=False):
 
     if section == sections[3]:
         st.subheader('Cash flow reports')
+        st.caption('💡 Chart display tip: If a chart shifts out of position or becomes hidden, double-tap the chart area to restore its original view.')
         if not transactions:
             st.info('Add transactions to see monthly trends and spending categories.')
         else:
