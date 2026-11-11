@@ -208,6 +208,36 @@ st.markdown(
         box-shadow: 0 10px 25px rgba(132,204,22,.18);
     }
 
+    /* Demo-first navigation: override Streamlit theme button defaults reliably. */
+    [data-testid="stSidebar"] [data-testid="stButton"] button,
+    [data-testid="stSidebar"] button[data-testid="stBaseButton-secondary"] {
+        background: rgba(255,255,255,.06) !important;
+        color: #f8fafc !important;
+        -webkit-text-fill-color: #f8fafc !important;
+        border: 1px solid rgba(148,163,184,.18) !important;
+        border-radius: 12px !important;
+        box-shadow: none;
+    }
+    [data-testid="stSidebar"] [data-testid="stButton"] button p,
+    [data-testid="stSidebar"] [data-testid="stButton"] button span {
+        color: inherit !important;
+        -webkit-text-fill-color: inherit !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stButton"] button[kind="primary"],
+    [data-testid="stSidebar"] button[data-testid="stBaseButton-primary"] {
+        background: linear-gradient(135deg,#65a30d,#84cc16) !important;
+        color: #0f172a !important;
+        -webkit-text-fill-color: #0f172a !important;
+        border-color: rgba(190,242,100,.65) !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stButton"] button:hover {
+        border-color: rgba(132,204,22,.65) !important;
+        background: rgba(132,204,22,.18) !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stButton"] button[kind="primary"]:hover {
+        background: linear-gradient(135deg,#65a30d,#a3e635) !important;
+    }
+
     /* Sidebar form controls: keep white fields but force readable dark text. */
     [data-testid="stSidebar"] input {
         color: #0f172a !important;
@@ -2711,7 +2741,7 @@ def render_cashflow_workspace():
 # STEP 4C.3 — SERVER SESSION INACTIVITY WATCHDOG
 # A fragment re-executes independently of dashboard widget interaction.
 # It never renews the inactivity timestamp.
-@st.fragment(run_every="1s")
+@st.fragment(run_every="5s")
 def _iv_inactivity_watchdog():
     from auth import session_inactivity_expired
     if session_inactivity_expired():
