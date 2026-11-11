@@ -36,7 +36,23 @@ def _query(table, workspace_id, order=None):
 
 
 def _money(value, currency):
-    return f'{currency} {Decimal(str(value or 0)):,.2f}'
+    symbols = {
+        'USD': '$',
+        'GHS': 'GH₵',
+        'GBP': '£',
+        'EUR': '€',
+        'NGN': '₦',
+        'PHP': '₱',
+        'KES': 'KSh',
+        'ZAR': 'R',
+        'CAD': 'CA$',
+        'AUD': 'A$',
+    }
+    code = str(currency or 'USD').upper()
+    symbol = symbols.get(code, code + ' ')
+    amount = Decimal(str(value or 0))
+    separator = '' if symbol.endswith(' ') else ' '
+    return f'{symbol}{separator}{amount:,.2f}'
 
 
 def _rerun():
