@@ -440,13 +440,24 @@ def login_ui():
                     email = st.text_input('Email address', placeholder='Email address', label_visibility='collapsed', key='signup_email')
                     password = st.text_input('Password', type='password', placeholder='Password (at least 6 characters)', label_visibility='collapsed', key='signup_pass')
                     confirm = st.text_input('Confirm password', type='password', placeholder='Confirm password', label_visibility='collapsed', key='signup_confirm_pass')
+                    marketing_consent = st.checkbox(
+                        'Email me product updates, new features, and occasional announcements.',
+                        value=False, key='iv_signup_marketing_consent'
+                    )
                     submit = st.form_submit_button('Create Account', type='primary', use_container_width=True)
                 if submit:
                     if not email.strip() or len(password) < 6 or password != confirm:
                         st.warning('Enter an email and matching passwords of at least 6 characters.')
                     else:
                         try:
-                            result = get_supabase().auth.sign_up({'email': email.strip(), 'password': password})
+                            result = get_supabase().auth.sign_up({
+                                'email': email.strip(),
+                                'password': password,
+                                'options': {'data': {
+                                    'marketing_opt_in_requested': bool(marketing_consent),
+                                    'marketing_consent_source': 'signup_checkbox_v1',
+                                }},
+                            })
                             if result.session and result.user:
                                 st.session_state.access_token = result.session.access_token
                                 st.session_state.refresh_token = result.session.refresh_token
