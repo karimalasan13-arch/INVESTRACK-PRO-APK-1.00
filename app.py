@@ -826,6 +826,80 @@ def render_biometric_enrollment_control(show_controls=True):
             st.sidebar.warning("Biometric setup could not be authorized. Please retry.")
 
 
+def _iv_marketing_rpc(function_name, payload=None):
+    """Call a user-scoped marketing RPC using the existing verified session."""
+    if not ensure_auth():
+        return None, "Your session has expired. Please sign in again."
+    token = st.session_state.get("access_token")
+    url = str(get_secret("SUPABASE_URL", "")).rstrip("/")
+    anon_key = str(get_secret("SUPABASE_ANON_KEY", ""))
+    if not token or not url.startswith("https://") or not anon_key:
+        return None, "Account settings are temporarily unavailable."
+    try:
+        response = requests.post(
+            f"{url}/rest/v1/rpc/{function_name}",
+            headers={"Authorization": f"Bearer {token}",
+                     "apikey": anon_key, "Content-Type": "application/json"},
+            json=payload if payload is not None else {},
+            timeout=15,
+            allow_redirects=False,
+        )
+        if response.status_code != 200:
+            return None, f"Could not access email preferences (HTTP {response.status_code})."
+        return response.json(), None
+    except (requests.RequestException, ValueError):
+        return None, "Could not contact the preferences service. Please retry."
+
+
+def render_marketing_account_settings(user):
+    """Optional, explicit marketing consent for registered accounts only."""
+    user_id = str(getattr(user, "id", "") or st.session_state.get("user_id", ""))
+    if not user_id:
+        return
+    with st.sidebar.expander("⚙️  Account Settings", expanded=False):
+        st.markdown("**Email preferences**")
+        st.caption("Choose whether to receive product updates, new features and occasional announcements. This does not affect essential account emails.")
+        state_key = "_iv_marketing_preference_state"
+        state = st.session_state.get(state_key)
+        if not isinstance(state, dict) or state.get("user_id") != user_id:
+            state = {"user_id": user_id, "loaded": False, "value": False, "error": None}
+            st.session_state[state_key] = state
+        if not state["loaded"]:
+            data, error = _iv_marketing_rpc("get_my_marketing_preference")
+            if error:
+                state["error"] = error
+            elif not isinstance(data, list):
+                state["error"] = "Unexpected preference response. Please retry."
+            else:
+                record = data[0] if data and isinstance(data[0], dict) else {}
+                state["value"] = bool(record.get("marketing_opt_in") is True and record.get("unsubscribed") is False)
+                state["loaded"] = True
+                state["error"] = None
+        if not state["loaded"]:
+            st.warning(state["error"] or "Could not load your preference.")
+            if st.button("Retry loading preferences", key="iv_marketing_retry"):
+                state["error"] = None
+                st.rerun()
+            return
+        with st.form("iv_marketing_preference_form"):
+            selected = st.checkbox(
+                "Receive marketing emails",
+                value=state["value"],
+                help="Optional. You can change your choice at any time.",
+            )
+            submitted = st.form_submit_button("Save email preference", use_container_width=True)
+        if submitted:
+            result, error = _iv_marketing_rpc(
+                "set_my_marketing_preference", {"p_opt_in": bool(selected)}
+            )
+            if error or result is not True:
+                st.error(error or "Preference was not saved. Please try again.")
+            else:
+                state["value"] = bool(selected)
+                st.success("Email preference saved.")
+        st.caption("Marketing emails are off unless you explicitly subscribe.")
+
+
 def render_profile_section(user):
     from auth import is_anonymous_user
     if is_anonymous_user(user):
@@ -871,6 +945,7 @@ def render_profile_section(user):
         if st.sidebar.button("🚪  Logout", key="profile_logout", use_container_width=True):
             logout()
             st.stop()
+    render_marketing_account_settings(user)
 
 
 def issue_premium_auth_code():
