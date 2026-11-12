@@ -255,6 +255,47 @@ st.markdown(
         -webkit-text-fill-color: #ffffff !important;
     }
 
+    /* Account Settings: readable dark sidebar expander and form action. */
+    [data-testid="stSidebar"] [data-testid="stExpander"] > details > summary {
+        background: rgba(255,255,255,.08) !important;
+        border: 1px solid rgba(148,163,184,.28) !important;
+        border-radius: 10px !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stExpander"] > details > summary,
+    [data-testid="stSidebar"] [data-testid="stExpander"] > details > summary * {
+        color: #f8fafc !important;
+        -webkit-text-fill-color: #f8fafc !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stExpander"] > details > summary:hover {
+        background: rgba(255,255,255,.15) !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stFormSubmitButton"] button {
+        background: #84cc16 !important;
+        border: 1px solid #a3e635 !important;
+        color: #0f172a !important;
+        -webkit-text-fill-color: #0f172a !important;
+        font-weight: 700 !important;
+        border-radius: 10px !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stFormSubmitButton"] button :is(p,span,div) {
+        color: #0f172a !important;
+        -webkit-text-fill-color: #0f172a !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stFormSubmitButton"] button:hover {
+        background: #a3e635 !important;
+        border-color: #bef264 !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stFormSubmitButton"] button:disabled {
+        background: #475569 !important;
+        border-color: #64748b !important;
+        color: #e2e8f0 !important;
+        -webkit-text-fill-color: #e2e8f0 !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stFormSubmitButton"] button:disabled :is(p,span,div) {
+        color: #e2e8f0 !important;
+        -webkit-text-fill-color: #e2e8f0 !important;
+    }
+
     /* Sidebar form controls: keep white fields but force readable dark text. */
     [data-testid="stSidebar"] input {
         color: #0f172a !important;
